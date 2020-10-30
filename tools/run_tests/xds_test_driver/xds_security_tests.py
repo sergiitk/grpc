@@ -15,6 +15,7 @@
 
 import argparse
 import googleapiclient.discovery
+from google.cloud import container_v1
 
 
 def parse_args():
@@ -71,6 +72,20 @@ def main():
     print('Instances in project %s and zone %s:' % (args.project_id, args.zone))
     for instance in instances:
         print(' - ' + instance['name'])
+
+
+    print()
+
+    gke = container_v1.ClusterManagerClient()
+    print('Clusters in project %s and zone %s:' % (args.project_id, args.zone))
+    resp = gke.list_clusters(
+        parent=f'projects/{args.project_id}/locations/{args.zone}')
+
+    for cluster in resp.clusters:
+        print(' - ' + cluster.name)
+
+  # request = {'project_id': "project_id", 'zone': "us-central1-a", 'parent': "parent"}
+
 
 
 if __name__ == '__main__':
