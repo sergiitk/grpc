@@ -14,8 +14,12 @@
 # limitations under the License.
 
 import argparse
+from pprint import pprint
+
 import googleapiclient.discovery
-from google.cloud import container_v1
+# from google.cloud import container_v1
+from kubernetes import client, config
+from kubernetes.client import ApiException
 
 
 def parse_args():
@@ -73,16 +77,53 @@ def main():
     for instance in instances:
         print(' - ' + instance['name'])
 
-
     print()
 
-    gke = container_v1.ClusterManagerClient()
-    print('Clusters in project %s and zone %s:' % (args.project_id, args.zone))
-    resp = gke.list_clusters(
-        parent=f'projects/{args.project_id}/locations/{args.zone}')
+    config.load_kube_config()
 
-    for cluster in resp.clusters:
-        print(' - ' + cluster.name)
+    print("k8s nodes:")
+    core = client.CoreV1Api()
+    for node in core.list_node().items:
+        print(' - ' + node.metadata.name)
+
+    print()
+    print("Supported APIs (* is preferred version):")
+    print("%-40s %s" %
+          ("core", ",".join(client.CoreApi().get_api_versions().versions)))
+    for api in client.ApisApi().get_api_versions().groups:
+        versions = []
+        for v in api.versions:
+            name = ""
+            if v.version == api.preferred_version.version and len(
+                    api.versions) > 1:
+                name += "*"
+            name += v.version
+            versions.append(name)
+        print("%-40s %s" % (api.name, ",".join(versions)))
+
+    # # Enter a context with an instance of the API kubernetes.client
+    # with client.ApiClient() as api_client:
+    #     # Create an instance of the API class
+    #     api_instance = client.AdmissionregistrationApi(api_client)
+    #
+    #     try:
+    #         api_response = api_instance.get_api_group()
+    #         pprint(api_response)
+    #     except ApiException as e:
+    #         print("Exception when calling AdmissionregistrationApi->get_api_group: %s\n" % e)
+
+
+
+
+    # print()
+    #
+    # gke = container_v1.ClusterManagerClient()
+    # print('Clusters in project %s and zone %s:' % (args.project_id, args.zone))
+    # resp = gke.list_clusters(
+    #     parent='projects/%s/locations/%s' % (args.project_id, args.zone))
+    #
+    # for cluster in resp.clusters:
+    #     print(' - ' + cluster.name)
 
   # request = {'project_id': "project_id", 'zone': "us-central1-a", 'parent': "parent"}
 
