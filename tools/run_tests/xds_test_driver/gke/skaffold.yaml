@@ -2,15 +2,14 @@ apiVersion: skaffold/v2beta7
 kind: Config
 build:
   tagPolicy:
-    dateTime:
-      format: 2006-01-02_15-04-05Z
-      timezone: Z
+    sha256: {}
+#    dateTime:
+#      format: 2006-01-02_15-04-05_MST
+#      timezone: UTC
   # defines where to find the code at build time and where to push the resulting image
   artifacts:
-    - image: xds-gke-java-interop
-      context: grpc-interop-testing
-  local:
-    push: false
+    - image: gcr.io/grpc-testing/xds-gke-java-interop-helloworld
+  local: {}
 
 # defines the Kubernetes manifests to deploy on each run
 deploy:

@@ -14,11 +14,13 @@
 # limitations under the License.
 
 import argparse
+import json
 from pprint import pprint
 
 import googleapiclient.discovery
 # from google.cloud import container_v1
 from kubernetes import client, config
+from kubernetes.client import configuration
 from kubernetes.client import ApiException
 
 
@@ -69,37 +71,78 @@ def list_instances(compute, project, zone):
 def main():
     args = parse_args()
     # print(args)
+
+
+    # instances = list_instances(compute, args.project_id, args.zone)
+    #
+    # print('Instances in project %s and zone %s:' % (args.project_id, args.zone))
+    # for instance in instances:
+    #     print(' - ' + instance['name'])
+    #
+    # print()
+    contexts, active_context = config.list_kube_config_contexts()
+    # print(contexts)
+    # print(active_context)
+    config.load_kube_config(context='gke_grpc-testing_us-central1-a_gke-interop-xds-test1-us-central1')
+    # config.load_kube_config(context=active_context['name'])
+    core = client.CoreApi()
+    v1 = client.CoreV1Api()
+
+    print("Server mappings:")
+    for mapping in core.get_api_versions().server_address_by_client_cid_rs:
+        print(f"{mapping.client_cidr} -> {mapping.server_address}")
+
+    namespace = 'default'
+    service_name = "psm-grpc-service"
+    service_port = "8080"
+    project = args.project_id
+    zone = args.zone
+
+    print(f"Detecting NEG name for service {service_name}")
+    service = v1.read_namespaced_service(name=service_name, namespace=namespace)
+    neg_info = json.loads(service.metadata.annotations['cloud.google.com/neg-status'])
+    neg_name = neg_info['network_endpoint_groups']['8080']
+
+    print(f"Detected NEG = {neg_name}")
+    # print(f"NEG = {neg_info.network_endpoint_groups} in zones {neg_info.zones}")
+
     compute = googleapiclient.discovery.build('compute', 'v1')
+    result = compute.networkEndpointGroups().get(project=project, zone=zone, networkEndpointGroup=neg_name).execute()
+    print(result)
 
-    instances = list_instances(compute, args.project_id, args.zone)
 
-    print('Instances in project %s and zone %s:' % (args.project_id, args.zone))
-    for instance in instances:
-        print(' - ' + instance['name'])
+    # print("Listing pods with their IPs:")
+    # ret = v1.list_namespaced_pod(namespace="default")
+    # for item in ret.items:
+    #     print(
+    #         "%s\t%s\t%s" %
+    #         (item.status.pod_ip,
+    #          item.metadata.namespace,
+    #          item.metadata.name))
 
-    print()
 
-    config.load_kube_config()
-
-    print("k8s nodes:")
-    core = client.CoreV1Api()
-    for node in core.list_node().items:
-        print(' - ' + node.metadata.name)
-
-    print()
-    print("Supported APIs (* is preferred version):")
-    print("%-40s %s" %
-          ("core", ",".join(client.CoreApi().get_api_versions().versions)))
-    for api in client.ApisApi().get_api_versions().groups:
-        versions = []
-        for v in api.versions:
-            name = ""
-            if v.version == api.preferred_version.version and len(
-                    api.versions) > 1:
-                name += "*"
-            name += v.version
-            versions.append(name)
-        print("%-40s %s" % (api.name, ",".join(versions)))
+    # config.load_kube_config()
+    # core = client.CoreV1Api()
+    #
+    # # print("k8s nodes:")
+    # core = client.CoreV1Api()
+    # for node in core.list_node().items:
+    #     print(' - ' + node.metadata.name)
+    #
+    # print()
+    # print("Supported APIs (* is preferred version):")
+    # print("%-40s %s" %
+    #       ("core", ",".join(client.CoreApi().get_api_versions().versions)))
+    # for api in client.ApisApi().get_api_versions().groups:
+    #     versions = []
+    #     for v in api.versions:
+    #         name = ""
+    #         if v.version == api.preferred_version.version and len(
+    #                 api.versions) > 1:
+    #             name += "*"
+    #         name += v.version
+    #         versions.append(name)
+    #     print("%-40s %s" % (api.name, ",".join(versions)))
 
     # # Enter a context with an instance of the API kubernetes.client
     # with client.ApiClient() as api_client:

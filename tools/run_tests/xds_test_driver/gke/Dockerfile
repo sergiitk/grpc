@@ -1,8 +1,7 @@
 # Build runtime image.
-FROM openjdk:8-jre-alpine
+# FROM openjdk:8-jre-alpine
+# COPY grpc-interop-testing/ /app/
+# CMD "bin/xds-test-client --server=xds:///{server_uri} --stats_port={stats_port} --qps={qps} {rpcs_to_send} {metadata_to_send}"
 
-# Copy the compiled files over.
-COPY --from=build-env /app/target/ /app/
+FROM grpc/java-example-hostname:1.27.0
 
-# Starts java app with debugging server at port 5005.
-CMD ["java", "-jar", "/app/hello-world-1.0.0.jar"]

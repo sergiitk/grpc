@@ -1,0 +1,108 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: psm-grpc-service
+  annotations:
+    cloud.google.com/neg: '{"exposed_ports":{"8080":{}}}'
+spec:
+  type: ClusterIP
+  selector:
+    app: psm-grpc-server
+  ports:
+  - port: 8080
+    protocol: TCP
+    targetPort: 50051
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: psm-grpc-server
+  labels:
+    app: psm-grpc-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: psm-grpc-service
+  template:
+    metadata:
+      labels:
+        app: psm-grpc-service
+    spec:
+      containers:
+      - name: psm-grpc-service
+        image: gcr.io/grpc-testing/xds-gke-java-interop-helloworld
+        imagePullPolicy: Always
+        ports:
+          - containerPort: 50051
+        resources:
+          limits:
+            cpu: 800m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 512Mi
+        
+
+#      - command:
+#        - /bin/sleep
+#        - inf
+#        image: gcr.io/meshca-gke-test/psms-grpc-xds:1.06
+#        imagePullPolicy: Always
+#        name: zatar-grpc-server
+#        ports:
+#        - containerPort: 8000
+#        resources:
+#          limits:
+#            cpu: 800m
+#            memory: 512Mi
+#          requests:
+#            cpu: 100m
+#            memory: 512Mi
+#        volumeMounts:
+#        - mountPath: /var/run/gke-spiffe/certs
+#          name: gke-spiffe-certs-volume
+#          readOnly: true
+#      serviceAccountName: zatar-grpc-server
+#      volumes:
+#      - name: gke-spiffe-certs-volume
+#        csi:
+#          driver: certs.spiffe.gke.io
+#      - emptyDir:
+#          medium: Memory
+#        name: empty-vol
+
+#
+#
+#apiVersion: apps/v1
+#kind: Deployment
+#metadata:
+#  name: java-hello-world
+#spec:
+#  replicas: 1
+#  selector:
+#    matchLabels:
+#      app: java-hello-world
+#  template:
+#    metadata:
+#      labels:
+#        app: java-hello-world
+#    spec:
+#      containers:
+#      - name: server
+#        image: java-hello-world
+#        ports:
+#        - containerPort: 8080
+#        env:
+#        - name: PORT
+#          value: "8080"
+#        # This environment variable enables debugging support for the container.
+#        # Remove this to disable the debug build.
+#        - name: JAVA_TOOL_OPTIONS
+#          value: -agentlib:jdwp=transport=dt_socket,server=y,address=5005,suspend=n,quiet=y
+#        readinessProbe:
+#          tcpSocket:
+#            port: 8080
+#          initialDelaySeconds: 5
