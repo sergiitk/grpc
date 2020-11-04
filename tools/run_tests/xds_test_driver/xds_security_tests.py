@@ -15,16 +15,28 @@
 
 import argparse
 import json
-from pprint import pprint
+import logging
+import time
+from typing import List, Tuple
 
-import googleapiclient.discovery
-# from google.cloud import container_v1
-from kubernetes import client, config
-from kubernetes.client import configuration
-from kubernetes.client import ApiException
+from kubernetes import client as kube_client, config as kube_config
+from kubernetes.client import CoreV1Api, CoreApi
+from kubernetes.client.models import V1Service
+
+_WAIT_FOR_OPERATION_SEC = 1200
+_GCP_API_RETRIES = 5
 
 
-def parse_args():
+logger = logging.getLogger()
+console_handler = logging.StreamHandler()
+formatter = logging.Formatter(fmt='%(asctime)s: %(levelname)-8s %(message)s')
+console_handler.setFormatter(formatter)
+logger.handlers = []
+logger.addHandler(console_handler)
+logger.setLevel(logging.DEBUG)
+
+
+def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         description='Run xDS security interop tests on GCP')
@@ -46,135 +58,136 @@ def parse_args():
         '--stats_port', default=8079, type=int,
         help='Local port for the client process to expose the LB stats service')
     group_driver.add_argument(
-        '--verbose', action='store_false',
+        '--verbose', action='store_true',
         help='verbose log output')
     return parser.parse_args()
 
 
-# def create_service():
-#
-#     compute = googleapiclient.discovery.build('compute', 'v1')
-#     result = gcp.compute.instanceGroups().listInstances(
-#         project=gcp.project,
-#         zone=instance_group.zone,
-#         instanceGroup=instance_group.name,
-#         body={
-#             'instanceState': 'ALL'
-#     }).execute(num_retries=_GCP_API_RETRIES)
+def wait_for_global_operation(gcp,
+                              operation,
+                              timeout_sec=_WAIT_FOR_OPERATION_SEC):
+    start_time = time.time()
+    while time.time() - start_time <= timeout_sec:
+        result = gcp.compute.globalOperations().get(
+            project=gcp.project,
+            operation=operation).execute(num_retries=_GCP_API_RETRIES)
+        if result['status'] == 'DONE':
+            if 'error' in result:
+                raise Exception(result['error'])
+            return
+        time.sleep(2)
+    raise Exception('Operation %s did not complete within %d' %
+                    (operation, timeout_sec))
 
 
-def list_instances(compute, project, zone):
-    result = compute.instances().list(project=project, zone=zone).execute()
-    return result['items'] if 'items' in result else None
+# def create_tcp_health_check(gcp, name):
+#     tcp_health_check_spec = {
+#         'name': name,
+#         'type': 'TCP',
+#         'tcpHealthCheck': {
+#             'portSpecification': 'USE_SERVING_PORT',
+#         }
+#     }
+#     logger.debug('Sending GCP request with body=%s', config)
+#     result = gcp.compute.healthChecks().insert(
+#         project=gcp.project, body=tcp_health_check_spec).execute(num_retries=_GCP_API_RETRIES)
+#     wait_for_global_operation(gcp, result['name'])
+#     gcp.health_check = GcpResource(result['name'], result['targetLink'])
+
+
+# def get_health_check(gcp, health_check_name):
+#     result = gcp.compute.healthChecks().get(
+#         project=gcp.project, healthCheck=health_check_name).execute()
+#     gcp.health_check = GcpResource(health_check_name, result['selfLink'])
+#     # V1Service.status;
+#     # x: property = V1Service.metadata;
+#     z = V1Service.metadata
+#     print(z)
+    # z.
+    # z.
+
+def k8s_get_service_neg(k8s_core_v1: CoreV1Api, service_name: str, namespace: str,
+    service_port: int) -> Tuple[str, List[str]]:
+    logger.debug('Detecting NEG name for service=%s', service_name)
+    service: V1Service = k8s_core_v1.read_namespaced_service(service_name,
+                                                             namespace,
+                                                             async_req=False)
+
+    neg_info: dict = json.loads(
+        service.metadata.annotations['cloud.google.com/neg-status'])
+    neg_name: str = neg_info['network_endpoint_groups'][str(service_port)]
+    neg_zones: List[str] = neg_info['zones']
+    return neg_name, neg_zones
+
+class GcpResource:
+    def __init__(self, name, url):
+        self.name = name
+        self.url = url
+
+
+class GcpState:
+    def __init__(self, compute, project):
+        self.compute = compute
+        # self.alpha_compute = alpha_compute
+        self.project = project
+        self.health_check = None
+        self.health_check_firewall_rule = None
+        self.backend_services = []
+        self.url_map = None
+        self.target_proxy = None
+        self.global_forwarding_rule = None
+        self.service_port = None
+
+
+def k8s_print_server_mappings(k8s_root):
+    logger.debug("Server mappings:")
+    for mapping in k8s_root.get_api_versions().server_address_by_client_cid_rs:
+        logger.debug('%s -> %s', mapping.client_cidr, mapping.server_address)
 
 
 def main():
     args = parse_args()
-    # print(args)
+    if not args.verbose:
+        logger.setLevel(logging.INFO)
 
+    # local args shortcuts
+    project: str = args.project_id
+    zone: str = args.zone
 
-    # instances = list_instances(compute, args.project_id, args.zone)
-    #
-    # print('Instances in project %s and zone %s:' % (args.project_id, args.zone))
-    # for instance in instances:
-    #     print(' - ' + instance['name'])
-    #
-    # print()
-    contexts, active_context = config.list_kube_config_contexts()
-    # print(contexts)
-    # print(active_context)
-    config.load_kube_config(context='gke_grpc-testing_us-central1-a_gke-interop-xds-test1-us-central1')
-    # config.load_kube_config(context=active_context['name'])
-    core = client.CoreApi()
-    v1 = client.CoreV1Api()
-
-    print("Server mappings:")
-    for mapping in core.get_api_versions().server_address_by_client_cid_rs:
-        print(f"{mapping.client_cidr} -> {mapping.server_address}")
-
+    # todo(sergiitk): move to args
+    kube_context_name = 'gke_grpc-testing_us-central1-a_gke-interop-xds-test1-us-central1'
     namespace = 'default'
-    service_name = "psm-grpc-service"
-    service_port = "8080"
-    project = args.project_id
-    zone = args.zone
+    service_name = 'psm-grpc-service'
+    service_port = 8080
+    health_check_name = "sergii-psm-test-health-check"
 
-    print(f"Detecting NEG name for service {service_name}")
-    service = v1.read_namespaced_service(name=service_name, namespace=namespace)
-    neg_info = json.loads(service.metadata.annotations['cloud.google.com/neg-status'])
-    neg_name = neg_info['network_endpoint_groups']['8080']
+    # Connect k8s
+    kube_config.load_kube_config(context=kube_context_name)
+    k8s_root: CoreApi = kube_client.CoreApi()
+    k8s_core_v1: CoreV1Api = kube_client.CoreV1Api()
 
-    print(f"Detected NEG = {neg_name}")
-    # print(f"NEG = {neg_info.network_endpoint_groups} in zones {neg_info.zones}")
+    if args.verbose:
+        k8s_print_server_mappings(k8s_root)
 
-    compute = googleapiclient.discovery.build('compute', 'v1')
-    result = compute.networkEndpointGroups().get(project=project, zone=zone, networkEndpointGroup=neg_name).execute()
-    print(result)
-
-
-    # print("Listing pods with their IPs:")
-    # ret = v1.list_namespaced_pod(namespace="default")
-    # for item in ret.items:
-    #     print(
-    #         "%s\t%s\t%s" %
-    #         (item.status.pod_ip,
-    #          item.metadata.namespace,
-    #          item.metadata.name))
+    # Detect NEG name
+    neg_name, neg_zones = k8s_get_service_neg(k8s_core_v1, service_name, namespace,
+                                              service_port)
+    logger.info("Detected NEG=%s in zones=%s", neg_name, neg_zones)
 
 
-    # config.load_kube_config()
-    # core = client.CoreV1Api()
+    # compute = googleapiclient.discovery.build('compute', 'v1',
+    #                                           cache_discovery=False)
+    # gcp = GcpState(compute, project)
     #
-    # # print("k8s nodes:")
-    # core = client.CoreV1Api()
-    # for node in core.list_node().items:
-    #     print(' - ' + node.metadata.name)
-    #
-    # print()
-    # print("Supported APIs (* is preferred version):")
-    # print("%-40s %s" %
-    #       ("core", ",".join(client.CoreApi().get_api_versions().versions)))
-    # for api in client.ApisApi().get_api_versions().groups:
-    #     versions = []
-    #     for v in api.versions:
-    #         name = ""
-    #         if v.version == api.preferred_version.version and len(
-    #                 api.versions) > 1:
-    #             name += "*"
-    #         name += v.version
-    #         versions.append(name)
-    #     print("%-40s %s" % (api.name, ",".join(versions)))
+    # if args.use_existing_gcp_resources:
+    #     create_tcp_health_check(gcp, health_check_name)
+    #     print(f"Created healthcheck = {gcp.health_check.name} @ {gcp.health_check.url}")
+    # else:
+    #     get_health_check(gcp, health_check_name)
 
-    # # Enter a context with an instance of the API kubernetes.client
-    # with client.ApiClient() as api_client:
-    #     # Create an instance of the API class
-    #     api_instance = client.AdmissionregistrationApi(api_client)
-    #
-    #     try:
-    #         api_response = api_instance.get_api_group()
-    #         pprint(api_response)
-    #     except ApiException as e:
-    #         print("Exception when calling AdmissionregistrationApi->get_api_group: %s\n" % e)
-
-
-
-
-    # print()
-    #
-    # gke = container_v1.ClusterManagerClient()
-    # print('Clusters in project %s and zone %s:' % (args.project_id, args.zone))
-    # resp = gke.list_clusters(
-    #     parent='projects/%s/locations/%s' % (args.project_id, args.zone))
-    #
-    # for cluster in resp.clusters:
-    #     print(' - ' + cluster.name)
-
-  # request = {'project_id': "project_id", 'zone': "us-central1-a", 'parent': "parent"}
-
+    # confirm NEG
+    # result = compute.networkEndpointGroups().get(project=project, zone=zone, networkEndpointGroup=neg_name).execute()
 
 
 if __name__ == '__main__':
     main()
-
-
-# containers = googleapiclient.discovery.build('container', 'v1')
-# containers.list()
