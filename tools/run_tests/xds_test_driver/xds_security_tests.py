@@ -127,13 +127,13 @@ class GcpState:
         self.service_port = None
 
 
-def get_health_check(compute, project, health_check_name):
+def gcp_get_health_check(compute, project, health_check_name):
     result = compute.healthChecks().get(project=project,
                                         healthCheck=health_check_name).execute()
     return GcpResource(health_check_name, result['selfLink'])
 
 
-def create_tcp_health_check(compute, project, health_check_name):
+def gcp_create_tcp_health_check(compute, project, health_check_name):
     tcp_health_check_spec = {
         'name': health_check_name,
         'type': 'TCP',
@@ -143,6 +143,27 @@ def create_tcp_health_check(compute, project, health_check_name):
     }
     result = compute.healthChecks().insert(project=project,
                                            body=tcp_health_check_spec).execute(num_retries=_GCP_API_RETRIES)
+    wait_for_global_operation(compute, project, result['name'])
+    return GcpResource(result['name'], result['targetLink'])
+
+
+def gcp_get_backend_service(compute, project, backend_service_name):
+    result = compute.backendServices().get(
+        project=project,
+        backendService=backend_service_name).execute()
+    return GcpResource(backend_service_name, result['selfLink'])
+
+
+def gcp_create_backend_service(compute, project, backend_service_name, health_check):
+    backend_service_spec = {
+        'name': backend_service_name,
+        'loadBalancingScheme': 'INTERNAL_SELF_MANAGED',  # Traffic Director
+        'healthChecks': [health_check.url],
+        'protocol': 'HTTP2',
+    }
+    result = compute.backendServices().insert(
+        project=project,
+        body=backend_service_spec).execute(num_retries=_GCP_API_RETRIES)
     wait_for_global_operation(compute, project, result['name'])
     return GcpResource(result['name'], result['targetLink'])
 
@@ -161,7 +182,9 @@ def main():
     namespace = 'default'
     service_name = 'psm-grpc-service'
     service_port = 8080
-    health_check_name: str = "sergii-psm-test-health-check2"
+    # todo(sergiitk): remove sergii-psm-test-health-check2
+    health_check_name: str = "sergii-psm-test-health-check"
+    backend_service_name: str = "sergii-psm-test-backend-service"
 
     # Connect k8s
     kube_config.load_kube_config(context=kube_context_name)
@@ -183,12 +206,28 @@ def main():
 
     # Health check
     try:
-        health_check = get_health_check(compute, project, health_check_name)
+        health_check = gcp_get_health_check(compute, project, health_check_name)
         logger.info('Loaded TCP HealthCheck %s', health_check.name)
     except google_api_errors.HttpError as e:
         logger.info('Creating TCP HealthCheck %s', health_check_name)
-        health_check = create_tcp_health_check(compute, project,
-                                               health_check_name)
+        health_check = gcp_create_tcp_health_check(compute, project,
+                                                   health_check_name)
+
+    # Backend Service
+    backend_services = []
+    try:
+        backend_service = gcp_get_backend_service(compute, project,
+                                                  backend_service_name)
+        logger.info('Loaded Backend Service %s', backend_service.name)
+    except google_api_errors.HttpError as e:
+        logger.info('Creating Backend Service %s', backend_service_name)
+        backend_service = gcp_create_backend_service(
+            compute, project, backend_service_name, health_check)
+    backend_services.append(backend_service)
+
+
+    # todo(sergiitk): finally/context manager
+    compute.close()
 
 
 if __name__ == '__main__':
