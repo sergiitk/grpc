@@ -193,6 +193,26 @@ def gcp_get_network_endpoint_group(compute, project, zone, neg_name):
     return GcpResource(neg_name, result['selfLink'])
 
 
+def gcp_create_url_map(compute, project, url_map_name, backend_service,
+                       service_name, path_matcher_name):
+    url_map_spec = {
+        'name': url_map_name,
+        'defaultService': backend_service.url,
+        'pathMatchers': [{
+            'name': path_matcher_name,
+            'defaultService': backend_service.url,
+        }],
+        'hostRules': [{
+            'hosts': [service_name],
+            'pathMatcher': path_matcher_name
+        }]
+    }
+    result = compute.urlMaps().insert(
+        project=project,
+        body=url_map_spec).execute(num_retries=_GCP_API_RETRIES)
+    wait_for_global_operation(compute, project, result['name'])
+    return GcpResource(result['name'], result['targetLink'])
+
 def main():
     args = parse_args()
     if not args.verbose:
@@ -210,6 +230,8 @@ def main():
     # todo(sergiitk): remove sergii-psm-test-health-check2
     health_check_name: str = "sergii-psm-test-health-check"
     backend_service_name: str = "sergii-psm-test-backend-service"
+    url_map_name: str = "sergii-psm-test-url-map"
+    path_matcher_name: str = "sergii-psm-test-path-matcher"
 
     # Connect k8s
     kube_config.load_kube_config(context=kube_context_name)
@@ -255,11 +277,21 @@ def main():
 
     backend_services.append(backend_service)
 
-    logger.info('Add NEG %s as a backend to to the Backend Service %s',
-                negs,
+    logger.info('Add NEG %s in zones %s as backends to the Backend Service %s',
+                neg_name,
+                neg_zones,
                 backend_service_name)
 
     gcp_backend_service_add_backend(compute, project, backend_service, negs)
+
+    # URL map
+    logger.info('Creating URL map %s with path matcher %s',
+                url_map_name,
+                path_matcher_name)
+
+    url_map = gcp_create_url_map(compute, project, url_map_name,
+                                 backend_service,
+                                 service_name, path_matcher_name)
 
     # todo(sergiitk): finally/context manager
     compute.close()
