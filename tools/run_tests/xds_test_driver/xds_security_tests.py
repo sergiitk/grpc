@@ -19,14 +19,18 @@ import logging
 import time
 from typing import List, Tuple
 
-from kubernetes import client as kube_client, config as kube_config
+from googleapiclient import discovery as google_api
+from googleapiclient import errors as google_api_errors
+from kubernetes import client as kube_client
+from kubernetes import config as kube_config
 from kubernetes.client import CoreV1Api, CoreApi
 from kubernetes.client.models import V1Service
 
+# todo(sergiitk): fix imports
 _WAIT_FOR_OPERATION_SEC = 1200
 _GCP_API_RETRIES = 5
 
-
+# todo(sergiitk): setup in a method
 logger = logging.getLogger()
 console_handler = logging.StreamHandler()
 formatter = logging.Formatter(fmt='%(asctime)s: %(levelname)-8s %(message)s')
@@ -63,13 +67,12 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def wait_for_global_operation(gcp,
-                              operation,
+def wait_for_global_operation(compute, project, operation,
                               timeout_sec=_WAIT_FOR_OPERATION_SEC):
     start_time = time.time()
     while time.time() - start_time <= timeout_sec:
-        result = gcp.compute.globalOperations().get(
-            project=gcp.project,
+        result = compute.globalOperations().get(
+            project=project,
             operation=operation).execute(num_retries=_GCP_API_RETRIES)
         if result['status'] == 'DONE':
             if 'error' in result:
@@ -80,38 +83,13 @@ def wait_for_global_operation(gcp,
                     (operation, timeout_sec))
 
 
-# def create_tcp_health_check(gcp, name):
-#     tcp_health_check_spec = {
-#         'name': name,
-#         'type': 'TCP',
-#         'tcpHealthCheck': {
-#             'portSpecification': 'USE_SERVING_PORT',
-#         }
-#     }
-#     logger.debug('Sending GCP request with body=%s', config)
-#     result = gcp.compute.healthChecks().insert(
-#         project=gcp.project, body=tcp_health_check_spec).execute(num_retries=_GCP_API_RETRIES)
-#     wait_for_global_operation(gcp, result['name'])
-#     gcp.health_check = GcpResource(result['name'], result['targetLink'])
-
-
-# def get_health_check(gcp, health_check_name):
-#     result = gcp.compute.healthChecks().get(
-#         project=gcp.project, healthCheck=health_check_name).execute()
-#     gcp.health_check = GcpResource(health_check_name, result['selfLink'])
-#     # V1Service.status;
-#     # x: property = V1Service.metadata;
-#     z = V1Service.metadata
-#     print(z)
-    # z.
-    # z.
-
-def k8s_get_service_neg(k8s_core_v1: CoreV1Api, service_name: str, namespace: str,
-    service_port: int) -> Tuple[str, List[str]]:
+def k8s_get_service_neg(
+    k8s_core_v1: CoreV1Api, service_name: str, namespace: str,
+    service_port: int,
+) -> Tuple[str, List[str]]:
     logger.debug('Detecting NEG name for service=%s', service_name)
-    service: V1Service = k8s_core_v1.read_namespaced_service(service_name,
-                                                             namespace,
-                                                             async_req=False)
+    service: V1Service = k8s_core_v1.read_namespaced_service(
+        service_name, namespace, async_req=False)
 
     neg_info: dict = json.loads(
         service.metadata.annotations['cloud.google.com/neg-status'])
@@ -119,10 +97,20 @@ def k8s_get_service_neg(k8s_core_v1: CoreV1Api, service_name: str, namespace: st
     neg_zones: List[str] = neg_info['zones']
     return neg_name, neg_zones
 
+
+def k8s_print_server_mappings(k8s_root):
+    logger.debug("Server mappings:")
+    for mapping in k8s_root.get_api_versions().server_address_by_client_cid_rs:
+        logger.debug('%s -> %s', mapping.client_cidr, mapping.server_address)
+
+
 class GcpResource:
     def __init__(self, name, url):
         self.name = name
         self.url = url
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}({self.name!r}, {self.url!r})'
 
 
 class GcpState:
@@ -139,10 +127,24 @@ class GcpState:
         self.service_port = None
 
 
-def k8s_print_server_mappings(k8s_root):
-    logger.debug("Server mappings:")
-    for mapping in k8s_root.get_api_versions().server_address_by_client_cid_rs:
-        logger.debug('%s -> %s', mapping.client_cidr, mapping.server_address)
+def get_health_check(compute, project, health_check_name):
+    result = compute.healthChecks().get(project=project,
+                                        healthCheck=health_check_name).execute()
+    return GcpResource(health_check_name, result['selfLink'])
+
+
+def create_tcp_health_check(compute, project, health_check_name):
+    tcp_health_check_spec = {
+        'name': health_check_name,
+        'type': 'TCP',
+        'tcpHealthCheck': {
+            'portSpecification': 'USE_SERVING_PORT',
+        }
+    }
+    result = compute.healthChecks().insert(project=project,
+                                           body=tcp_health_check_spec).execute(num_retries=_GCP_API_RETRIES)
+    wait_for_global_operation(compute, project, result['name'])
+    return GcpResource(result['name'], result['targetLink'])
 
 
 def main():
@@ -159,7 +161,7 @@ def main():
     namespace = 'default'
     service_name = 'psm-grpc-service'
     service_port = 8080
-    health_check_name = "sergii-psm-test-health-check"
+    health_check_name: str = "sergii-psm-test-health-check2"
 
     # Connect k8s
     kube_config.load_kube_config(context=kube_context_name)
@@ -170,23 +172,23 @@ def main():
         k8s_print_server_mappings(k8s_root)
 
     # Detect NEG name
-    neg_name, neg_zones = k8s_get_service_neg(k8s_core_v1, service_name, namespace,
+    neg_name, neg_zones = k8s_get_service_neg(k8s_core_v1, service_name,
+                                              namespace,
                                               service_port)
     logger.info("Detected NEG=%s in zones=%s", neg_name, neg_zones)
 
+    # todo(sergiitk): see if cache_discovery=False needed
+    compute: google_api.Resource = google_api.build('compute', 'v1',
+                                                    cache_discovery=False)
 
-    # compute = googleapiclient.discovery.build('compute', 'v1',
-    #                                           cache_discovery=False)
-    # gcp = GcpState(compute, project)
-    #
-    # if args.use_existing_gcp_resources:
-    #     create_tcp_health_check(gcp, health_check_name)
-    #     print(f"Created healthcheck = {gcp.health_check.name} @ {gcp.health_check.url}")
-    # else:
-    #     get_health_check(gcp, health_check_name)
-
-    # confirm NEG
-    # result = compute.networkEndpointGroups().get(project=project, zone=zone, networkEndpointGroup=neg_name).execute()
+    # Health check
+    try:
+        health_check = get_health_check(compute, project, health_check_name)
+        logger.info('Loaded TCP HealthCheck %s', health_check.name)
+    except google_api_errors.HttpError as e:
+        logger.info('Creating TCP HealthCheck %s', health_check_name)
+        health_check = create_tcp_health_check(compute, project,
+                                               health_check_name)
 
 
 if __name__ == '__main__':
