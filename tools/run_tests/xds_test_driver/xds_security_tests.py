@@ -27,6 +27,7 @@ from kubernetes.client import CoreV1Api, CoreApi
 from kubernetes.client.models import V1Service
 
 # todo(sergiitk): fix imports
+_WAIT_FOR_BACKEND_SEC = 1200
 _WAIT_FOR_OPERATION_SEC = 1200
 _GCP_API_RETRIES = 5
 
@@ -168,6 +169,30 @@ def gcp_create_backend_service(compute, project, backend_service_name, health_ch
     return GcpResource(result['name'], result['targetLink'])
 
 
+def gcp_backend_service_add_backend(compute, project, backend_service, negs):
+    backends = [{
+        'group': neg.url,
+        'balancingMode': 'RATE',
+        'maxRatePerEndpoint': 5
+    } for neg in negs]
+
+    result = compute.backendServices().patch(
+        project=project,
+        backendService=backend_service.name,
+        body={'backends': backends}).execute(num_retries=_GCP_API_RETRIES)
+
+    wait_for_global_operation(
+        compute, project, result['name'], timeout_sec=_WAIT_FOR_BACKEND_SEC)
+
+
+def gcp_get_network_endpoint_group(compute, project, zone, neg_name):
+    result = compute.networkEndpointGroups().get(
+        project=project,
+        zone=zone,
+        networkEndpointGroup=neg_name).execute()
+    return GcpResource(neg_name, result['selfLink'])
+
+
 def main():
     args = parse_args()
     if not args.verbose:
@@ -204,6 +229,10 @@ def main():
     compute: google_api.Resource = google_api.build('compute', 'v1',
                                                     cache_discovery=False)
 
+    # Load NEGs
+    negs = [gcp_get_network_endpoint_group(compute, project, neg_zone, neg_name)
+            for neg_zone in neg_zones]
+
     # Health check
     try:
         health_check = gcp_get_health_check(compute, project, health_check_name)
@@ -223,8 +252,14 @@ def main():
         logger.info('Creating Backend Service %s', backend_service_name)
         backend_service = gcp_create_backend_service(
             compute, project, backend_service_name, health_check)
+
     backend_services.append(backend_service)
 
+    logger.info('Add NEG %s as a backend to to the Backend Service %s',
+                negs,
+                backend_service_name)
+
+    gcp_backend_service_add_backend(compute, project, backend_service, negs)
 
     # todo(sergiitk): finally/context manager
     compute.close()
