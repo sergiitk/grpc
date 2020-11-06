@@ -148,14 +148,14 @@ def gcp_create_tcp_health_check(compute, project, health_check_name):
     return GcpResource(result['name'], result['targetLink'])
 
 
-def gcp_get_backend_service(compute, project, backend_service_name):
+def gcp_get_global_backend_service(compute, project, backend_service_name):
     result = compute.backendServices().get(
         project=project,
         backendService=backend_service_name).execute()
     return GcpResource(backend_service_name, result['selfLink'])
 
 
-def gcp_create_backend_service(compute, project, backend_service_name, health_check):
+def gcp_create_global_backend_service(compute, project, backend_service_name, health_check):
     backend_service_spec = {
         'name': backend_service_name,
         'loadBalancingScheme': 'INTERNAL_SELF_MANAGED',  # Traffic Director
@@ -213,6 +213,7 @@ def gcp_create_url_map(compute, project, url_map_name, backend_service,
     wait_for_global_operation(compute, project, result['name'])
     return GcpResource(result['name'], result['targetLink'])
 
+
 def main():
     args = parse_args()
     if not args.verbose:
@@ -224,12 +225,12 @@ def main():
 
     # todo(sergiitk): move to args
     kube_context_name = 'gke_grpc-testing_us-central1-a_gke-interop-xds-test1-us-central1'
-    namespace = 'default'
-    service_name = 'psm-grpc-service'
+    namespace = 'sergii-psm-test'
+    service_name = 'psm-grpc-server-service'
     service_port = 8080
     # todo(sergiitk): remove sergii-psm-test-health-check2
     health_check_name: str = "sergii-psm-test-health-check"
-    backend_service_name: str = "sergii-psm-test-backend-service"
+    global_backend_service_name: str = "sergii-psm-test-global-backend-service"
     url_map_name: str = "sergii-psm-test-url-map"
     path_matcher_name: str = "sergii-psm-test-path-matcher"
 
@@ -259,7 +260,7 @@ def main():
     try:
         health_check = gcp_get_health_check(compute, project, health_check_name)
         logger.info('Loaded TCP HealthCheck %s', health_check.name)
-    except google_api_errors.HttpError as e:
+    except google_api_errors.HttpError:
         logger.info('Creating TCP HealthCheck %s', health_check_name)
         health_check = gcp_create_tcp_health_check(compute, project,
                                                    health_check_name)
@@ -267,20 +268,20 @@ def main():
     # Backend Service
     backend_services = []
     try:
-        backend_service = gcp_get_backend_service(compute, project,
-                                                  backend_service_name)
+        backend_service = gcp_get_global_backend_service(
+            compute, project, global_backend_service_name)
         logger.info('Loaded Backend Service %s', backend_service.name)
-    except google_api_errors.HttpError as e:
-        logger.info('Creating Backend Service %s', backend_service_name)
-        backend_service = gcp_create_backend_service(
-            compute, project, backend_service_name, health_check)
+    except google_api_errors.HttpError:
+        logger.info('Creating Backend Service %s', global_backend_service_name)
+        backend_service = gcp_create_global_backend_service(
+            compute, project, global_backend_service_name, health_check)
 
     backend_services.append(backend_service)
 
     logger.info('Add NEG %s in zones %s as backends to the Backend Service %s',
                 neg_name,
                 neg_zones,
-                backend_service_name)
+                global_backend_service_name)
 
     gcp_backend_service_add_backend(compute, project, backend_service, negs)
 
