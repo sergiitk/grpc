@@ -220,10 +220,53 @@ def gcp_create_url_map(compute, project,
     return GcpResource(url_map_name, result['targetLink'])
 
 
+def gcp_create_forwarding_rule(compute, project,
+                               forwarding_rule_name, xds_service_port,
+                               target_proxy, network):
+    forwarding_rule_spec = {
+        'name': forwarding_rule_name,
+        'loadBalancingScheme': 'INTERNAL_SELF_MANAGED',  # Traffic Director
+        'portRange': xds_service_port,
+        'IPAddress': '0.0.0.0',
+        'network': network,
+        'target': target_proxy.url,
+    }
+    result = compute.globalForwardingRules().insert(
+        project=project,
+        body=forwarding_rule_spec).execute(num_retries=_GCP_API_RETRIES)
+    wait_for_global_operation(compute, project, result['name'])
+    return GcpResource(forwarding_rule_name, result['targetLink'])
+
+
 def gcp_get_url_map(compute, project, url_map_name):
     result = compute.urlMaps().get(project=project,
                                    urlMap=url_map_name).execute()
     return GcpResource(url_map_name, result['selfLink'])
+
+
+def gcp_get_forwarding_rule(compute, project, forwarding_rule_name):
+    result = compute.globalForwardingRules().get(
+        project=project, forwardingRule=forwarding_rule_name).execute()
+    return GcpResource(forwarding_rule_name, result['selfLink'])
+
+
+def gcp_create_target_proxy(compute, project, target_proxy_name, url_map):
+    target_proxy_spec = {
+        'name': target_proxy_name,
+        'url_map': url_map.url,
+        'validate_for_proxyless': True,
+    }
+    result = compute.targetGrpcProxies().insert(
+        project=project,
+        body=target_proxy_spec).execute(num_retries=_GCP_API_RETRIES)
+    wait_for_global_operation(compute, project, result['name'])
+    return GcpResource(target_proxy_name, result['selfLink'])
+
+
+def gcp_get_target_proxy(compute, project, target_proxy_name):
+    result = compute.targetGrpcProxies().get(
+        project=project, targetGrpcProxy=target_proxy_name).execute()
+    return GcpResource(target_proxy_name, result['selfLink'])
 
 
 def main():
@@ -234,6 +277,7 @@ def main():
     # local args shortcuts
     project: str = args.project_id
     zone: str = args.zone
+    network: str = args.network
 
     # todo(sergiitk): move to args
     dotenv.load_dotenv()
@@ -245,6 +289,8 @@ def main():
     global_backend_service_name: str = os.environ['GLOBAL_BACKEND_SERVICE_NAME']
     url_map_name: str = os.environ['URL_MAP_NAME']
     url_map_path_matcher_name: str = os.environ['URL_MAP_PATH_MATCHER_NAME']
+    target_proxy_name: str = os.environ['TARGET_PROXY_NAME']
+    forwarding_rule_name: str = os.environ['FORWARDING_RULE_NAME']
     xds_service_hostname: str = 'sergii-psm-test-xds-host'
     xds_service_port: str = '8000'
     xds_service_host: str = f'{xds_service_hostname}:{xds_service_port}'
@@ -309,6 +355,32 @@ def main():
         url_map = gcp_create_url_map(compute, project,
                                      url_map_name, url_map_path_matcher_name,
                                      xds_service_host, global_backend_service)
+
+    # Target Proxy
+    try:
+        target_proxy = gcp_get_target_proxy(compute, project,
+                                            target_proxy_name)
+        logger.info('Loaded target proxy %s', target_proxy.name)
+    except google_api_errors.HttpError:
+        logger.info('Creating target proxy %s to url map %s',
+                    target_proxy_name, url_map.url)
+        target_proxy = gcp_create_target_proxy(
+            compute, project,
+            target_proxy_name, url_map)
+
+    # Global Forwarding Rule
+    try:
+        forwarding_rule = gcp_get_forwarding_rule(compute, project,
+                                                  forwarding_rule_name)
+        logger.info('Loaded forwarding rule %s', forwarding_rule.name)
+    except google_api_errors.HttpError:
+        logger.info('Creating forwarding rule %s 0.0.0.0:%s -> %s in %s',
+                    forwarding_rule_name, xds_service_port,
+                    target_proxy.url, network)
+        forwarding_rule = gcp_create_forwarding_rule(
+            compute, project,
+            forwarding_rule_name, xds_service_port,
+            target_proxy, network)
 
     # todo(sergiitk): finally/context manager
     compute.close()
