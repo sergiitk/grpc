@@ -33,7 +33,7 @@ spec:
     spec:
       containers:
       - name: psm-grpc-server
-        image: gcr.io/grpc-testing/xds-gke-java-interop-helloworld
+        image: gcr.io/grpc-testing/xds-gke-java-interop-helloworld:latest
         imagePullPolicy: Always
         ports:
           - containerPort: 8081
