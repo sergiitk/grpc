@@ -20,5 +20,3 @@ gcloud compute health-checks delete "$HEALTH_CHECK_NAME" --global -q
 
 # Backend
 gcloud compute backend-services delete "$GLOBAL_BACKEND_SERVICE_NAME" --global -q
-
-cd gke && skaffold delete -v info

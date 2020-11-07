@@ -150,28 +150,31 @@ def gcp_create_tcp_health_check(compute, project, health_check_name):
     return GcpResource(result['name'], result['targetLink'])
 
 
-def gcp_get_global_backend_service(compute, project, backend_service_name):
+def gcp_get_global_backend_service(compute, project, global_backend_service_name):
     result = compute.backendServices().get(
         project=project,
-        backendService=backend_service_name).execute()
-    return GcpResource(backend_service_name, result['selfLink'])
+        backendService=global_backend_service_name).execute()
+    return GcpResource(global_backend_service_name, result['selfLink'])
 
 
-def gcp_create_global_backend_service(compute, project, backend_service_name, health_check):
+def gcp_create_global_backend_service(compute, project,
+                                      global_backend_service_name,
+                                      health_check):
     backend_service_spec = {
-        'name': backend_service_name,
+        'name': global_backend_service_name,
         'loadBalancingScheme': 'INTERNAL_SELF_MANAGED',  # Traffic Director
         'healthChecks': [health_check.url],
-        'protocol': 'HTTP2',
+        'protocol': 'GRPC',
     }
     result = compute.backendServices().insert(
         project=project,
         body=backend_service_spec).execute(num_retries=_GCP_API_RETRIES)
     wait_for_global_operation(compute, project, result['name'])
-    return GcpResource(result['name'], result['targetLink'])
+    return GcpResource(global_backend_service_name, result['selfLink'])
 
 
-def gcp_backend_service_add_backend(compute, project, backend_service, negs):
+def gcp_backend_service_add_backend(compute, project,
+                                    global_backend_service, negs):
     backends = [{
         'group': neg.url,
         'balancingMode': 'RATE',
@@ -180,7 +183,7 @@ def gcp_backend_service_add_backend(compute, project, backend_service, negs):
 
     result = compute.backendServices().patch(
         project=project,
-        backendService=backend_service.name,
+        backendService=global_backend_service.name,
         body={'backends': backends}).execute(num_retries=_GCP_API_RETRIES)
 
     wait_for_global_operation(
@@ -195,17 +198,18 @@ def gcp_get_network_endpoint_group(compute, project, zone, neg_name):
     return GcpResource(neg_name, result['selfLink'])
 
 
-def gcp_create_url_map(compute, project, url_map_name, backend_service,
-                       service_name, url_map_path_matcher_name):
+def gcp_create_url_map(compute, project,
+                       url_map_name, url_map_path_matcher_name,
+                       xds_service, global_backend_service):
     url_map_spec = {
         'name': url_map_name,
-        'defaultService': backend_service.url,
+        'defaultService': global_backend_service.url,
         'pathMatchers': [{
             'name': url_map_path_matcher_name,
-            'defaultService': backend_service.url,
+            'defaultService': global_backend_service.url,
         }],
         'hostRules': [{
-            'hosts': [service_name],
+            'hosts': [xds_service],
             'pathMatcher': url_map_path_matcher_name,
         }]
     }
@@ -213,7 +217,13 @@ def gcp_create_url_map(compute, project, url_map_name, backend_service,
         project=project,
         body=url_map_spec).execute(num_retries=_GCP_API_RETRIES)
     wait_for_global_operation(compute, project, result['name'])
-    return GcpResource(result['name'], result['targetLink'])
+    return GcpResource(url_map_name, result['targetLink'])
+
+
+def gcp_get_url_map(compute, project, url_map_name):
+    result = compute.urlMaps().get(project=project,
+                                   urlMap=url_map_name).execute()
+    return GcpResource(url_map_name, result['selfLink'])
 
 
 def main():
@@ -235,6 +245,9 @@ def main():
     global_backend_service_name: str = os.environ['GLOBAL_BACKEND_SERVICE_NAME']
     url_map_name: str = os.environ['URL_MAP_NAME']
     url_map_path_matcher_name: str = os.environ['URL_MAP_PATH_MATCHER_NAME']
+    xds_service_hostname: str = 'sergii-psm-test-xds-host'
+    xds_service_port: str = '8000'
+    xds_service_host: str = f'{xds_service_hostname}:{xds_service_port}'
 
     # Connect k8s
     kube_config.load_kube_config(context=kube_context_name)
@@ -267,34 +280,35 @@ def main():
         health_check = gcp_create_tcp_health_check(compute, project,
                                                    health_check_name)
 
-    # Backend Service
-    backend_services = []
+    # Global Backend Service (LB)
     try:
-        backend_service = gcp_get_global_backend_service(
+        global_backend_service = gcp_get_global_backend_service(
             compute, project, global_backend_service_name)
-        logger.info('Loaded Backend Service %s', backend_service.name)
+        logger.info('Loaded Backend Service %s', global_backend_service.name)
     except google_api_errors.HttpError:
         logger.info('Creating Backend Service %s', global_backend_service_name)
-        backend_service = gcp_create_global_backend_service(
+        global_backend_service = gcp_create_global_backend_service(
             compute, project, global_backend_service_name, health_check)
-
-    backend_services.append(backend_service)
-
-    logger.info('Add NEG %s in zones %s as backends to the Backend Service %s',
-                neg_name,
-                neg_zones,
-                global_backend_service_name)
-
-    gcp_backend_service_add_backend(compute, project, backend_service, negs)
+        # Add NEGs as backends of Global Backend Service
+        logger.info('Add NEG %s in zones %s as backends to the Backend Service %s',
+                    neg_name,
+                    neg_zones,
+                    global_backend_service.name)
+        gcp_backend_service_add_backend(compute, project,
+                                        global_backend_service, negs)
 
     # URL map
-    logger.info('Creating URL map %s with path matcher %s',
-                url_map_name,
-                url_map_path_matcher_name)
-
-    url_map = gcp_create_url_map(compute, project, url_map_name,
-                                 backend_service,
-                                 service_name, url_map_path_matcher_name)
+    try:
+        url_map = gcp_get_url_map(compute, project, url_map_name)
+        logger.info('Loaded URL Map %s', url_map.name)
+    except google_api_errors.HttpError:
+        logger.info('Creating URL map %s xds://%s -> %s',
+                    url_map_name,
+                    xds_service_host,
+                    global_backend_service.name)
+        url_map = gcp_create_url_map(compute, project,
+                                     url_map_name, url_map_path_matcher_name,
+                                     xds_service_host, global_backend_service)
 
     # todo(sergiitk): finally/context manager
     compute.close()
