@@ -16,6 +16,7 @@
 import argparse
 import json
 import logging
+import os
 import time
 from typing import List, Tuple
 
@@ -25,6 +26,7 @@ from kubernetes import client as kube_client
 from kubernetes import config as kube_config
 from kubernetes.client import CoreV1Api, CoreApi
 from kubernetes.client.models import V1Service
+import dotenv
 
 # todo(sergiitk): fix imports
 _WAIT_FOR_BACKEND_SEC = 1200
@@ -194,17 +196,17 @@ def gcp_get_network_endpoint_group(compute, project, zone, neg_name):
 
 
 def gcp_create_url_map(compute, project, url_map_name, backend_service,
-                       service_name, path_matcher_name):
+                       service_name, url_map_path_matcher_name):
     url_map_spec = {
         'name': url_map_name,
         'defaultService': backend_service.url,
         'pathMatchers': [{
-            'name': path_matcher_name,
+            'name': url_map_path_matcher_name,
             'defaultService': backend_service.url,
         }],
         'hostRules': [{
             'hosts': [service_name],
-            'pathMatcher': path_matcher_name
+            'pathMatcher': url_map_path_matcher_name,
         }]
     }
     result = compute.urlMaps().insert(
@@ -224,15 +226,15 @@ def main():
     zone: str = args.zone
 
     # todo(sergiitk): move to args
-    kube_context_name = 'gke_grpc-testing_us-central1-a_gke-interop-xds-test1-us-central1'
-    namespace = 'sergii-psm-test'
-    service_name = 'psm-grpc-server-service'
-    service_port = 8080
-    # todo(sergiitk): remove sergii-psm-test-health-check2
-    health_check_name: str = "sergii-psm-test-health-check"
-    global_backend_service_name: str = "sergii-psm-test-global-backend-service"
-    url_map_name: str = "sergii-psm-test-url-map"
-    path_matcher_name: str = "sergii-psm-test-path-matcher"
+    dotenv.load_dotenv()
+    kube_context_name = os.environ['KUBE_CONTEXT_NAME']
+    namespace = os.environ['NAMESPACE']
+    service_name = os.environ['SERVICE_NAME']
+    service_port = os.environ['SERVICE_PORT']
+    health_check_name: str = os.environ['HEALTH_CHECK_NAME']
+    global_backend_service_name: str = os.environ['GLOBAL_BACKEND_SERVICE_NAME']
+    url_map_name: str = os.environ['URL_MAP_NAME']
+    url_map_path_matcher_name: str = os.environ['URL_MAP_PATH_MATCHER_NAME']
 
     # Connect k8s
     kube_config.load_kube_config(context=kube_context_name)
@@ -288,11 +290,11 @@ def main():
     # URL map
     logger.info('Creating URL map %s with path matcher %s',
                 url_map_name,
-                path_matcher_name)
+                url_map_path_matcher_name)
 
     url_map = gcp_create_url_map(compute, project, url_map_name,
                                  backend_service,
-                                 service_name, path_matcher_name)
+                                 service_name, url_map_path_matcher_name)
 
     # todo(sergiitk): finally/context manager
     compute.close()

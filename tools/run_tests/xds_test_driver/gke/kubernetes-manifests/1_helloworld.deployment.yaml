@@ -3,7 +3,7 @@ kind: Service
 metadata:
   name: psm-grpc-server-service
   annotations:
-    cloud.google.com/neg: '{"exposed_ports":{"8080":{}}}'
+    cloud.google.com/neg: '{"exposed_ports": {"8080":{}}}'
 spec:
   type: ClusterIP
   selector:
