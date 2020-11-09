@@ -1,21 +1,21 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: psm-grpc-client
+  name: psm-grpc-debug
   labels:
-    app: psm-grpc-client
+    app: psm-grpc-debug
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: psm-grpc-client
+      app: psm-grpc-debug
   template:
     metadata:
       labels:
-        app: psm-grpc-client
+        app: psm-grpc-debug
     spec:
       containers:
-      - name: psm-grpc-client
+      - name: psm-grpc-debug
         image: openjdk:10
         imagePullPolicy: IfNotPresent
         command:

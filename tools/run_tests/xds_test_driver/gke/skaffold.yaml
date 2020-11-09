@@ -8,7 +8,7 @@ build:
 #      timezone: UTC
   # defines where to find the code at build time and where to push the resulting image
   artifacts:
-    - image: gcr.io/grpc-testing/xds-gke-java-interop-helloworld
+    - image: gcr.io/grpc-testing/xds-gke-interop-server-java-sergii-test
   local: {}
 
 # defines the Kubernetes manifests to deploy on each run
