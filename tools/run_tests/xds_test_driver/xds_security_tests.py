@@ -17,17 +17,16 @@ import argparse
 import json
 import logging
 import os
-from typing import List, Tuple
 
 from googleapiclient import discovery as google_api
 from googleapiclient import errors as google_api_errors
 from kubernetes import client as kube_client
 from kubernetes import config as kube_config
 from kubernetes.client import CoreV1Api, CoreApi
-from kubernetes.client.models import V1Service
 import dotenv
 
 from infrastructure import gcp
+from infrastructure import k8s
 
 # todo(sergiitk): setup in a method
 logger = logging.getLogger()
@@ -66,27 +65,6 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def k8s_get_service_neg(
-    k8s_core_v1: CoreV1Api, namespace: str,
-    service_name: str, service_port: int,
-) -> Tuple[str, List[str]]:
-    logger.debug('Detecting NEG name for service=%s', service_name)
-    service: V1Service = k8s_core_v1.read_namespaced_service(
-        service_name, namespace, async_req=False)
-
-    neg_info: dict = json.loads(
-        service.metadata.annotations['cloud.google.com/neg-status'])
-    neg_name: str = neg_info['network_endpoint_groups'][str(service_port)]
-    neg_zones: List[str] = neg_info['zones']
-    return neg_name, neg_zones
-
-
-def k8s_print_server_mappings(k8s_root):
-    logger.debug("Server mappings:")
-    for mapping in k8s_root.get_api_versions().server_address_by_client_cid_rs:
-        logger.debug('%s -> %s', mapping.client_cidr, mapping.server_address)
-
-
 def configure_traffic_director_on_gke(
     k8s_core_v1, compute,
     project, namespace, network,
@@ -97,7 +75,7 @@ def configure_traffic_director_on_gke(
     xds_service_host, xds_service_port
 ):
     # Detect NEG name
-    neg_name, neg_zones = k8s_get_service_neg(k8s_core_v1, namespace,
+    neg_name, neg_zones = k8s.get_service_neg(k8s_core_v1, namespace,
                                               service_name, service_port)
     logger.info("Detected NEG=%s in zones=%s", neg_name, neg_zones)
 
@@ -201,7 +179,7 @@ def main():
     k8s_root: CoreApi = kube_client.CoreApi()
     k8s_core_v1: CoreV1Api = kube_client.CoreV1Api()
     if args.verbose:
-        k8s_print_server_mappings(k8s_root)
+        k8s.debug_server_mappings(k8s_root)
 
     # Create compute client
     # todo(sergiitk): see if cache_discovery=False needed
