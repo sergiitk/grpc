@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: psm-grpc-client
+  labels:
+    app: psm-grpc-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: psm-grpc-client
+  template:
+    metadata:
+      labels:
+        app: psm-grpc-client
+    spec:
+      containers:
+      - name: psm-grpc-client
+        image: gcr.io/grpc-testing/xds-gke-interop-client-java-sergii-test
+        imagePullPolicy: IfNotPresent
+        env:
+          - name: GRPC_XDS_BOOTSTRAP
+            value: "/tmp/grpc-xds/td-grpc-bootstrap.json"
+        resources:
+          limits:
+            cpu: 2
+            memory: 2000Mi
+          requests:
+            cpu: 300m
+            memory: 1500Mi
+        volumeMounts:
+          - mountPath: /tmp/grpc-xds/
+            name: grpc-td-conf
+      initContainers:
+        - name: grpc-td-init
+          image: gcr.io/trafficdirector-prod/td-grpc-bootstrap:0.9.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - --output
+            - "/tmp/bootstrap/td-grpc-bootstrap.json"
+            - --vpc-network-name
+            - default-vpc
+          resources:
+            limits:
+              cpu: 100m
+              memory: 100Mi
+            requests:
+              cpu: 10m
+              memory: 100Mi
+          volumeMounts:
+            - mountPath: /tmp/bootstrap/
+              name: grpc-td-conf
+      volumes:
+        - name: grpc-td-conf
+          emptyDir:
+            medium: Memory

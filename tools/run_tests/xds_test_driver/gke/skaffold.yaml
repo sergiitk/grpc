@@ -9,10 +9,14 @@ build:
   # defines where to find the code at build time and where to push the resulting image
   artifacts:
     - image: gcr.io/grpc-testing/xds-gke-interop-server-java-sergii-test
+      docker:
+        dockerfile: server.Dockerfile
+    - image: gcr.io/grpc-testing/xds-gke-interop-client-java-sergii-test
+      docker:
+        dockerfile: client.Dockerfile
     - image: gcr.io/grpc-testing/xds-gke-interop-debug-sergii-test
       docker:
         dockerfile: debug.Dockerfile
-        noCache: false
   local: {}
 
 # defines the Kubernetes manifests to deploy on each run
