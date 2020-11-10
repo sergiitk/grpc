@@ -17,7 +17,6 @@ import argparse
 import json
 import logging
 import os
-import time
 from typing import List, Tuple
 
 from googleapiclient import discovery as google_api
@@ -28,10 +27,7 @@ from kubernetes.client import CoreV1Api, CoreApi
 from kubernetes.client.models import V1Service
 import dotenv
 
-# todo(sergiitk): fix imports
-_WAIT_FOR_BACKEND_SEC = 1200
-_WAIT_FOR_OPERATION_SEC = 1200
-_GCP_API_RETRIES = 5
+from infrastructure import gcp
 
 # todo(sergiitk): setup in a method
 logger = logging.getLogger()
@@ -70,22 +66,6 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def wait_for_global_operation(compute, project, operation,
-                              timeout_sec=_WAIT_FOR_OPERATION_SEC):
-    start_time = time.time()
-    while time.time() - start_time <= timeout_sec:
-        result = compute.globalOperations().get(
-            project=project,
-            operation=operation).execute(num_retries=_GCP_API_RETRIES)
-        if result['status'] == 'DONE':
-            if 'error' in result:
-                raise Exception(result['error'])
-            return
-        time.sleep(2)
-    raise Exception('Operation %s did not complete within %d' %
-                    (operation, timeout_sec))
-
-
 def k8s_get_service_neg(
     k8s_core_v1: CoreV1Api, namespace: str,
     service_name: str, service_port: int,
@@ -107,169 +87,7 @@ def k8s_print_server_mappings(k8s_root):
         logger.debug('%s -> %s', mapping.client_cidr, mapping.server_address)
 
 
-class GcpResource:
-    def __init__(self, name, url):
-        self.name = name
-        self.url = url
-
-    def __repr__(self):
-        return f'{self.__class__.__name__}({self.name!r}, {self.url!r})'
-
-
-class GcpState:
-    def __init__(self, compute, project):
-        self.compute = compute
-        # self.alpha_compute = alpha_compute
-        self.project = project
-        self.health_check = None
-        self.health_check_firewall_rule = None
-        self.backend_services = []
-        self.url_map = None
-        self.target_proxy = None
-        self.global_forwarding_rule = None
-        self.service_port = None
-
-
-def gcp_get_health_check(compute, project, health_check_name):
-    result = compute.healthChecks().get(project=project,
-                                        healthCheck=health_check_name).execute()
-    return GcpResource(health_check_name, result['selfLink'])
-
-
-def gcp_create_tcp_health_check(compute, project, health_check_name):
-    tcp_health_check_spec = {
-        'name': health_check_name,
-        'type': 'TCP',
-        'tcpHealthCheck': {
-            'portSpecification': 'USE_SERVING_PORT',
-        }
-    }
-    result = compute.healthChecks().insert(project=project,
-                                           body=tcp_health_check_spec).execute(num_retries=_GCP_API_RETRIES)
-    wait_for_global_operation(compute, project, result['name'])
-    return GcpResource(result['name'], result['targetLink'])
-
-
-def gcp_get_global_backend_service(compute, project, global_backend_service_name):
-    result = compute.backendServices().get(
-        project=project,
-        backendService=global_backend_service_name).execute()
-    return GcpResource(global_backend_service_name, result['selfLink'])
-
-
-def gcp_create_global_backend_service(compute, project,
-                                      global_backend_service_name,
-                                      health_check):
-    backend_service_spec = {
-        'name': global_backend_service_name,
-        'loadBalancingScheme': 'INTERNAL_SELF_MANAGED',  # Traffic Director
-        'healthChecks': [health_check.url],
-        'protocol': 'GRPC',
-    }
-    result = compute.backendServices().insert(
-        project=project,
-        body=backend_service_spec).execute(num_retries=_GCP_API_RETRIES)
-    wait_for_global_operation(compute, project, result['name'])
-    return GcpResource(global_backend_service_name, result['selfLink'])
-
-
-def gcp_backend_service_add_backend(compute, project,
-                                    global_backend_service, negs):
-    backends = [{
-        'group': neg.url,
-        'balancingMode': 'RATE',
-        'maxRatePerEndpoint': 5
-    } for neg in negs]
-
-    result = compute.backendServices().patch(
-        project=project,
-        backendService=global_backend_service.name,
-        body={'backends': backends}).execute(num_retries=_GCP_API_RETRIES)
-
-    wait_for_global_operation(
-        compute, project, result['name'], timeout_sec=_WAIT_FOR_BACKEND_SEC)
-
-
-def gcp_get_network_endpoint_group(compute, project, zone, neg_name):
-    result = compute.networkEndpointGroups().get(
-        project=project,
-        zone=zone,
-        networkEndpointGroup=neg_name).execute()
-    return GcpResource(neg_name, result['selfLink'])
-
-
-def gcp_create_url_map(compute, project,
-                       url_map_name, url_map_path_matcher_name,
-                       xds_service, global_backend_service):
-    url_map_spec = {
-        'name': url_map_name,
-        'defaultService': global_backend_service.url,
-        'pathMatchers': [{
-            'name': url_map_path_matcher_name,
-            'defaultService': global_backend_service.url,
-        }],
-        'hostRules': [{
-            'hosts': [xds_service],
-            'pathMatcher': url_map_path_matcher_name,
-        }]
-    }
-    result = compute.urlMaps().insert(
-        project=project,
-        body=url_map_spec).execute(num_retries=_GCP_API_RETRIES)
-    wait_for_global_operation(compute, project, result['name'])
-    return GcpResource(url_map_name, result['targetLink'])
-
-
-def gcp_create_forwarding_rule(compute, project,
-                               forwarding_rule_name, xds_service_port,
-                               target_proxy, network):
-    forwarding_rule_spec = {
-        'name': forwarding_rule_name,
-        'loadBalancingScheme': 'INTERNAL_SELF_MANAGED',  # Traffic Director
-        'portRange': xds_service_port,
-        'IPAddress': '0.0.0.0',
-        'network': network,
-        'target': target_proxy.url,
-    }
-    result = compute.globalForwardingRules().insert(
-        project=project,
-        body=forwarding_rule_spec).execute(num_retries=_GCP_API_RETRIES)
-    wait_for_global_operation(compute, project, result['name'])
-    return GcpResource(forwarding_rule_name, result['targetLink'])
-
-
-def gcp_get_url_map(compute, project, url_map_name):
-    result = compute.urlMaps().get(project=project,
-                                   urlMap=url_map_name).execute()
-    return GcpResource(url_map_name, result['selfLink'])
-
-
-def gcp_get_forwarding_rule(compute, project, forwarding_rule_name):
-    result = compute.globalForwardingRules().get(
-        project=project, forwardingRule=forwarding_rule_name).execute()
-    return GcpResource(forwarding_rule_name, result['selfLink'])
-
-
-def gcp_create_target_proxy(compute, project, target_proxy_name, url_map):
-    target_proxy_spec = {
-        'name': target_proxy_name,
-        'url_map': url_map.url,
-        'validate_for_proxyless': True,
-    }
-    result = compute.targetGrpcProxies().insert(
-        project=project,
-        body=target_proxy_spec).execute(num_retries=_GCP_API_RETRIES)
-    wait_for_global_operation(compute, project, result['name'])
-    return GcpResource(target_proxy_name, result['selfLink'])
-
-
-def gcp_get_target_proxy(compute, project, target_proxy_name):
-    result = compute.targetGrpcProxies().get(
-        project=project, targetGrpcProxy=target_proxy_name).execute()
-    return GcpResource(target_proxy_name, result['selfLink'])
-
-
-def configure_traffic_director(
+def configure_traffic_director_on_gke(
     k8s_core_v1, compute,
     project, namespace, network,
     service_name, service_port,
@@ -284,69 +102,69 @@ def configure_traffic_director(
     logger.info("Detected NEG=%s in zones=%s", neg_name, neg_zones)
 
     # Load NEGs
-    negs = [gcp_get_network_endpoint_group(compute, project, neg_zone, neg_name)
+    negs = [gcp.get_network_endpoint_group(compute, project, neg_zone, neg_name)
             for neg_zone in neg_zones]
 
     # Health check
     try:
-        health_check = gcp_get_health_check(compute, project, health_check_name)
+        health_check = gcp.get_health_check(compute, project, health_check_name)
         logger.info('Loaded TCP HealthCheck %s', health_check.name)
     except google_api_errors.HttpError:
         logger.info('Creating TCP HealthCheck %s', health_check_name)
-        health_check = gcp_create_tcp_health_check(compute, project,
+        health_check = gcp.create_tcp_health_check(compute, project,
                                                    health_check_name)
 
     # Global Backend Service (LB)
     try:
-        global_backend_service = gcp_get_global_backend_service(
+        global_backend_service = gcp.get_global_backend_service(
             compute, project, global_backend_service_name)
         logger.info('Loaded Backend Service %s', global_backend_service.name)
     except google_api_errors.HttpError:
         logger.info('Creating Backend Service %s', global_backend_service_name)
-        global_backend_service = gcp_create_global_backend_service(
+        global_backend_service = gcp.create_global_backend_service(
             compute, project, global_backend_service_name, health_check)
         # Add NEGs as backends of Global Backend Service
         logger.info(
             'Add NEG %s in zones %s as backends to the Backend Service %s',
             neg_name, neg_zones, global_backend_service.name)
-        gcp_backend_service_add_backend(compute, project,
+        gcp.backend_service_add_backend(compute, project,
                                         global_backend_service, negs)
 
     # URL map
     try:
-        url_map = gcp_get_url_map(compute, project, url_map_name)
+        url_map = gcp.get_url_map(compute, project, url_map_name)
         logger.info('Loaded URL Map %s', url_map.name)
     except google_api_errors.HttpError:
         logger.info('Creating URL map %s xds://%s -> %s',
                     url_map_name,
                     xds_service_host,
                     global_backend_service.name)
-        url_map = gcp_create_url_map(compute, project,
+        url_map = gcp.create_url_map(compute, project,
                                      url_map_name, url_map_path_matcher_name,
                                      xds_service_host, global_backend_service)
 
     # Target Proxy
     try:
-        target_proxy = gcp_get_target_proxy(compute, project,
+        target_proxy = gcp.get_target_proxy(compute, project,
                                             target_proxy_name)
         logger.info('Loaded target proxy %s', target_proxy.name)
     except google_api_errors.HttpError:
         logger.info('Creating target proxy %s to url map %s',
                     target_proxy_name, url_map.url)
-        target_proxy = gcp_create_target_proxy(
+        target_proxy = gcp.create_target_proxy(
             compute, project,
             target_proxy_name, url_map)
 
     # Global Forwarding Rule
     try:
-        forwarding_rule = gcp_get_forwarding_rule(compute, project,
+        forwarding_rule = gcp.get_forwarding_rule(compute, project,
                                                   forwarding_rule_name)
         logger.info('Loaded forwarding rule %s', forwarding_rule.name)
     except google_api_errors.HttpError:
         logger.info('Creating forwarding rule %s 0.0.0.0:%s -> %s in %s',
                     forwarding_rule_name, xds_service_port,
                     target_proxy.url, network)
-        forwarding_rule = gcp_create_forwarding_rule(
+        forwarding_rule = gcp.create_forwarding_rule(
             compute, project,
             forwarding_rule_name, xds_service_port,
             target_proxy, network)
@@ -387,10 +205,10 @@ def main():
 
     # Create compute client
     # todo(sergiitk): see if cache_discovery=False needed
-    compute: google_api.Resource = google_api.build('compute', 'v1',
-                                                    cache_discovery=False)
+    compute: google_api.Resource = google_api.build(
+        'compute', 'v1', cache_discovery=False)
 
-    configure_traffic_director(
+    configure_traffic_director_on_gke(
         k8s_core_v1, compute,
         project, namespace, network,
         service_name, service_port,
