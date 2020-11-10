@@ -23,7 +23,6 @@ from kubernetes import config as kube_config
 import dotenv
 
 from infrastructure import traffic_director
-from infrastructure import k8s
 
 # todo(sergiitk): setup in a method
 logger = logging.getLogger()
@@ -89,10 +88,7 @@ def main():
 
     # Connect k8s
     kube_config.load_kube_config(context=kube_context_name)
-    k8s_root: kube_client.CoreApi = kube_client.CoreApi()
     k8s_core_v1: kube_client.CoreV1Api = kube_client.CoreV1Api()
-    if args.verbose:
-        k8s.debug_server_mappings(k8s_root)
 
     # Create compute client
     # todo(sergiitk): see if cache_discovery=False needed
