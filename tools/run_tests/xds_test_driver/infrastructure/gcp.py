@@ -16,10 +16,9 @@
 import logging
 import time
 
-
 logger = logging.getLogger()
 
-
+_WAIT_FOR_BACKEND_SEC = 1200
 _WAIT_FOR_OPERATION_SEC = 1200
 _GCP_API_RETRIES = 5
 
@@ -63,8 +62,9 @@ def create_tcp_health_check(compute, project, health_check_name):
             'portSpecification': 'USE_SERVING_PORT',
         }
     }
-    result = compute.healthChecks().insert(project=project,
-                                           body=tcp_health_check_spec).execute(num_retries=_GCP_API_RETRIES)
+    result = compute.healthChecks().insert(
+        project=project,
+        body=tcp_health_check_spec).execute(num_retries=_GCP_API_RETRIES)
     wait_for_global_operation(compute, project, result['name'])
     return GcpResource(result['name'], result['targetLink'])
 
@@ -77,8 +77,8 @@ def get_global_backend_service(compute, project, global_backend_service_name):
 
 
 def create_global_backend_service(compute, project,
-                                      global_backend_service_name,
-                                      health_check):
+                                  global_backend_service_name,
+                                  health_check):
     backend_service_spec = {
         'name': global_backend_service_name,
         'loadBalancingScheme': 'INTERNAL_SELF_MANAGED',  # Traffic Director
@@ -89,11 +89,11 @@ def create_global_backend_service(compute, project,
         project=project,
         body=backend_service_spec).execute(num_retries=_GCP_API_RETRIES)
     wait_for_global_operation(compute, project, result['name'])
-    return GcpResource(global_backend_service_name, result['selfLink'])
+    return GcpResource(global_backend_service_name, result['targetLink'])
 
 
 def backend_service_add_backend(compute, project,
-                                    global_backend_service, negs):
+                                global_backend_service, negs):
     backends = [{
         'group': neg.url,
         'balancingMode': 'RATE',
@@ -118,8 +118,8 @@ def get_network_endpoint_group(compute, project, zone, neg_name):
 
 
 def create_url_map(compute, project,
-                       url_map_name, url_map_path_matcher_name,
-                       xds_service, global_backend_service):
+                   url_map_name, url_map_path_matcher_name,
+                   xds_service, global_backend_service):
     url_map_spec = {
         'name': url_map_name,
         'defaultService': global_backend_service.url,
@@ -140,8 +140,8 @@ def create_url_map(compute, project,
 
 
 def create_forwarding_rule(compute, project,
-                               forwarding_rule_name, xds_service_port,
-                               target_proxy, network):
+                           forwarding_rule_name, xds_service_port,
+                           target_proxy, network):
     forwarding_rule_spec = {
         'name': forwarding_rule_name,
         'loadBalancingScheme': 'INTERNAL_SELF_MANAGED',  # Traffic Director
@@ -179,11 +179,10 @@ def create_target_proxy(compute, project, target_proxy_name, url_map):
         project=project,
         body=target_proxy_spec).execute(num_retries=_GCP_API_RETRIES)
     wait_for_global_operation(compute, project, result['name'])
-    return GcpResource(target_proxy_name, result['selfLink'])
+    return GcpResource(target_proxy_name, result['targetLink'])
 
 
 def get_target_proxy(compute, project, target_proxy_name):
     result = compute.targetGrpcProxies().get(
         project=project, targetGrpcProxy=target_proxy_name).execute()
     return GcpResource(target_proxy_name, result['selfLink'])
-
