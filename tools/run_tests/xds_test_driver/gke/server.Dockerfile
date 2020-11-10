@@ -13,6 +13,3 @@ ENV JAVA_OPTS="-Djava.util.logging.config.file=$APP_DIR/logging.properties"
 
 # Server
 CMD ["bin/xds-test-server", "--port=8080"]
-
-# client
-# CMD "bin/xds-test-client --server=xds:///{server_uri} --stats_port={stats_port} --qps={qps} {rpcs_to_send} {metadata_to_send}"
