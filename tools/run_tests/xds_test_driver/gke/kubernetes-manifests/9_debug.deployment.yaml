@@ -16,21 +16,18 @@ spec:
     spec:
       containers:
       - name: psm-grpc-debug
-        image: openjdk:10
+        image: gcr.io/grpc-testing/xds-gke-interop-debug-sergii-test:latest
         imagePullPolicy: IfNotPresent
-        command:
-        - /bin/sleep
-        - inf
         env:
           - name: GRPC_XDS_BOOTSTRAP
             value: "/tmp/grpc-xds/td-grpc-bootstrap.json"
         resources:
           limits:
-            cpu: 2
-            memory: 2000Mi
+            cpu: 250m
+            memory: 250Mi
           requests:
-            cpu: 300m
-            memory: 1500Mi
+            cpu: 100m
+            memory: 250Mi
         volumeMounts:
           - mountPath: /tmp/grpc-xds/
             name: grpc-td-conf
@@ -57,4 +54,3 @@ spec:
         - name: grpc-td-conf
           emptyDir:
             medium: Memory
-
