@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import logging
-import time
 
 import retrying
 
@@ -22,6 +21,7 @@ logger = logging.getLogger()
 
 _WAIT_FOR_BACKEND_SEC = 1200
 _WAIT_FOR_OPERATION_SEC = 1200
+_WAIT_FIXES_SEC = 2
 _GCP_API_RETRIES = 5
 
 
@@ -44,24 +44,25 @@ class ZonalGcpResource(GcpResource):
                f'{self.zone!r})'
 
 
-def wait_for_global_operation(compute, project, operation,
-                              timeout_sec=_WAIT_FOR_OPERATION_SEC):
-    start_time = time.time()
-    while time.time() - start_time <= timeout_sec:
-        result = compute.globalOperations().get(
-            project=project,
-            operation=operation).execute(num_retries=_GCP_API_RETRIES)
-        if result['status'] == 'DONE':
-            if 'error' in result:
-                raise Exception(result['error'])
-            return
-        time.sleep(2)
-    raise Exception('Operation %s did not complete within %d' %
-                    (operation, timeout_sec))
+@retrying.retry(retry_on_result=lambda result: result['status'] != 'DONE',
+                stop_max_delay=_WAIT_FOR_OPERATION_SEC * 1000,
+                wait_fixed=_WAIT_FIXES_SEC * 1000)
+def _wait_for_global_operation_with_retry(compute, project, operation):
+    return compute.globalOperations().get(
+        project=project,
+        operation=operation).execute(num_retries=_GCP_API_RETRIES)
+
+
+def wait_for_global_operation(compute, project, operation):
+    result = _wait_for_global_operation_with_retry(compute, project, operation)
+    if 'error' in result:
+        raise Exception(
+            f'Operation {operation} did not complete within {_WAIT_FOR_OPERATION_SEC}')
 
 
 @retrying.retry(retry_on_result=lambda result: not result,
-                stop_max_delay=_WAIT_FOR_BACKEND_SEC, wait_fixed=2000)
+                stop_max_delay=_WAIT_FOR_BACKEND_SEC * 1000,
+                wait_fixed=_WAIT_FIXES_SEC * 1000)
 def wait_for_backends_healthy_status(compute, project,
                                      backend_service, backends):
     for backend in backends:
