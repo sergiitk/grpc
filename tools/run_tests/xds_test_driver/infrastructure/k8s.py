@@ -26,7 +26,7 @@ def get_service_neg(
     k8s_core_v1: client.CoreV1Api, namespace: str,
     service_name: str, service_port: int,
 ) -> Tuple[str, List[str]]:
-    logger.debug('Detecting NEG name for service=%s', service_name)
+    logger.info('Detecting NEG name for service=%s', service_name)
     service: client.V1Service = k8s_core_v1.read_namespaced_service(
         service_name, namespace, async_req=False)
 

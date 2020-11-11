@@ -34,6 +34,16 @@ class GcpResource:
         return f'{self.__class__.__name__}({self.name!r}, {self.url!r})'
 
 
+class ZonalGcpResource(GcpResource):
+    def __init__(self, name, url, zone):
+        super().__init__(name, url)
+        self.zone = zone
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}({self.name!r}, {self.url!r}, ' \
+               f'{self.zone!r})'
+
+
 def wait_for_global_operation(compute, project, operation,
                               timeout_sec=_WAIT_FOR_OPERATION_SEC):
     start_time = time.time()
@@ -51,20 +61,21 @@ def wait_for_global_operation(compute, project, operation,
 
 
 @retrying.retry(retry_on_result=lambda result: not result,
-                stop_max_delay=_WAIT_FOR_BACKEND_SEC * 1000, wait_fixed=2000)
+                stop_max_delay=_WAIT_FOR_BACKEND_SEC, wait_fixed=2000)
 def wait_for_backends_healthy_status(compute, project,
                                      backend_service, backends):
     for backend in backends:
-        logger.debug("Requesting health: %s", backend.url)
+        logger.info("Requesting health: %s", backend.name)
         result = compute.backendServices().getHealth(
             project=project, backendService=backend_service.name,
             body={"group": backend.url}).execute()
 
         for instance in result['healthStatus']:
-            logger.debug('Backend %s, instance %s:%s - healthState: %s',
-                         backend.name,
-                         instance['ipAddress'], instance['port'],
-                         instance['healthState'])
+            logger.info(
+                'Backend %s in zone %s: instance %s:%s - health state: %s',
+                backend.name, backend.zone,
+                instance['ipAddress'], instance['port'],
+                instance['healthState'])
 
             if instance['healthState'] != 'HEALTHY':
                 return False
@@ -138,7 +149,7 @@ def get_network_endpoint_group(compute, project, zone, neg_name):
         project=project,
         zone=zone,
         networkEndpointGroup=neg_name).execute()
-    return GcpResource(neg_name, result['selfLink'])
+    return ZonalGcpResource(neg_name, result['selfLink'], zone)
 
 
 def create_url_map(compute, project,
