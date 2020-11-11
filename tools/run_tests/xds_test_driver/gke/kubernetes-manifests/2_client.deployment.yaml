@@ -18,19 +18,21 @@ spec:
       - name: psm-grpc-client
         image: gcr.io/grpc-testing/xds-gke-interop-client-java-sergii-test
         imagePullPolicy: IfNotPresent
+        ports:
+          - containerPort: 8079
         env:
           - name: GRPC_XDS_BOOTSTRAP
             value: "/tmp/grpc-xds/td-grpc-bootstrap.json"
-        resources:
-          limits:
-            cpu: 2
-            memory: 2000Mi
-          requests:
-            cpu: 300m
-            memory: 1500Mi
         volumeMounts:
           - mountPath: /tmp/grpc-xds/
             name: grpc-td-conf
+        resources:
+          limits:
+            cpu: 800m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 512Mi
       initContainers:
         - name: grpc-td-init
           image: gcr.io/trafficdirector-prod/td-grpc-bootstrap:0.9.0

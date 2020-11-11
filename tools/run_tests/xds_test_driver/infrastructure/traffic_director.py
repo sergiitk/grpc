@@ -20,18 +20,17 @@ from googleapiclient import errors as google_api_errors
 
 from infrastructure import gcp
 from infrastructure import k8s
-from infrastructure.gcp import GcpResource
 
 logger = logging.getLogger()
 
 
 class TrafficDirectorState:
-    backends: List[GcpResource]
-    backend_service: GcpResource
-    health_check: GcpResource
-    url_map: GcpResource
-    target_proxy: GcpResource
-    forwarding_rule: GcpResource
+    backends: List[gcp.GcpResource]
+    backend_service: gcp.GcpResource
+    health_check: gcp.GcpResource
+    url_map: gcp.GcpResource
+    target_proxy: gcp.GcpResource
+    forwarding_rule: gcp.GcpResource
 
     def __init__(self,
                  backends: List[gcp.ZonalGcpResource],

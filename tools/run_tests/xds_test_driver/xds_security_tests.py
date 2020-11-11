@@ -22,7 +22,9 @@ from kubernetes import client as kube_client
 from kubernetes import config as kube_config
 import dotenv
 
-from infrastructure import traffic_director, gcp
+from rpc import client as rpc_client
+from infrastructure import traffic_director
+from infrastructure import gcp
 
 
 logger = logging.getLogger()
@@ -85,6 +87,8 @@ def main():
     xds_service_hostname: str = 'sergii-psm-test-xds-host'
     xds_service_port: str = '8000'
     xds_service_host: str = f'{xds_service_hostname}:{xds_service_port}'
+    client_addr = '192.168.81.70'
+    client_port = '8079'
 
     # Connect k8s
     kube_config.load_kube_config(context=kube_context_name)
@@ -107,6 +111,16 @@ def main():
     # Wait for global backend instance reporting all backends to be HEALTHY.
     gcp.wait_for_backends_healthy_status(compute, project,
                                          td.backend_service, td.backends)
+
+    logger.info('Running test_ping_pong')
+    rpc_client.get_stats(client_addr, client_port, num_rpcs=10)
+
+    # _verify_rpcs_to_given_backends(backends,
+    #                                timeout_sec,
+    #                                num_rpcs,
+    #                                allow_failures=False)
+
+
 
     # todo(sergiitk): finally/context manager.
     compute.close()

@@ -5,7 +5,7 @@ metadata:
   labels:
     app: psm-grpc-debug
 spec:
-  replicas: 1
+  replicas: 0
   selector:
     matchLabels:
       app: psm-grpc-debug
