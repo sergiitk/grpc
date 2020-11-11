@@ -16,6 +16,8 @@
 import logging
 import time
 
+import retrying
+
 logger = logging.getLogger()
 
 _WAIT_FOR_BACKEND_SEC = 1200
@@ -48,6 +50,28 @@ def wait_for_global_operation(compute, project, operation,
                     (operation, timeout_sec))
 
 
+@retrying.retry(retry_on_result=lambda result: not result,
+                stop_max_delay=_WAIT_FOR_BACKEND_SEC * 1000, wait_fixed=2000)
+def wait_for_backends_healthy_status(compute, project,
+                                     backend_service, backends):
+    for backend in backends:
+        logger.debug("Requesting health: %s", backend.url)
+        result = compute.backendServices().getHealth(
+            project=project, backendService=backend_service.name,
+            body={"group": backend.url}).execute()
+
+        for instance in result['healthStatus']:
+            logger.debug('Backend %s, instance %s:%s - healthState: %s',
+                         backend.name,
+                         instance['ipAddress'], instance['port'],
+                         instance['healthState'])
+
+            if instance['healthState'] != 'HEALTHY':
+                return False
+
+    return True
+
+
 def get_health_check(compute, project, health_check_name):
     result = compute.healthChecks().get(project=project,
                                         healthCheck=health_check_name).execute()
@@ -69,18 +93,18 @@ def create_tcp_health_check(compute, project, health_check_name):
     return GcpResource(result['name'], result['targetLink'])
 
 
-def get_global_backend_service(compute, project, global_backend_service_name):
+def get_backend_service(compute, project, backend_service_name):
     result = compute.backendServices().get(
         project=project,
-        backendService=global_backend_service_name).execute()
-    return GcpResource(global_backend_service_name, result['selfLink'])
+        backendService=backend_service_name).execute()
+    return GcpResource(backend_service_name, result['selfLink'])
 
 
-def create_global_backend_service(compute, project,
-                                  global_backend_service_name,
-                                  health_check):
+def create_backend_service(compute, project,
+                           backend_service_name,
+                           health_check):
     backend_service_spec = {
-        'name': global_backend_service_name,
+        'name': backend_service_name,
         'loadBalancingScheme': 'INTERNAL_SELF_MANAGED',  # Traffic Director
         'healthChecks': [health_check.url],
         'protocol': 'GRPC',
@@ -89,11 +113,11 @@ def create_global_backend_service(compute, project,
         project=project,
         body=backend_service_spec).execute(num_retries=_GCP_API_RETRIES)
     wait_for_global_operation(compute, project, result['name'])
-    return GcpResource(global_backend_service_name, result['targetLink'])
+    return GcpResource(backend_service_name, result['targetLink'])
 
 
 def backend_service_add_backend(compute, project,
-                                global_backend_service, negs):
+                                backend_service, negs):
     backends = [{
         'group': neg.url,
         'balancingMode': 'RATE',
@@ -102,7 +126,7 @@ def backend_service_add_backend(compute, project,
 
     result = compute.backendServices().patch(
         project=project,
-        backendService=global_backend_service.name,
+        backendService=backend_service.name,
         body={'backends': backends}).execute(num_retries=_GCP_API_RETRIES)
 
     wait_for_global_operation(
@@ -119,13 +143,13 @@ def get_network_endpoint_group(compute, project, zone, neg_name):
 
 def create_url_map(compute, project,
                    url_map_name, url_map_path_matcher_name,
-                   xds_service, global_backend_service):
+                   xds_service, backend_service):
     url_map_spec = {
         'name': url_map_name,
-        'defaultService': global_backend_service.url,
+        'defaultService': backend_service.url,
         'pathMatchers': [{
             'name': url_map_path_matcher_name,
-            'defaultService': global_backend_service.url,
+            'defaultService': backend_service.url,
         }],
         'hostRules': [{
             'hosts': [xds_service],

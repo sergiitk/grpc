@@ -22,9 +22,9 @@ from kubernetes import client as kube_client
 from kubernetes import config as kube_config
 import dotenv
 
-from infrastructure import traffic_director
+from infrastructure import traffic_director, gcp
 
-# todo(sergiitk): setup in a method
+
 logger = logging.getLogger()
 console_handler = logging.StreamHandler()
 formatter = logging.Formatter(fmt='%(asctime)s: %(levelname)-8s %(message)s')
@@ -95,7 +95,7 @@ def main():
     compute: google_api.Resource = google_api.build(
         'compute', 'v1', cache_discovery=False)
 
-    traffic_director.setup_gke(
+    td: traffic_director.TrafficDirectorState = traffic_director.setup_gke(
         k8s_core_v1, compute,
         project, namespace, network,
         service_name, service_port,
@@ -104,7 +104,11 @@ def main():
         target_proxy_name, forwarding_rule_name,
         xds_service_host, xds_service_port)
 
-    # todo(sergiitk): finally/context manager
+    # Wait for global backend instance reporting all backends to be HEALTHY.
+    gcp.wait_for_backends_healthy_status(compute, project,
+                                         td.backend_service, td.backends)
+
+    # todo(sergiitk): finally/context manager.
     compute.close()
 
 

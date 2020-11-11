@@ -14,11 +14,13 @@
 # limitations under the License.
 
 import logging
+from typing import List
 
 from googleapiclient import errors as google_api_errors
 
 from infrastructure import gcp
 from infrastructure import k8s
+from infrastructure.gcp import GcpResource
 
 logger = logging.getLogger()
 
@@ -27,7 +29,7 @@ def setup_gke(
     k8s_core_v1, compute,
     project, namespace, network,
     service_name, service_port,
-    global_backend_service_name, health_check_name,
+    backend_service_name, health_check_name,
     url_map_name, url_map_path_matcher_name,
     target_proxy_name, forwarding_rule_name,
     xds_service_host, xds_service_port
@@ -37,9 +39,13 @@ def setup_gke(
                                               service_name, service_port)
     logger.info("Detected NEG=%s in zones=%s", neg_name, neg_zones)
 
-    # Load NEGs
-    negs = [gcp.get_network_endpoint_group(compute, project, neg_zone, neg_name)
-            for neg_zone in neg_zones]
+    # Load Backends
+    backends = []
+    for neg_zone in neg_zones:
+        backend = gcp.get_network_endpoint_group(compute, project, neg_zone,
+                                                 neg_name)
+        logger.debug("Loaded backend: %s", backend.url)
+        backends.append(backend)
 
     # Health check
     try:
@@ -52,19 +58,21 @@ def setup_gke(
 
     # Global Backend Service (LB)
     try:
-        global_backend_service = gcp.get_global_backend_service(
-            compute, project, global_backend_service_name)
-        logger.info('Loaded Backend Service %s', global_backend_service.name)
+        backend_service = gcp.get_backend_service(
+            compute, project, backend_service_name)
+        logger.info('Loaded Global Backend Service %s',
+                    backend_service.name)
     except google_api_errors.HttpError:
-        logger.info('Creating Backend Service %s', global_backend_service_name)
-        global_backend_service = gcp.create_global_backend_service(
-            compute, project, global_backend_service_name, health_check)
+        logger.info('Creating Global Backend Service %s',
+                    backend_service_name)
+        backend_service = gcp.create_backend_service(
+            compute, project, backend_service_name, health_check)
         # Add NEGs as backends of Global Backend Service
         logger.info(
             'Add NEG %s in zones %s as backends to the Backend Service %s',
-            neg_name, neg_zones, global_backend_service.name)
+            neg_name, neg_zones, backend_service.name)
         gcp.backend_service_add_backend(compute, project,
-                                        global_backend_service, negs)
+                                        backend_service, negs)
 
     # URL map
     try:
@@ -74,10 +82,10 @@ def setup_gke(
         logger.info('Creating URL map %s xds://%s -> %s',
                     url_map_name,
                     xds_service_host,
-                    global_backend_service.name)
+                    backend_service.name)
         url_map = gcp.create_url_map(compute, project,
                                      url_map_name, url_map_path_matcher_name,
-                                     xds_service_host, global_backend_service)
+                                     xds_service_host, backend_service)
 
     # Target Proxy
     try:
@@ -104,3 +112,29 @@ def setup_gke(
             compute, project,
             forwarding_rule_name, xds_service_port,
             target_proxy, network)
+
+    return TrafficDirectorState(backends, backend_service, health_check,
+                                url_map, target_proxy, forwarding_rule)
+
+
+class TrafficDirectorState:
+    backends: List[GcpResource]
+    backend_service: GcpResource
+    health_check: GcpResource
+    url_map: GcpResource
+    target_proxy: GcpResource
+    forwarding_rule: GcpResource
+
+    def __init__(self,
+                 backends: List[gcp.GcpResource],
+                 backend_service: gcp.GcpResource,
+                 health_check: gcp.GcpResource,
+                 url_map: gcp.GcpResource,
+                 target_proxy: gcp.GcpResource,
+                 forwarding_rule: gcp.GcpResource):
+        self.backends = backends
+        self.backend_service = backend_service
+        self.health_check = health_check
+        self.url_map = url_map
+        self.target_proxy = target_proxy
+        self.forwarding_rule = forwarding_rule
