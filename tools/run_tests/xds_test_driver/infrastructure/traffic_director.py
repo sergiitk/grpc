@@ -49,7 +49,7 @@ class TrafficDirectorState:
 
 def setup_gke(
     k8s_core_v1, compute,
-    project, namespace, network,
+    project, namespace, network_url,
     service_name, service_port,
     backend_service_name, health_check_name,
     url_map_name, url_map_path_matcher_name,
@@ -128,11 +128,11 @@ def setup_gke(
     except google_api_errors.HttpError:
         logger.info('Creating forwarding rule %s 0.0.0.0:%s -> %s in %s',
                     forwarding_rule_name, xds_service_port,
-                    target_proxy.url, network)
+                    target_proxy.url, network_url)
         forwarding_rule = gcp.create_forwarding_rule(
             compute, project,
             forwarding_rule_name, xds_service_port,
-            target_proxy, network)
+            target_proxy, network_url)
 
     return TrafficDirectorState(backends, backend_service, health_check,
                                 url_map, target_proxy, forwarding_rule)

@@ -18,8 +18,8 @@ import logging
 import os
 
 from googleapiclient import discovery as google_api
-from kubernetes import client as kube_client
-from kubernetes import config as kube_config
+import kubernetes.client
+import kubernetes.config
 import dotenv
 
 from rpc import client as rpc_client
@@ -42,24 +42,23 @@ def parse_args() -> argparse.Namespace:
         description='Run xDS security interop tests on GCP')
 
     group_gcp = parser.add_argument_group('GCP settings')
-    group_gcp.add_argument('--project_id', help='GCP project id', required=True)
+    group_gcp.add_argument('--project_id', help='Project ID', required=True)
     group_gcp.add_argument(
-        '--network', default='global/networks/default-vpc',
-        help='GCP network to use')
-    group_gcp.add_argument('--zone', default='us-central1-a')
+        '--network', default='default-vpc',
+        help='Network ID')
 
-    group_xds = parser.add_argument_group('xDS settings')
-    group_xds.add_argument(
-        '--xds_server', default='trafficdirector.googleapis.com:443',
-        help='xDS server')
+    group_driver = parser.add_argument_group('Test client settings')
+    group_driver.add_argument(
+        '--client_stats_port', default=8079, type=int,
+        help='The port of LoadBalancerStatsService on the client')
 
     group_driver = parser.add_argument_group('Driver settings')
     group_driver.add_argument(
-        '--stats_port', default=8079, type=int,
-        help='Local port for the client process to expose the LB stats service')
-    group_driver.add_argument(
         '--verbose', action='store_true',
-        help='verbose log output')
+        help='Verbose log output')
+    group_driver.add_argument(
+        '--skip_provision', action='store_true',
+        help='Skip provisioning step and go directly to the tests')
     return parser.parse_args()
 
 
@@ -68,9 +67,12 @@ def main():
     if not args.verbose:
         logger.setLevel(logging.INFO)
 
-    # local args shortcuts
+    # GCP
     project: str = args.project_id
-    network: str = args.network
+    network_url: str = f'global/networks/{args.network}'
+
+    # Client
+    client_stats_port: int = args.client_stats_port
 
     # todo(sergiitk): move to args
     dotenv.load_dotenv()
@@ -87,43 +89,39 @@ def main():
     xds_service_hostname: str = 'sergii-psm-test-xds-host'
     xds_service_port: str = '8000'
     xds_service_host: str = f'{xds_service_hostname}:{xds_service_port}'
-    client_addr = '192.168.81.70'
-    client_port = '8079'
+    # todo(sergiitk): detect automatically
+    client_addr = '127.0.0.1'
 
     # Connect k8s
-    kube_config.load_kube_config(context=kube_context_name)
-    k8s_core_v1: kube_client.CoreV1Api = kube_client.CoreV1Api()
+    kubernetes.config.load_kube_config(context=kube_context_name)
+    kube_client = kubernetes.client.ApiClient()
+    k8s_core_v1 = kubernetes.client.CoreV1Api(kube_client)
 
     # Create compute client
     # todo(sergiitk): see if cache_discovery=False needed
     compute: google_api.Resource = google_api.build(
         'compute', 'v1', cache_discovery=False)
 
-    td: traffic_director.TrafficDirectorState = traffic_director.setup_gke(
-        k8s_core_v1, compute,
-        project, namespace, network,
-        service_name, service_port,
-        global_backend_service_name, health_check_name,
-        url_map_name, url_map_path_matcher_name,
-        target_proxy_name, forwarding_rule_name,
-        xds_service_host, xds_service_port)
+    if not args.skip_provision:
+        td: traffic_director.TrafficDirectorState = traffic_director.setup_gke(
+            k8s_core_v1, compute,
+            project, namespace, network_url,
+            service_name, service_port,
+            global_backend_service_name, health_check_name,
+            url_map_name, url_map_path_matcher_name,
+            target_proxy_name, forwarding_rule_name,
+            xds_service_host, xds_service_port)
 
-    # Wait for global backend instance reporting all backends to be HEALTHY.
-    gcp.wait_for_backends_healthy_status(compute, project,
-                                         td.backend_service, td.backends)
+        # Wait for global backend instance reporting all backends to be HEALTHY.
+        gcp.wait_for_backends_healthy_status(compute, project,
+                                             td.backend_service, td.backends)
 
     logger.info('Running test_ping_pong')
-    rpc_client.get_stats(client_addr, client_port, num_rpcs=10)
-
-    # _verify_rpcs_to_given_backends(backends,
-    #                                timeout_sec,
-    #                                num_rpcs,
-    #                                allow_failures=False)
-
-
+    rpc_client.get_stats(client_addr, client_stats_port, num_rpcs=10)
 
     # todo(sergiitk): finally/context manager.
     compute.close()
+    kube_client.close()
 
 
 if __name__ == '__main__':
