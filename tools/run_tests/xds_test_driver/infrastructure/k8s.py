@@ -32,6 +32,25 @@ class ClientRunError(Exception):
     """Error running Test Client"""
 
 
+def simple_resource_get(func):
+    def wrap_not_found_return_none(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except client.ApiException as e:
+            if e.status == 404:
+                # noinspection PyBroadException
+                try:
+                    # Try parsing nicer error from the body
+                    data = json.loads(e.body)
+                    logger.debug(data['message'])
+                except Exception:
+                    logger.debug('Resource not found. %s', e.body)
+                return None
+            raise
+
+    return wrap_not_found_return_none
+
+
 def get_service_neg(
     k8s_core_v1: client.CoreV1Api, namespace: str,
     service_name: str, service_port: int,
@@ -134,27 +153,42 @@ def wait_for_started_pod(k8s_client, namespace,
     if _pod_started(pod):
         return pod
 
-    logger.info('Waiting for pod to start. phase=%s', pod.status.phase)
-
     @retrying.retry(retry_on_result=lambda r: not _pod_started(r),
                     stop_max_delay=timeout_sec * 1000,
                     wait_fixed=wait_sec * 1000)
     def _get_started_pod_with_retry():
         updated_pod = get_pod(k8s_client, namespace, pod.metadata.name)
-        logger.info('Retrying... phase=%s', pod.status.phase)
+        logger.info('Waiting for pod %s to start, current phase: %s',
+                    updated_pod.metadata.name,
+                    updated_pod.status.phase)
         return updated_pod
 
     return _get_started_pod_with_retry()
 
 
+def wait_for_deployment_ready(k8s_client, namespace,
+                              deployment: client.V1Deployment,
+                              timeout_sec=60,
+                              wait_sec=1) -> client.V1Deployment:
+    @retrying.retry(retry_on_result=lambda result: not result.status.replicas,
+                    stop_max_delay=timeout_sec * 1000,
+                    wait_fixed=wait_sec * 1000)
+    def _get_deployment_with_retry():
+        updated_deployment = get_deployment_by_name(k8s_client, namespace,
+                                                    deployment.metadata.name)
+        logger.info('Waiting for deployment %s replicas, current count %s',
+                    updated_deployment.metadata.name,
+                    updated_deployment.status.replicas)
+        return updated_deployment
+
+    return _get_deployment_with_retry()
+
+
+@simple_resource_get
 def get_deployment_by_name(k8s_client, namespace,
                            deployment_name) -> client.V1Deployment:
     api_apps = client.AppsV1Api(k8s_client)
-    deployment: client.V1Deployment = api_apps.read_namespaced_deployment(
-        deployment_name, namespace)
-
-    logger.info('Loaded Deployment %s', deployment.metadata.self_link)
-    return deployment
+    return api_apps.read_namespaced_deployment(deployment_name, namespace)
 
 
 @contextlib.contextmanager
@@ -167,21 +201,25 @@ def xds_test_client(k8s_client, namespace, deployment_name='psm-grpc-client',
     if not deployment:
         deployment = create_test_client_deployment(k8s_client, namespace,
                                                    deployment_name)
+    deployment = wait_for_deployment_ready(k8s_client, namespace, deployment)
+    logger.info('Deployment %s ready', deployment.metadata.name)
 
     pods = get_deployment_pods(k8s_client, namespace, deployment)
 
     # We need only one client at the moment
-    pod: client.V1Pod = pods[0]
-    pod = wait_for_started_pod(k8s_client, namespace, pod)
+    pod: client.V1Pod = wait_for_started_pod(k8s_client, namespace, pods[0])
+    logger.info('Pod %s ready, IP: %s', pod.metadata.name, pod.status.pod_ip)
 
     host: str = pod.status.pod_ip
     if host_override is not None:
         logger.info('Overriding client host %s with %s', host, host_override)
         host = host_override
 
+    # Configure XdsTestClient
     yield xds_test_app.client.XdsTestClient(host=host, stats_port=stats_port)
 
-    # delete_test_client_deployment(k8s_client, namespace, deployment_name)
+    # Cleanup
+    delete_test_client_deployment(k8s_client, namespace, deployment_name)
 
 
 def _debug(k8s_obj):

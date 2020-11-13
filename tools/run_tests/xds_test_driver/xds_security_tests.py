@@ -16,6 +16,7 @@
 import argparse
 import logging
 import os
+from typing import Optional
 
 from googleapiclient import discovery as google_api
 import kubernetes.client
