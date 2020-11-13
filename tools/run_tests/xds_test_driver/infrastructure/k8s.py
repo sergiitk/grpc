@@ -18,6 +18,7 @@ import pathlib
 import contextlib
 from typing import Tuple, List
 
+import retrying
 import yaml
 from kubernetes import client
 from kubernetes import utils
@@ -117,8 +118,33 @@ def get_deployment_pods(k8s_client,
         k8s_client, namespace, deployment.spec.selector.match_labels)
 
 
-def wait_for_pod_ready(k8s_client, namespace, pod):
-    return 1
+def _pod_started(pod: client.V1Pod):
+    return pod.status.phase not in ('Pending', 'Unknown')
+
+
+def get_pod(k8s_client, namespace, name) -> client.V1Pod:
+    api_core = client.CoreV1Api(k8s_client)
+    return api_core.read_namespaced_pod(name, namespace)
+
+
+def wait_for_started_pod(k8s_client, namespace,
+                         pod: client.V1Pod,
+                         timeout_sec=60,
+                         wait_sec=1) -> client.V1Pod:
+    if _pod_started(pod):
+        return pod
+
+    logger.info('Waiting for pod to start. phase=%s', pod.status.phase)
+
+    @retrying.retry(retry_on_result=lambda r: not _pod_started(r),
+                    stop_max_delay=timeout_sec * 1000,
+                    wait_fixed=wait_sec * 1000)
+    def _get_started_pod_with_retry():
+        updated_pod = get_pod(k8s_client, namespace, pod.metadata.name)
+        logger.info('Retrying... phase=%s', pod.status.phase)
+        return updated_pod
+
+    return _get_started_pod_with_retry()
 
 
 def get_deployment_by_name(k8s_client, namespace,
@@ -146,7 +172,7 @@ def xds_test_client(k8s_client, namespace, deployment_name='psm-grpc-client',
 
     # We need only one client at the moment
     pod: client.V1Pod = pods[0]
-    wait_for_pod_ready(k8s_client, namespace, pod)
+    pod = wait_for_started_pod(k8s_client, namespace, pod)
 
     host: str = pod.status.pod_ip
     if host_override is not None:
