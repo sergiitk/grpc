@@ -25,6 +25,7 @@ import dotenv
 from rpc import client as rpc_client
 from infrastructure import traffic_director
 from infrastructure import gcp
+from infrastructure import k8s
 
 
 logger = logging.getLogger()
@@ -94,8 +95,8 @@ def main():
 
     # Connect k8s
     kubernetes.config.load_kube_config(context=kube_context_name)
-    kube_client = kubernetes.client.ApiClient()
-    k8s_core_v1 = kubernetes.client.CoreV1Api(kube_client)
+    k8s_client = kubernetes.client.ApiClient()
+    k8s_core_v1 = kubernetes.client.CoreV1Api(k8s_client)
 
     # Create compute client
     # todo(sergiitk): see if cache_discovery=False needed
@@ -116,12 +117,14 @@ def main():
         gcp.wait_for_backends_healthy_status(compute, project,
                                              td.backend_service, td.backends)
 
-    logger.info('Running test_ping_pong')
-    rpc_client.get_stats(client_addr, client_stats_port, num_rpcs=10)
+    # logger.info('Running test_ping_pong')
+    # rpc_client.get_stats(client_addr, client_stats_port, num_rpcs=10)
+
+    k8s.run_test_client(k8s_client, namespace)
 
     # todo(sergiitk): finally/context manager.
     compute.close()
-    kube_client.close()
+    k8s_client.close()
 
 
 if __name__ == '__main__':
