@@ -22,7 +22,7 @@ import kubernetes.client
 import kubernetes.config
 import dotenv
 
-from rpc import client as rpc_client
+import xds_test_app.client
 from infrastructure import traffic_director
 from infrastructure import gcp
 from infrastructure import k8s
@@ -91,7 +91,6 @@ def main():
     xds_service_port: str = '8000'
     xds_service_host: str = f'{xds_service_hostname}:{xds_service_port}'
     # todo(sergiitk): detect automatically
-    client_addr = '127.0.0.1'
 
     # Connect k8s
     kubernetes.config.load_kube_config(context=kube_context_name)
@@ -117,10 +116,10 @@ def main():
         gcp.wait_for_backends_healthy_status(compute, project,
                                              td.backend_service, td.backends)
 
-    # logger.info('Running test_ping_pong')
-    # rpc_client.get_stats(client_addr, client_stats_port, num_rpcs=10)
-
-    k8s.run_test_client(k8s_client, namespace)
+    xds_client: xds_test_app.client.XdsTestClient
+    with k8s.xds_test_client(k8s_client, namespace,
+                             client_stats_port=client_stats_port) as xds_client:
+        xds_client.request_load_balancer_stats(num_rpcs=2)
 
     # todo(sergiitk): finally/context manager.
     compute.close()

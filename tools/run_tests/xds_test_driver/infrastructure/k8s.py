@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # Copyright 2016 gRPC authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,6 +21,8 @@ from typing import Tuple, List
 import yaml
 from kubernetes import client
 from kubernetes import utils
+
+import xds_test_app.client
 
 logger = logging.getLogger()
 
@@ -78,17 +79,35 @@ def create_test_client_deployment(
     if deployment.metadata.name != deployment_name:
         raise ClientRunError('Client Deployment created with unexpected name: '
                              f'{deployment.metadata.name}')
+    logger.info('Deployment %s created at %s',
+                deployment.metadata.self_link,
+                deployment.metadata.creation_timestamp)
 
     return deployment
 
 
-def run_test_client(k8s_client, namespace):
-    deployment = create_test_client_deployment(
-        k8s_client, namespace, deployment_name='psm-grpc-client')
+def delete_test_client_deployment(k8s_client, namespace, deployment_name):
+    api_client = client.AppsV1Api(k8s_client)
+    api_client.delete_namespaced_deployment(
+        name=deployment_name, namespace=namespace,
+        body=client.V1DeleteOptions(
+            propagation_policy='Foreground',
+            grace_period_seconds=5))
 
-    print(yaml.dump(deployment.metadata.to_dict()))
-    print('----------------------\n')
-    print(yaml.dump(deployment.spec.to_dict()))
-    print('----------------------\n')
-    print(yaml.dump(deployment.status.to_dict()))
+    logger.info('Deployment %s deleted', deployment_name)
 
+
+@contextlib.contextmanager
+def xds_test_client(k8s_client, namespace, deployment_name='psm-grpc-client',
+                    client_stats_port=8079):
+    deployment: client.V1Deployment = create_test_client_deployment(
+        k8s_client, namespace, deployment_name)
+
+    pod_host = '127.0.0.1'
+    pod_serving_port = client_stats_port
+
+    input('Enter after port fwd --> ')
+    yield xds_test_app.client.XdsTestClient(host=pod_host,
+                                            stats_service_port=pod_serving_port)
+
+    delete_test_client_deployment(k8s_client, namespace, deployment_name)
