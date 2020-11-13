@@ -87,27 +87,76 @@ def create_test_client_deployment(
 
 
 def delete_test_client_deployment(k8s_client, namespace, deployment_name):
-    api_client = client.AppsV1Api(k8s_client)
-    api_client.delete_namespaced_deployment(
+    api_apps = client.AppsV1Api(k8s_client)
+    api_apps.delete_namespaced_deployment(
         name=deployment_name, namespace=namespace,
         body=client.V1DeleteOptions(
             propagation_policy='Foreground',
             grace_period_seconds=5))
-
     logger.info('Deployment %s deleted', deployment_name)
+
+
+def label_dict_to_selector(labels: dict) -> str:
+    return ','.join(f'{k}=={v}' for k, v in labels.items())
+
+
+def list_pods_with_labels(k8s_client,
+                          namespace,
+                          labels: dict) -> List[client.V1Pod]:
+    api_core = client.CoreV1Api(k8s_client)
+    pod_list: client.V1PodList = api_core.list_namespaced_pod(
+        namespace, label_selector=label_dict_to_selector(labels))
+    return pod_list.items
+
+
+def get_deployment_pods(k8s_client,
+                        namespace,
+                        deployment: client.V1Deployment) -> List[client.V1Pod]:
+    # V1LabelSelector.match_expressions not supported at the moment
+    return list_pods_with_labels(
+        k8s_client, namespace, deployment.spec.selector.match_labels)
+
+
+def wait_for_pod_ready(k8s_client, namespace, pod):
+    return 1
+
+
+def get_deployment_by_name(k8s_client, namespace,
+                           deployment_name) -> client.V1Deployment:
+    api_apps = client.AppsV1Api(k8s_client)
+    deployment: client.V1Deployment = api_apps.read_namespaced_deployment(
+        deployment_name, namespace)
+
+    logger.info('Loaded Deployment %s', deployment.metadata.self_link)
+    return deployment
 
 
 @contextlib.contextmanager
 def xds_test_client(k8s_client, namespace, deployment_name='psm-grpc-client',
-                    client_stats_port=8079):
-    deployment: client.V1Deployment = create_test_client_deployment(
-        k8s_client, namespace, deployment_name)
+                    stats_port=8079, host_override=None):
+    deployment: client.V1Deployment
 
-    pod_host = '127.0.0.1'
-    pod_serving_port = client_stats_port
+    # Reuse
+    deployment = get_deployment_by_name(k8s_client, namespace, deployment_name)
+    if not deployment:
+        deployment = create_test_client_deployment(k8s_client, namespace,
+                                                   deployment_name)
 
-    input('Enter after port fwd --> ')
-    yield xds_test_app.client.XdsTestClient(host=pod_host,
-                                            stats_service_port=pod_serving_port)
+    pods = get_deployment_pods(k8s_client, namespace, deployment)
 
-    delete_test_client_deployment(k8s_client, namespace, deployment_name)
+    # We need only one client at the moment
+    pod: client.V1Pod = pods[0]
+    wait_for_pod_ready(k8s_client, namespace, pod)
+
+    host: str = pod.status.pod_ip
+    if host_override is not None:
+        logger.info('Overriding client host %s with %s', host, host_override)
+        host = host_override
+
+    yield xds_test_app.client.XdsTestClient(host=host, stats_port=stats_port)
+
+    # delete_test_client_deployment(k8s_client, namespace, deployment_name)
+
+
+def _debug(k8s_obj):
+    print(yaml.dump(k8s_obj.to_dict()))

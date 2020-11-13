@@ -50,6 +50,10 @@ def parse_args() -> argparse.Namespace:
 
     group_driver = parser.add_argument_group('Test client settings')
     group_driver.add_argument(
+        '--client_host_override', type=str,
+        help='Do not detect test client host automatically. Use this options '
+             'for debugging locally (with port forwarding)')
+    group_driver.add_argument(
         '--client_stats_port', default=8079, type=int,
         help='The port of LoadBalancerStatsService on the client')
 
@@ -73,6 +77,7 @@ def main():
     network_url: str = f'global/networks/{args.network}'
 
     # Client
+    client_host_override: Optional[str] = args.client_host_override
     client_stats_port: int = args.client_stats_port
 
     # todo(sergiitk): move to args
@@ -118,7 +123,8 @@ def main():
 
     xds_client: xds_test_app.client.XdsTestClient
     with k8s.xds_test_client(k8s_client, namespace,
-                             client_stats_port=client_stats_port) as xds_client:
+                             stats_port=client_stats_port,
+                             host_override=client_host_override) as xds_client:
         xds_client.request_load_balancer_stats(num_rpcs=2)
 
     # todo(sergiitk): finally/context manager.

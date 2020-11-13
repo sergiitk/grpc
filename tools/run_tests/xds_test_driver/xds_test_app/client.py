@@ -27,9 +27,9 @@ class XdsTestClient:
     DEFAULT_STATS_REQUEST_TIMEOUT_SEC = 1200
     CONNECTION_TIMEOUT_SEC = 60
 
-    def __init__(self, host: str, stats_service_port: Tuple[int, str]):
+    def __init__(self, host: str, stats_port: Tuple[int, str]):
         self.host = host
-        self.stats_service_port = int(stats_service_port)
+        self.stats_service_port = int(stats_port)
 
     @property
     def stats_service_address(self) -> str:
