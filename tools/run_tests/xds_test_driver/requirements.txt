@@ -5,3 +5,4 @@ grpcio-tools
 kubernetes==12.0.0
 python-dotenv==0.15.0
 retrying==1.3.3
+pytest~=6.1

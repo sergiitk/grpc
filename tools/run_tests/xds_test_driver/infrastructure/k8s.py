@@ -60,7 +60,7 @@ def get_service_neg(
         service_name, namespace)
 
     neg_info: dict = json.loads(
-        service.metadata.annotations['cloud.google.com/neg-stat us'])
+        service.metadata.annotations['cloud.google.com/neg-status'])
     neg_name: str = neg_info['network_endpoint_groups'][str(service_port)]
     neg_zones: List[str] = neg_info['zones']
     return neg_name, neg_zones
