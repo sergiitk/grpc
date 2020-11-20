@@ -66,11 +66,14 @@ def wait_for_global_operation(compute, project, operation,
                 wait_fixed=_WAIT_FIXES_SEC * 1000)
 def wait_for_backends_healthy_status(compute, project,
                                      backend_service, backends):
+    # todo(sergiitk): match with the expectation how many instances in each zone
     for backend in backends:
-        logger.info("Requesting health: %s", backend.name)
+        logger.info("Requesting Backend Service %s health: backend %s, zone %s",
+                    backend_service.name, backend.name, backend.zone)
         result = compute.backendServices().getHealth(
             project=project, backendService=backend_service.name,
             body={"group": backend.url}).execute()
+        logger.debug('%s health: %s', backend.name, result)
 
         for instance in result['healthStatus']:
             logger.info(

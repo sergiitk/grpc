@@ -65,6 +65,9 @@ def parse_args() -> argparse.Namespace:
     group_driver.add_argument(
         '--skip_provision', action='store_true',
         help='Skip provisioning step and go directly to the tests')
+    group_driver.add_argument(
+        '--skip_tests', action='store_true',
+        help='Skip tests, only run provisioning')
     return parser.parse_args()
 
 
@@ -122,11 +125,12 @@ def main():
         gcp.wait_for_backends_healthy_status(compute, project,
                                              td.backend_service, td.backends)
 
-    xds_client: xds_test_app.client.XdsTestClient
-    with k8s.xds_test_client(k8s_client, namespace,
-                             stats_port=client_stats_port,
-                             host_override=client_host_override) as xds_client:
-        xds_client.request_load_balancer_stats(num_rpcs=2)
+    if not args.skip_tests:
+        with k8s.xds_test_client(k8s_client, namespace,
+                                 stats_port=client_stats_port,
+                                 host_override=client_host_override) as _client:
+            _client: xds_test_app.client.XdsTestClient
+            _client.request_load_balancer_stats(num_rpcs=2)
 
     # todo(sergiitk): finally/context manager.
     compute.close()

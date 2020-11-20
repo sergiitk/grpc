@@ -55,7 +55,8 @@ def get_service_neg(
     k8s_core_v1: client.CoreV1Api, namespace: str,
     service_name: str, service_port: int,
 ) -> Tuple[str, List[str]]:
-    logger.info('Detecting NEG name for service=%s', service_name)
+    logger.info('Detecting NEG name for service=%s in namespace=%s',
+                service_name, namespace)
     service: client.V1Service = k8s_core_v1.read_namespaced_service(
         service_name, namespace)
 
@@ -77,7 +78,8 @@ def create_test_client_deployment(
     deployment_name, template='client.deployment.yaml'
 ) -> client.V1Deployment:
     # Open template
-    yaml_file = pathlib.Path('./templates').joinpath(template).absolute()
+    templates_path = pathlib.Path(__file__).parent / '../templates'
+    yaml_file = templates_path.joinpath(template).absolute()
     logger.info("Creating client from: %s", yaml_file)
 
     # Parse yaml
