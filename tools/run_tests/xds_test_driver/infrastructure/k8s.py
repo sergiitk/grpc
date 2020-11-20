@@ -28,10 +28,6 @@ import xds_test_app.client
 logger = logging.getLogger()
 
 
-class ClientRunError(Exception):
-    """Error running Test Client"""
-
-
 def simple_resource_get(func):
     def wrap_not_found_return_none(*args, **kwargs):
         try:
@@ -71,51 +67,6 @@ def debug_server_mappings(k8s_root: client.CoreApi):
     logger.debug("Server mappings:")
     for mapping in k8s_root.get_api_versions().server_address_by_client_cid_rs:
         logger.debug('%s -> %s', mapping.client_cidr, mapping.server_address)
-
-
-def create_test_client_deployment(
-    k8s_client, namespace,
-    deployment_name, template='client.deployment.yaml'
-) -> client.V1Deployment:
-    # Open template
-    templates_path = pathlib.Path(__file__).parent / '../templates'
-    yaml_file = templates_path.joinpath(template).absolute()
-    logger.info("Creating client from: %s", yaml_file)
-
-    # Parse yaml
-    with open(yaml_file) as f, contextlib.closing(yaml.safe_load_all(f)) as yml:
-        manifest = next(yml)
-        # Error out on multi-document yaml
-        if next(yml, False):
-            raise ClientRunError(
-                'Exactly one document expected in client manifest {yaml_file}')
-
-    # Apply the manifest
-    results = utils.create_from_dict(k8s_client, manifest, namespace=namespace)
-
-    # Correctness check
-    if len(results) != 1 or not isinstance(results[0], client.V1Deployment):
-        raise ClientRunError('Expected exactly one Deployment created from '
-                             f'manifest {yaml_file}')
-    deployment: client.V1Deployment = results[0]
-    if deployment.metadata.name != deployment_name:
-        raise ClientRunError('Client Deployment created with unexpected name: '
-                             f'{deployment.metadata.name}')
-    logger.info('Deployment %s created at %s',
-                deployment.metadata.self_link,
-                deployment.metadata.creation_timestamp)
-
-    return deployment
-
-
-def delete_test_client_deployment(k8s_client, namespace, deployment_name):
-    api_apps = client.AppsV1Api(k8s_client)
-    api_apps.delete_namespaced_deployment(
-        name=deployment_name, namespace=namespace,
-        body=client.V1DeleteOptions(
-            propagation_policy='Foreground',
-            grace_period_seconds=5))
-    logger.info('Deployment %s deleted', deployment_name)
 
 
 def label_dict_to_selector(labels: dict) -> str:
@@ -168,11 +119,23 @@ def wait_for_started_pod(k8s_client, namespace,
     return _get_started_pod_with_retry()
 
 
-def wait_for_deployment_ready(k8s_client, namespace,
-                              deployment: client.V1Deployment,
-                              timeout_sec=60,
-                              wait_sec=1) -> client.V1Deployment:
-    @retrying.retry(retry_on_result=lambda result: not result.status.replicas,
+def _min_replicas_available(deployment):
+    return (deployment is not None and
+            deployment.status.available_replicas is not None and
+            deployment.status.available_replicas > 0)
+
+
+def wait_for_deployment_minimum_replicas_available(
+    k8s_client,
+    namespace,
+    deployment: client.V1Deployment,
+    timeout_sec=60,
+    wait_sec=1
+) -> client.V1Deployment:
+    if _min_replicas_available(deployment):
+        return deployment
+
+    @retrying.retry(retry_on_result=lambda r: not _min_replicas_available(r),
                     stop_max_delay=timeout_sec * 1000,
                     wait_fixed=wait_sec * 1000)
     def _get_deployment_with_retry():
@@ -180,10 +143,33 @@ def wait_for_deployment_ready(k8s_client, namespace,
                                                     deployment.metadata.name)
         logger.info('Waiting for deployment %s replicas, current count %s',
                     updated_deployment.metadata.name,
-                    updated_deployment.status.replicas)
+                    updated_deployment.status.available_replicas)
         return updated_deployment
 
     return _get_deployment_with_retry()
+
+
+def wait_for_deployment_deleted(
+    k8s_client,
+    namespace,
+    deployment: client.V1Deployment,
+    timeout_sec=60,
+    wait_sec=1
+) -> client.V1Deployment:
+    @retrying.retry(retry_on_result=_min_replicas_available,
+                    stop_max_delay=timeout_sec * 1000,
+                    wait_fixed=wait_sec * 1000)
+    def _wait_for_deleted_deployment_with_retry():
+        deleted_deployment = get_deployment_by_name(k8s_client, namespace,
+                                                    deployment.metadata.name)
+        if deleted_deployment:
+            logger.info('Waiting for deployment %s to be deleted, current '
+                        'replica count %s',
+                        deleted_deployment.metadata.name,
+                        deleted_deployment.status.available_replicas)
+        return deleted_deployment
+
+    return _wait_for_deleted_deployment_with_retry()
 
 
 @simple_resource_get
@@ -193,35 +179,20 @@ def get_deployment_by_name(k8s_client, namespace,
     return api_apps.read_namespaced_deployment(deployment_name, namespace)
 
 
-@contextlib.contextmanager
-def xds_test_client(k8s_client, namespace, deployment_name='psm-grpc-client',
-                    stats_port=8079, host_override=None):
-    deployment: client.V1Deployment
+def delete_deployment(k8s_client, namespace, deployment_name,
+                      grace_period_seconds=5):
+    api_apps = client.AppsV1Api(k8s_client)
+    result = api_apps.delete_namespaced_deployment(
+        name=deployment_name, namespace=namespace,
+        body=client.V1DeleteOptions(
+            propagation_policy='Foreground',
+            grace_period_seconds=grace_period_seconds))
 
-    # Reuse
-    deployment = get_deployment_by_name(k8s_client, namespace, deployment_name)
-    if not deployment:
-        deployment = create_test_client_deployment(k8s_client, namespace,
-                                                   deployment_name)
-    deployment = wait_for_deployment_ready(k8s_client, namespace, deployment)
-    logger.info('Deployment %s ready', deployment.metadata.name)
+    # logger.info('del %s', result)
 
-    pods = get_deployment_pods(k8s_client, namespace, deployment)
 
-    # We need only one client at the moment
-    pod: client.V1Pod = wait_for_started_pod(k8s_client, namespace, pods[0])
-    logger.info('Pod %s ready, IP: %s', pod.metadata.name, pod.status.pod_ip)
-
-    host: str = pod.status.pod_ip
-    if host_override is not None:
-        logger.info('Overriding client host %s with %s', host, host_override)
-        host = host_override
-
-    # Configure XdsTestClient
-    yield xds_test_app.client.XdsTestClient(host=host, stats_port=stats_port)
-
-    # Cleanup
-    delete_test_client_deployment(k8s_client, namespace, deployment_name)
+def apply_manifest(k8s_client, manifest, namespace):
+    return utils.create_from_dict(k8s_client, manifest, namespace=namespace)
 
 
 def _debug(k8s_obj):

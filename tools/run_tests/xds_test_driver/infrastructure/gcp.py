@@ -74,6 +74,10 @@ def wait_for_backends_healthy_status(compute, project,
             project=project, backendService=backend_service.name,
             body={"group": backend.url}).execute()
         logger.debug('%s health: %s', backend.name, result)
+        if 'healthStatus' not in result:
+            logger.info('Backend %s in zone %s: no instances found',
+                        backend.name, backend.zone)
+            return False
 
         for instance in result['healthStatus']:
             logger.info(

@@ -125,13 +125,6 @@ def main():
         gcp.wait_for_backends_healthy_status(compute, project,
                                              td.backend_service, td.backends)
 
-    if not args.skip_tests:
-        with k8s.xds_test_client(k8s_client, namespace,
-                                 stats_port=client_stats_port,
-                                 host_override=client_host_override) as _client:
-            _client: xds_test_app.client.XdsTestClient
-            _client.request_load_balancer_stats(num_rpcs=2)
-
     # todo(sergiitk): finally/context manager.
     compute.close()
     k8s_client.close()
