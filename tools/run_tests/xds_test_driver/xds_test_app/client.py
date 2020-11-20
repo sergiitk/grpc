@@ -56,8 +56,8 @@ class XdsTestClient:
                                            wait_for_ready=True,
                                            timeout=request_timeout)
 
-            logger.info('Invoked GetClientStats RPC to %s: %s',
-                        self.stats_service_address, response)
+            logger.debug('Invoked GetClientStats RPC to %s: %s',
+                         self.stats_service_address, response)
             return response
 
 

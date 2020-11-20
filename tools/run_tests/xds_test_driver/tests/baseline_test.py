@@ -17,19 +17,10 @@ import dotenv
 import kubernetes.config
 import kubernetes.client
 from absl.testing import absltest
-# from absl import logging
+from absl import logging
 
 from infrastructure import k8s
 import xds_test_app.client
-
-# logger = logging.getLogger()
-# console_handler = logging.StreamHandler()
-# formatter = logging.Formatter(fmt='%(asctime)s: %(levelname)-8s %(message)s')
-# console_handler.setFormatter(formatter)
-# logger.handlers = []
-# logger.addHandler(console_handler)
-# logger.setLevel(logging.INFO)
-
 
 
 class BaselineTest(absltest.TestCase):
@@ -79,17 +70,31 @@ class BaselineTest(absltest.TestCase):
             self.k8s_client, namespace, deployment_name,
             debug_client_host_override=self.client_host_override)
 
+    def assertAllBackendsReceivedRpcs(self, stats_response):
+        # todo(sergiitk): assert backends length
+        logging.info(stats_response.rpcs_by_peer)
+        for backend, rpcs_count in stats_response.rpcs_by_peer.items():
+            with self.subTest(f'Backend {backend} received RPCs'):
+                self.assertGreater(int(rpcs_count), 0,
+                                   msg='Did not receive a single RPC')
+
+    def assertFailedRpcsAtMost(self, stats_response, count):
+        self.assertLessEqual(int(stats_response.num_failures), count,
+                             msg='Unexpected number of RPC failures'
+                                 f'{stats_response.num_failures} > {count}')
+
     def tearDown(self):
         self.client_runner.cleanup()
 
     def test_ping_pong(self):
         xds_test_client = self.client_runner.run()
-        result = xds_test_client.request_load_balancer_stats(num_rpcs=2)
-        self.assertEqual(result, 'FOO')
+        stats_response = xds_test_client.request_load_balancer_stats(num_rpcs=9)
+        self.assertAllBackendsReceivedRpcs(stats_response)
+        self.assertFailedRpcsAtMost(stats_response, 0)
 
     def test_zoo(self):
         self.assertEqual('FOO', 'FOO')
 
 
 if __name__ == '__main__':
-    absltest.main(verbosity=10)
+    absltest.main()
