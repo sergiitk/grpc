@@ -62,12 +62,6 @@ def parse_args() -> argparse.Namespace:
     group_driver.add_argument(
         '--verbose', action='store_true',
         help='Verbose log output')
-    group_driver.add_argument(
-        '--skip_provision', action='store_true',
-        help='Skip provisioning step and go directly to the tests')
-    group_driver.add_argument(
-        '--skip_tests', action='store_true',
-        help='Skip tests, only run provisioning')
     return parser.parse_args()
 
 
@@ -111,19 +105,18 @@ def main():
     compute: google_api.Resource = google_api.build(
         'compute', 'v1', cache_discovery=False)
 
-    if not args.skip_provision:
-        td: traffic_director.TrafficDirectorState = traffic_director.setup_gke(
-            k8s_core_v1, compute,
-            project, namespace, network_url,
-            service_name, service_port,
-            global_backend_service_name, health_check_name,
-            url_map_name, url_map_path_matcher_name,
-            target_proxy_name, forwarding_rule_name,
-            xds_service_host, xds_service_port)
+    td: traffic_director.TrafficDirectorState = traffic_director.setup_gke(
+        k8s_core_v1, compute,
+        project, namespace, network_url,
+        service_name, service_port,
+        global_backend_service_name, health_check_name,
+        url_map_name, url_map_path_matcher_name,
+        target_proxy_name, forwarding_rule_name,
+        xds_service_host, xds_service_port)
 
-        # Wait for global backend instance reporting all backends to be HEALTHY.
-        gcp.wait_for_backends_healthy_status(compute, project,
-                                             td.backend_service, td.backends)
+    # Wait for global backend instance reporting all backends to be HEALTHY.
+    gcp.wait_for_backends_healthy_status(compute, project,
+                                         td.backend_service, td.backends)
 
     # todo(sergiitk): finally/context manager.
     compute.close()
