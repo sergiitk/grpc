@@ -17,5 +17,9 @@ gcloud --project="$PROJECT_ID" compute backend-services delete "$GLOBAL_BACKEND_
 # HC
 gcloud --project="$PROJECT_ID" compute health-checks delete "$HEALTH_CHECK_NAME" --global -q
 
-# NEG
-gcloud --project="$PROJECT_ID" compute health-checks delete "$HEALTH_CHECK_NAME" --global -q
+# NEGs
+gcloud --project="$PROJECT_ID" compute network-endpoint-groups delete "$NEG_NAME" \
+  --zone="$REGION_PRIMARY_ZONE_PRIMARY" -q
+
+gcloud --project="$PROJECT_ID" compute network-endpoint-groups delete "$NEG_NAME" \
+  --zone="$REGION_PRIMARY_ZONE_SECONDARY" -q
