@@ -14,6 +14,7 @@ spec:
       labels:
         app: psm-grpc-client
     spec:
+      serviceAccountName: psm-grpc-client
       containers:
       - name: psm-grpc-client
         image: gcr.io/grpc-testing/xds-gke-interop-client-java-sergii-test

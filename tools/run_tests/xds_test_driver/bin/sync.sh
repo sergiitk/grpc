@@ -1,8 +1,10 @@
 #!/bin/sh -ux
 
-set -o allexport
-. .env
-set +o allexport
+#set -o allexport
+#. .env
+#set +o allexport
+
+XDS_DRIVER_HOST='sergiitk-xds-interop-vm-driver-us-central1-a.us-central1-a.c.grpc-testing.internal'
 
 rsync \
   --exclude='gke/build/*' \
