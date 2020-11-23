@@ -37,10 +37,12 @@ class BaselineTest(absltest.TestCase):
         #
         # Client
         cls.client_deployment_name = 'psm-grpc-client'
-        cls.client_host_override = os.environ['CLIENT_HOST_OVERRIDE']
+
+        cls.client_use_port_forwarding = bool(
+            os.getenv('CLIENT_USE_PORT_FORWARDING', False))
 
         # K8s
-        kube_context_name = os.environ['KUBE_CONTEXT_NAME']
+        cls.kube_context_name = os.environ['KUBE_CONTEXT_NAME']
         cls.namespace = os.environ['NAMESPACE']
         # service_name = os.environ['SERVICE_NAME']
         # service_port = os.environ['SERVICE_PORT']
@@ -55,7 +57,7 @@ class BaselineTest(absltest.TestCase):
         # xds_service_port: int = 8000
         # xds_service_host: str = f'{xds_service_hostname}:{xds_service_port}'
         # Connect k8s
-        kubernetes.config.load_kube_config(context=kube_context_name)
+        kubernetes.config.load_kube_config(context=cls.kube_context_name)
         cls.k8s_client = kubernetes.client.ApiClient()
 
     @classmethod
@@ -67,8 +69,9 @@ class BaselineTest(absltest.TestCase):
         deployment_name = self.client_deployment_name
         namespace = self.namespace
         self.client_runner = xds_test_app.client.KubernetesClientRunner(
+            self.kube_context_name,
             self.k8s_client, namespace, deployment_name,
-            debug_client_host_override=self.client_host_override)
+            use_port_forwarding=self.client_use_port_forwarding)
 
     def assertAllBackendsReceivedRpcs(self, stats_response):
         # todo(sergiitk): assert backends length

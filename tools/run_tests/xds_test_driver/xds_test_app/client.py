@@ -70,34 +70,52 @@ class KubernetesClientRunner:
     pod: Optional[k8s.client.V1Pod]
 
     def __init__(self,
+                 k8s_context_name,
                  k8s_client,
                  namespace,
                  deployment_name,
                  stats_port=8079,
                  template_name='client.deployment.yaml',
-                 debug_client_host_override=None):
+                 use_port_forwarding=False):
+        self.k8s_context_name = k8s_context_name
         self.k8s_client = k8s_client
         self.namespace = namespace
         self.deployment_name = deployment_name
         self.stats_port = stats_port
         self.template_name = template_name
-        self.debug_client_host_override = debug_client_host_override
+        self.use_port_forwarding = use_port_forwarding
         self.deployment = None
         self.pod = None
+        # Port forwarding kubernetes.stream.ws_client.PortForward
+        self.pf = None
 
+    def run(self) -> XdsTestClient:
+        # Reuse existing or create a new deployment
+        self.deployment = self._reuse_deployment() or self._create_deployment()
+        self._wait_for_deployment_available()
 
-    @staticmethod
-    def _manifests_from_yaml_file(yaml_file):
-        # Parse yaml
-        with open(yaml_file) as f:
-            with contextlib.closing(yaml.safe_load_all(f)) as yml:
-                for manifest in yml:
-                    yield manifest
+        # Load test client pod
+        self.pod = self._get_pod()
+        self._wait_for_pod_started()
 
-    @staticmethod
-    def _template_file_from_name(template_name):
-        templates_path = pathlib.Path(__file__).parent / '../templates'
-        return templates_path.joinpath(template_name).absolute()
+        if self.use_port_forwarding:
+            logger.info('Enabling port forwarding from %s:%s',
+                        self.pod.status.pod_ip, self.stats_port)
+
+            host = '127.0.0.1'
+            self.pf = k8s.port_forward(self.k8s_context_name, self.namespace,
+                                       self.pod, self.stats_port,
+                                       local_address=host)
+            return XdsTestClient(host=host, stats_port=self.stats_port)
+        else:
+            return XdsTestClient(host=self.pod.status.pod_ip,
+                                 stats_port=self.stats_port)
+
+    def cleanup(self):
+        if self.pf:
+            k8s.port_forward_shutdown(self.pf)
+        if self.deployment:
+            self._delete_deployment()
 
     def _create_deployment(self) -> k8s.client.V1Deployment:
         yaml_file = self._template_file_from_name(self.template_name)
@@ -167,23 +185,15 @@ class KubernetesClientRunner:
         # We need only one client at the moment
         return pods[0]
 
-    def run(self) -> XdsTestClient:
-        # Reuse existing or create a new deployment
-        self.deployment = self._reuse_deployment() or self._create_deployment()
-        self._wait_for_deployment_available()
+    @staticmethod
+    def _manifests_from_yaml_file(yaml_file):
+        # Parse yaml
+        with open(yaml_file) as f:
+            with contextlib.closing(yaml.safe_load_all(f)) as yml:
+                for manifest in yml:
+                    yield manifest
 
-        # Load test client pod
-        self.pod = self._get_pod()
-        self._wait_for_pod_started()
-
-        host: str = self.pod.status.pod_ip
-        if self.debug_client_host_override is not None:
-            logger.info('Overriding client host %s with %s', host,
-                        self.debug_client_host_override)
-            host = self.debug_client_host_override
-
-        return XdsTestClient(host=host, stats_port=self.stats_port)
-
-    def cleanup(self):
-        if self.deployment:
-            self._delete_deployment()
+    @staticmethod
+    def _template_file_from_name(template_name):
+        templates_path = pathlib.Path(__file__).parent / '../templates'
+        return templates_path.joinpath(template_name).absolute()

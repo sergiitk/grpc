@@ -11,19 +11,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import contextlib
 import json
 import logging
-import pathlib
-import contextlib
+import subprocess
+from typing import Optional
 from typing import Tuple, List
 
 import retrying
 import yaml
 from kubernetes import client
 from kubernetes import utils
-
-import xds_test_app.client
+from kubernetes import stream
 
 logger = logging.getLogger()
 
@@ -188,7 +187,54 @@ def delete_deployment(k8s_client, namespace, deployment_name,
             propagation_policy='Foreground',
             grace_period_seconds=grace_period_seconds))
 
+    # todo(sergiitk): confirm deleted
     # logger.info('del %s', result)
+
+
+def port_forward(
+    kube_context_name, namespace,
+    pod: client.V1Pod,
+    remote_port: int,
+    local_port: Optional[int] = None,
+    local_address: Optional[str] = '127.0.0.1'
+):
+    if local_port is None:
+        local_port = remote_port
+
+    cmd = [
+        "kubectl", "--context", kube_context_name, "--namespace", namespace,
+        "port-forward", "--address", local_address,
+        f"pod/{pod.metadata.name}", f"{local_port}:{remote_port}"
+    ]
+    pf = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                          universal_newlines=True)
+    expected = f"Forwarding from {local_address}:{local_port} -> {remote_port}"
+    while True:
+        output = pf.stdout.readline().strip()
+        if not output:
+            return_code = pf.poll()
+            if return_code is not None:
+                errors = [error for error in pf.stdout.readlines()]
+                pf.kill()
+                raise RuntimeError('Error creating port forwarding, process '
+                                   f'exited, return code {return_code}, '
+                                   f'output {errors}')
+        elif output != expected:
+            pf.kill()
+            raise RuntimeError(
+                f'Error creating port forwarding, unexpected output {output}')
+        else:
+            logger.info(output)
+            break
+
+    return pf
+
+
+def port_forward_shutdown(pf):
+    logger.info('Shutting down port forwarding, pid %s', pf.pid)
+    pf.kill()
+    stdout, _stderr = pf.communicate(timeout=5)
+    logger.info('Port forwarding stopped, stdout and stderr %s', stdout)
 
 
 def apply_manifest(k8s_client, manifest, namespace):
