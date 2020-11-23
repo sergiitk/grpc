@@ -13,5 +13,5 @@ gcloud --project="$PROJECT_ID" compute backend-services remove-backend "$GLOBAL_
   --network-endpoint-group="$NEG_NAME" \
   --network-endpoint-group-zone="$REGION_PRIMARY_ZONE_SECONDARY" -q
 
-cd gke && skaffold delete -v debug \
+cd gke && skaffold delete -v info \
   --kube-context="$KUBE_CONTEXT_NAME"

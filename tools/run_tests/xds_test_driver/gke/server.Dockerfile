@@ -12,4 +12,4 @@ COPY assets/logging.properties $APP_DIR/
 ENV JAVA_OPTS="-Djava.util.logging.config.file=$APP_DIR/logging.properties"
 
 # Server
-CMD ["bin/xds-test-server", "--port=8080"]
+ENTRYPOINT ["bin/xds-test-server"]

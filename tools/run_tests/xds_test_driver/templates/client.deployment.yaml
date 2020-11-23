@@ -17,10 +17,9 @@ spec:
       serviceAccountName: psm-grpc-client
       containers:
       - name: psm-grpc-client
-        image: gcr.io/grpc-testing/xds-gke-interop-client-java-sergii-test
-        imagePullPolicy: IfNotPresent
+        image: gcr.io/grpc-testing/xds-gke-interop-client-java-sergii-test:latest
+        imagePullPolicy: Always
         args:
-            - "bin/xds-test-client"
             - "--server=xds:///sergii-psm-test-xds-host:8000"
             - "--stats_port=8079"
             - "--qps=1"
