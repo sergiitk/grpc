@@ -25,6 +25,7 @@ import yaml
 from infrastructure import k8s
 from src.proto.grpc.testing import test_pb2_grpc
 from src.proto.grpc.testing import messages_pb2
+from xds_test_app import base_runner
 
 logger = logging.getLogger()
 
@@ -66,7 +67,7 @@ class ServerRunError(Exception):
     """Error running Test Server"""
 
 
-class KubernetesServerRunner:
+class KubernetesServerRunner(base_runner.KubernetesBaseRunner):
     k8s_namespace: k8s.KubernetesNamespace
     deployment: Optional[k8s.V1Deployment]
 
@@ -78,46 +79,42 @@ class KubernetesServerRunner:
                  network_name='default',
                  deployment_template='server.deployment.yaml',
                  service_template='server.service.yaml'):
+        super().__init__(k8s_namespace)
+
         # Settings
         self.deployment_name = deployment_name
         self.service_name = service_name or deployment_name
         self.deployment_template = deployment_template
         self.service_template = service_template
         self.network_name = network_name
-
-        # Kubernetes namespaced resources manager
-        self.k8s_namespace = k8s_namespace
+        # todo(sergiitk): make adjustable
+        self.replica_count = 2
 
         # Mutable state
         self.service = None
         self.deployment = None
 
-    def run(
-        self,
-        *,
-        port=8080,
-        maintenance_port=8080,
-        secure_mode=False,
-        server_id=None,
-    ) -> XdsTestServer:
+    def run(self, *,
+            port=8080, maintenance_port=8080,
+            secure_mode=False, server_id=None) -> XdsTestServer:
         # Reuse existing or create a new deployment
-        self.deployment = self._reuse_deployment()
+        self.deployment = self._reuse_deployment(self.deployment_name)
         if not self.deployment:
-            self._create_server_resources(
+            self.deployment = self._create_deployment(
                 port=port,
                 maintenance_port=maintenance_port,
                 secure_mode=secure_mode,
                 server_id=server_id)
 
-        self.deployment = self.k8s_namespace.get_deployment(
-            self.deployment_name)
-        self._wait_for_deployment_available()
+        self.deployment = self._get_deployment_with_available_replicas(
+            self.deployment_name, self.replica_count)
 
         return XdsTestServer(port, maintenance_port, secure_mode, server_id)
 
     def cleanup(self):
         if self.deployment:
-            self._delete_deployment()
+            self._delete_deployment(self.deployment_name)
+            self.deployment = None
 
     def _render_server_template(
         self,
@@ -154,57 +151,28 @@ class KubernetesServerRunner:
         service_manifest = next(self._manifests_from_str(server_documents))
         self.k8s_namespace.apply_manifest(service_manifest)
 
-    def _reuse_deployment(self):
-        deployment = self.k8s_namespace.get_deployment(self.deployment_name)
-        # todo(sergiitk): check if good or must be recreated
+    def _create_deployment(self, **kwargs) -> k8s.V1Deployment:
+        deployment = self._create_from_template(
+            self.deployment_template,
+            deployment_name=self.deployment_name,
+            service_name=self.service_name,
+            namespace=self.k8s_namespace.name,
+            network_name=self.network_name,
+            port=kwargs['port'],
+            maintenance_port=kwargs['maintenance_port'],
+            secure_mode=kwargs['secure_mode'])
+
+        if not isinstance(deployment, k8s.V1Deployment):
+            raise ServerRunError('Expected exactly one must deployment created '
+                                 f' from manifest {self.deployment_template}')
+
+        if deployment.metadata.name != self.deployment_name:
+            raise ServerRunError(
+                'Client Deployment created with unexpected name: '
+                f'{deployment.metadata.name}')
+
+        logger.info('Deployment %s created at %s',
+                    deployment.metadata.self_link,
+                    deployment.metadata.creation_timestamp)
+
         return deployment
-
-    def _delete_deployment(self):
-        deployment_name = self.deployment.metadata.name
-        self.k8s_namespace.delete_deployment(deployment_name)
-        self.k8s_namespace.wait_for_deployment_deleted(deployment_name)
-        logger.info('Deployment %s deleted', deployment_name)
-        self.deployment = None
-        self.pod = None
-
-    def _wait_for_deployment_available(self, save_latest_state=False):
-        deployment = self.k8s_namespace.wait_for_deployment_minimum_replicas(
-            self.deployment)
-        logger.info('Deployment %s has %i replicas available',
-                    deployment.metadata.name,
-                    deployment.status.available_replicas)
-        # Use the most recent deployment state
-        if save_latest_state:
-            self.deployment = deployment
-
-    def _wait_for_pod_started(self, save_latest_state=True):
-        pod = self.k8s_namespace.wait_for_pod_started(self.pod)
-        logger.info('Pod %s ready, IP: %s', pod.metadata.name,
-                    pod.status.pod_ip)
-        # Use the most recent pod state
-        if save_latest_state:
-            self.pod = pod
-
-    def _get_pod(self) -> k8s.V1Pod:
-        pods = self.k8s_namespace.list_deployment_pods(self.deployment)
-        # We need only one client at the moment
-        return pods[0]
-
-    @staticmethod
-    def _manifests_from_yaml_file(yaml_file):
-        # Parse yaml
-        with open(yaml_file) as f:
-            with contextlib.closing(yaml.safe_load_all(f)) as yml:
-                for manifest in yml:
-                    yield manifest
-
-    @staticmethod
-    def _manifests_from_str(document):
-        with contextlib.closing(yaml.safe_load_all(document)) as yml:
-            for manifest in yml:
-                yield manifest
-
-    @staticmethod
-    def _template_file_from_name(template_name):
-        templates_path = pathlib.Path(__file__).parent / '../templates'
-        return templates_path.joinpath(template_name).absolute()

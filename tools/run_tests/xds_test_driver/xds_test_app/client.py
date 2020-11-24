@@ -95,8 +95,14 @@ class KubernetesClientRunner(base_runner.KubernetesBaseRunner):
         self.deployment = self._reuse_deployment(self.deployment_name)
         if not self.deployment:
             self.deployment = self._create_deployment(
+                self.deployment_template,
+                deployment_name=self.deployment_name,
+                namespace=self.k8s_namespace.name,
+                stats_port=self.stats_port,
+                network_name=self.network_name,
                 server_address=server_address,
-                rpc=rpc, qps=qps)
+                rpc=rpc,
+                qps=qps)
 
         self.deployment = self._get_deployment_with_available_replicas(
             self.deployment_name)
@@ -125,29 +131,3 @@ class KubernetesClientRunner(base_runner.KubernetesBaseRunner):
         if self.deployment:
             self._delete_deployment(self.deployment_name)
             self.deployment = None
-
-    def _create_deployment(self, **kwargs) -> k8s.V1Deployment:
-        deployment = self._create_from_template(
-            self.deployment_template,
-            deployment_name=self.deployment_name,
-            namespace=self.k8s_namespace.name,
-            stats_port=self.stats_port,
-            network_name=self.network_name,
-            server_address=kwargs['server_address'],
-            rpc=kwargs['rpc'],
-            qps=kwargs['qps'])
-
-        if not isinstance(deployment, k8s.V1Deployment):
-            raise ClientRunError('Expected exactly one must deployment created '
-                                 f' from manifest {self.deployment_template}')
-
-        if deployment.metadata.name != self.deployment_name:
-            raise ClientRunError(
-                'Client Deployment created with unexpected name: '
-                f'{deployment.metadata.name}')
-
-        logger.info('Deployment %s created at %s',
-                    deployment.metadata.self_link,
-                    deployment.metadata.creation_timestamp)
-
-        return deployment
