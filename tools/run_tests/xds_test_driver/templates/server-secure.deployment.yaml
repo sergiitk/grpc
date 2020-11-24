@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${deployment_name}
+  namespace: ${namespace}
+  labels:
+    app: ${deployment_name}
+spec:
+  replicas: ${replica_count}
+  selector:
+    matchLabels:
+      app: ${deployment_name}
+  template:
+    metadata:
+      labels:
+        app: ${deployment_name}
+    spec:
+      serviceAccountName: ${deployment_name}
+      containers:
+      - name: ${deployment_name}
+        image: gcr.io/grpc-testing/xds-gke-interop-server-java-sergii-test:latest
+        imagePullPolicy: Always
+        args:
+          - "--port=${port}"
+          - "--maintenance_port=${maintenance_port}"
+          - "--secure_mode=${secure_mode}"
+        ports:
+          - containerPort: ${port}
+          - containerPort: ${maintenance_port}
+        resources:
+          limits:
+            cpu: 800m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 512Mi
+        volumeMounts:
+        - mountPath: /var/run/gke-spiffe/certs
+          name: gke-spiffe-certs-volume
+          readOnly: true
+      volumes:
+        - name: gke-spiffe-certs-volume
+          csi:
+            driver: certs.spiffe.gke.io
