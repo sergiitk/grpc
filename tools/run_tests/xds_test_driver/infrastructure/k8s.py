@@ -11,20 +11,27 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import contextlib
+
+import functools
 import json
 import logging
 import subprocess
+import time
 from typing import Optional
-from typing import Tuple, List
+from typing import List
+from typing import Tuple
 
 import retrying
-import yaml
+import kubernetes.config
 from kubernetes import client
 from kubernetes import utils
-from kubernetes import stream
 
 logger = logging.getLogger()
+
+# Type aliases
+V1Deployment = client.V1Deployment
+V1Pod = client.V1Pod
+V1PodList = client.V1PodList
 
 
 def simple_resource_get(func):
@@ -42,14 +49,195 @@ def simple_resource_get(func):
                     logger.debug('Resource not found. %s', e.body)
                 return None
             raise
-
     return wrap_not_found_return_none
+
+
+def label_dict_to_selector(labels: dict) -> str:
+    return ','.join(f'{k}=={v}' for k, v in labels.items())
+
+
+class KubernetesApiManager:
+    def __init__(self, context):
+        self.context = context
+        self.client = self._cached_api_client_for_context(context)
+        self.apps = client.AppsV1Api(self.client)
+        self.core = client.CoreV1Api(self.client)
+
+    def close(self):
+        pass
+
+    @classmethod
+    @functools.lru_cache(None)
+    def _cached_api_client_for_context(cls, context: str) -> client.ApiClient:
+        return kubernetes.config.new_client_from_config(context=context)
+
+
+class PortForwardingError(Exception):
+    """Error forwarding port"""
+
+
+class KubernetesNamespace:
+    def __init__(self, api: KubernetesApiManager, name: str):
+        self.name = name
+        self.api = api
+
+    def apply_manifest(self, manifest):
+        return utils.create_from_dict(self.api.client, manifest,
+                                      namespace=self.name)
+
+    @simple_resource_get
+    def get_deployment(self, name) -> V1Deployment:
+        return self.api.apps.read_namespaced_deployment(name, self.name)
+
+    def delete_deployment(self, name, grace_period_seconds=5):
+        self.api.apps.delete_namespaced_deployment(
+            name=name, namespace=self.name,
+            body=client.V1DeleteOptions(
+                propagation_policy='Foreground',
+                grace_period_seconds=grace_period_seconds))
+        # todo(sergiitk): confirm deleted
+        # logger.info('del %s', result)
+
+    def list_deployment_pods(self, deployment: V1Deployment) -> List[V1Pod]:
+        # V1LabelSelector.match_expressions not supported at the moment
+        return self.list_pods_with_labels(deployment.spec.selector.match_labels)
+
+    def wait_for_deployment_minimum_replicas(self,
+                                             deployment: V1Deployment,
+                                             timeout_sec=60,
+                                             wait_sec=1) -> V1Deployment:
+        if self._min_replicas_available(deployment):
+            return deployment
+
+        @retrying.retry(
+            retry_on_result=lambda r: not self._min_replicas_available(r),
+            stop_max_delay=timeout_sec * 1000,
+            wait_fixed=wait_sec * 1000)
+        def _get_deployment_with_retry():
+            updated_deployment = self.get_deployment(deployment.metadata.name)
+            logger.info('Waiting for deployment %s replicas, available %s',
+                        updated_deployment.metadata.name,
+                        updated_deployment.status.available_replicas)
+            return updated_deployment
+
+        return _get_deployment_with_retry()
+
+    def wait_for_deployment_deleted(self,
+                                    deployment_name: str,
+                                    timeout_sec=60,
+                                    wait_sec=1) -> V1Deployment:
+        @retrying.retry(retry_on_result=lambda r: r is not None,
+                        stop_max_delay=timeout_sec * 1000,
+                        wait_fixed=wait_sec * 1000)
+        def _wait_for_deleted_deployment_with_retry():
+            deployment = self.get_deployment(deployment_name)
+            if deployment is not None:
+                logger.info('Waiting for deployment %s to be deleted '
+                            'non-terminated replicas: %s',
+                            deployment.metadata.name,
+                            deployment.status.replicas)
+            return deployment
+
+        return _wait_for_deleted_deployment_with_retry()
+
+    def list_pods_with_labels(self, labels: dict) -> List[V1Pod]:
+        pod_list: V1PodList = self.api.core.list_namespaced_pod(
+            self.name, label_selector=label_dict_to_selector(labels))
+        return pod_list.items
+
+    def get_pod(self, name) -> client.V1Pod:
+        return self.api.core.read_namespaced_pod(name, self.name)
+
+    def wait_for_pod_started(
+        self,
+        pod: V1Pod,
+        timeout_sec=60,
+        wait_sec=1
+    ) -> V1Pod:
+        if self._pod_started(pod):
+            return pod
+
+        @retrying.retry(retry_on_result=lambda r: not self._pod_started(r),
+                        stop_max_delay=timeout_sec * 1000,
+                        wait_fixed=wait_sec * 1000)
+        def _get_started_pod_with_retry():
+            updated_pod = self.get_pod(pod.metadata.name)
+            logger.info('Waiting for pod %s to start, current phase: %s',
+                        updated_pod.metadata.name,
+                        updated_pod.status.phase)
+            return updated_pod
+
+        return _get_started_pod_with_retry()
+
+    def port_forward_pod(
+        self,
+        pod: V1Pod,
+        remote_port: int,
+        local_port: Optional[int] = None,
+        local_address: Optional[str] = '127.0.0.1'
+    ):
+        """Experimental"""
+        local_port = local_port or remote_port
+        cmd = [
+            "kubectl", "--context", self.api.context,
+            "--namespace", self.name,
+            "port-forward", "--address", local_address,
+            f"pod/{pod.metadata.name}", f"{local_port}:{remote_port}"
+        ]
+        pf = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                              stderr=subprocess.STDOUT,
+                              universal_newlines=True)
+        # Wait for stdout line indicating successful start.
+        expected = (f"Forwarding from {local_address}:{local_port}"
+                    f" -> {remote_port}")
+        try:
+            while True:
+                time.sleep(0.05)
+                output = pf.stdout.readline().strip()
+                if not output:
+                    return_code = pf.poll()
+                    if return_code is not None:
+                        errors = [error for error in pf.stdout.readlines()]
+                        raise PortForwardingError(
+                            'Error forwarding port, kubectl return '
+                            f'code {return_code}, output {errors}')
+                elif output != expected:
+                    raise PortForwardingError(
+                        f'Error forwarding port, unexpected output {output}')
+                else:
+                    logger.info(output)
+                    break
+        except Exception:
+            self.port_forward_stop(pf)
+            raise
+
+        return pf
+
+    @staticmethod
+    def port_forward_stop(pf):
+        logger.info('Shutting down port forwarding, pid %s', pf.pid)
+        pf.kill()
+        stdout, _stderr = pf.communicate(timeout=5)
+        logger.info('Port forwarding stopped')
+        # todo(sergiitk): make debug
+        logger.info('Port forwarding remaining stdout: %s', stdout)
+
+    @staticmethod
+    def _pod_started(pod: V1Pod):
+        return pod.status.phase not in ('Pending', 'Unknown')
+
+    @staticmethod
+    def _min_replicas_available(deployment):
+        return (deployment is not None and
+                deployment.status.available_replicas is not None and
+                deployment.status.available_replicas > 0)
 
 
 def get_service_neg(
     k8s_core_v1: client.CoreV1Api, namespace: str,
     service_name: str, service_port: int,
 ) -> Tuple[str, List[str]]:
+    # todo(sergiitk): move to KubernetesNamespace when td refactored
     logger.info('Detecting NEG name for service=%s in namespace=%s',
                 service_name, namespace)
     service: client.V1Service = k8s_core_v1.read_namespaced_service(
@@ -60,186 +248,3 @@ def get_service_neg(
     neg_name: str = neg_info['network_endpoint_groups'][str(service_port)]
     neg_zones: List[str] = neg_info['zones']
     return neg_name, neg_zones
-
-
-def debug_server_mappings(k8s_root: client.CoreApi):
-    logger.debug("Server mappings:")
-    for mapping in k8s_root.get_api_versions().server_address_by_client_cid_rs:
-        logger.debug('%s -> %s', mapping.client_cidr, mapping.server_address)
-
-
-def label_dict_to_selector(labels: dict) -> str:
-    return ','.join(f'{k}=={v}' for k, v in labels.items())
-
-
-def list_pods_with_labels(k8s_client,
-                          namespace,
-                          labels: dict) -> List[client.V1Pod]:
-    api_core = client.CoreV1Api(k8s_client)
-    pod_list: client.V1PodList = api_core.list_namespaced_pod(
-        namespace, label_selector=label_dict_to_selector(labels))
-    return pod_list.items
-
-
-def get_deployment_pods(k8s_client,
-                        namespace,
-                        deployment: client.V1Deployment) -> List[client.V1Pod]:
-    # V1LabelSelector.match_expressions not supported at the moment
-    return list_pods_with_labels(
-        k8s_client, namespace, deployment.spec.selector.match_labels)
-
-
-def _pod_started(pod: client.V1Pod):
-    return pod.status.phase not in ('Pending', 'Unknown')
-
-
-def get_pod(k8s_client, namespace, name) -> client.V1Pod:
-    api_core = client.CoreV1Api(k8s_client)
-    return api_core.read_namespaced_pod(name, namespace)
-
-
-def wait_for_started_pod(k8s_client, namespace,
-                         pod: client.V1Pod,
-                         timeout_sec=60,
-                         wait_sec=1) -> client.V1Pod:
-    if _pod_started(pod):
-        return pod
-
-    @retrying.retry(retry_on_result=lambda r: not _pod_started(r),
-                    stop_max_delay=timeout_sec * 1000,
-                    wait_fixed=wait_sec * 1000)
-    def _get_started_pod_with_retry():
-        updated_pod = get_pod(k8s_client, namespace, pod.metadata.name)
-        logger.info('Waiting for pod %s to start, current phase: %s',
-                    updated_pod.metadata.name,
-                    updated_pod.status.phase)
-        return updated_pod
-
-    return _get_started_pod_with_retry()
-
-
-def _min_replicas_available(deployment):
-    return (deployment is not None and
-            deployment.status.available_replicas is not None and
-            deployment.status.available_replicas > 0)
-
-
-def wait_for_deployment_minimum_replicas_available(
-    k8s_client,
-    namespace,
-    deployment: client.V1Deployment,
-    timeout_sec=60,
-    wait_sec=1
-) -> client.V1Deployment:
-    if _min_replicas_available(deployment):
-        return deployment
-
-    @retrying.retry(retry_on_result=lambda r: not _min_replicas_available(r),
-                    stop_max_delay=timeout_sec * 1000,
-                    wait_fixed=wait_sec * 1000)
-    def _get_deployment_with_retry():
-        updated_deployment = get_deployment_by_name(k8s_client, namespace,
-                                                    deployment.metadata.name)
-        logger.info('Waiting for deployment %s replicas, current count %s',
-                    updated_deployment.metadata.name,
-                    updated_deployment.status.available_replicas)
-        return updated_deployment
-
-    return _get_deployment_with_retry()
-
-
-def wait_for_deployment_deleted(
-    k8s_client,
-    namespace,
-    deployment: client.V1Deployment,
-    timeout_sec=60,
-    wait_sec=1
-) -> client.V1Deployment:
-    @retrying.retry(retry_on_result=_min_replicas_available,
-                    stop_max_delay=timeout_sec * 1000,
-                    wait_fixed=wait_sec * 1000)
-    def _wait_for_deleted_deployment_with_retry():
-        deleted_deployment = get_deployment_by_name(k8s_client, namespace,
-                                                    deployment.metadata.name)
-        if deleted_deployment:
-            logger.info('Waiting for deployment %s to be deleted, current '
-                        'replica count %s',
-                        deleted_deployment.metadata.name,
-                        deleted_deployment.status.available_replicas)
-        return deleted_deployment
-
-    return _wait_for_deleted_deployment_with_retry()
-
-
-@simple_resource_get
-def get_deployment_by_name(k8s_client, namespace,
-                           deployment_name) -> client.V1Deployment:
-    api_apps = client.AppsV1Api(k8s_client)
-    return api_apps.read_namespaced_deployment(deployment_name, namespace)
-
-
-def delete_deployment(k8s_client, namespace, deployment_name,
-                      grace_period_seconds=5):
-    api_apps = client.AppsV1Api(k8s_client)
-    result = api_apps.delete_namespaced_deployment(
-        name=deployment_name, namespace=namespace,
-        body=client.V1DeleteOptions(
-            propagation_policy='Foreground',
-            grace_period_seconds=grace_period_seconds))
-
-    # todo(sergiitk): confirm deleted
-    # logger.info('del %s', result)
-
-
-def port_forward(
-    kube_context_name, namespace,
-    pod: client.V1Pod,
-    remote_port: int,
-    local_port: Optional[int] = None,
-    local_address: Optional[str] = '127.0.0.1'
-):
-    if local_port is None:
-        local_port = remote_port
-
-    cmd = [
-        "kubectl", "--context", kube_context_name, "--namespace", namespace,
-        "port-forward", "--address", local_address,
-        f"pod/{pod.metadata.name}", f"{local_port}:{remote_port}"
-    ]
-    pf = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                          universal_newlines=True)
-    expected = f"Forwarding from {local_address}:{local_port} -> {remote_port}"
-    while True:
-        output = pf.stdout.readline().strip()
-        if not output:
-            return_code = pf.poll()
-            if return_code is not None:
-                errors = [error for error in pf.stdout.readlines()]
-                pf.kill()
-                raise RuntimeError('Error creating port forwarding, process '
-                                   f'exited, return code {return_code}, '
-                                   f'output {errors}')
-        elif output != expected:
-            pf.kill()
-            raise RuntimeError(
-                f'Error creating port forwarding, unexpected output {output}')
-        else:
-            logger.info(output)
-            break
-
-    return pf
-
-
-def port_forward_shutdown(pf):
-    logger.info('Shutting down port forwarding, pid %s', pf.pid)
-    pf.kill()
-    stdout, _stderr = pf.communicate(timeout=5)
-    logger.info('Port forwarding stopped, stdout and stderr %s', stdout)
-
-
-def apply_manifest(k8s_client, manifest, namespace):
-    return utils.create_from_dict(k8s_client, manifest, namespace=namespace)
-
-
-def _debug(k8s_obj):
-    print(yaml.dump(k8s_obj.to_dict()))
