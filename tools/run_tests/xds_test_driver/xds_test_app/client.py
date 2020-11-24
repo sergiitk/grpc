@@ -190,7 +190,7 @@ class KubernetesClientRunner:
         self.deployment = None
         self.pod = None
 
-    def _wait_for_deployment_available(self, save_latest_state=False):
+    def _wait_for_deployment_available(self, save_latest_state=True):
         deployment = self.k8s_namespace.wait_for_deployment_minimum_replicas(
             self.deployment)
         logger.info('Deployment %s has %i replicas available',

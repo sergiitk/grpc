@@ -32,6 +32,7 @@ logger = logging.getLogger()
 V1Deployment = client.V1Deployment
 V1Pod = client.V1Pod
 V1PodList = client.V1PodList
+V1Service = client.V1Service
 
 
 def simple_resource_get(func):
@@ -84,6 +85,22 @@ class KubernetesNamespace:
     def apply_manifest(self, manifest):
         return utils.create_from_dict(self.api.client, manifest,
                                       namespace=self.name)
+
+    @simple_resource_get
+    def get_service(self, name) -> V1Service:
+        return self.api.core.read_namespaced_service(name, self.name)
+
+    def get_service_neg(
+        self,
+        service_name: str,
+        service_port: int
+    ) -> Tuple[str, List[str]]:
+        service = self.get_service(service_name)
+        neg_info: dict = json.loads(
+            service.metadata.annotations['cloud.google.com/neg-status'])
+        neg_name: str = neg_info['network_endpoint_groups'][str(service_port)]
+        neg_zones: List[str] = neg_info['zones']
+        return neg_name, neg_zones
 
     @simple_resource_get
     def get_deployment(self, name) -> V1Deployment:
@@ -231,20 +248,3 @@ class KubernetesNamespace:
         return (deployment is not None and
                 deployment.status.available_replicas is not None and
                 deployment.status.available_replicas > 0)
-
-
-def get_service_neg(
-    k8s_core_v1: client.CoreV1Api, namespace: str,
-    service_name: str, service_port: int,
-) -> Tuple[str, List[str]]:
-    # todo(sergiitk): move to KubernetesNamespace when td refactored
-    logger.info('Detecting NEG name for service=%s in namespace=%s',
-                service_name, namespace)
-    service: client.V1Service = k8s_core_v1.read_namespaced_service(
-        service_name, namespace)
-
-    neg_info: dict = json.loads(
-        service.metadata.annotations['cloud.google.com/neg-status'])
-    neg_name: str = neg_info['network_endpoint_groups'][str(service_port)]
-    neg_zones: List[str] = neg_info['zones']
-    return neg_name, neg_zones

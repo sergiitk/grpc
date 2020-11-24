@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${deployment_name}
+  namespace: ${namespace}
+  labels:
+    app: ${deployment_name}
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ${deployment_name}
+  template:
+    metadata:
+      labels:
+        app: ${deployment_name}
+    spec:
+      serviceAccountName: ${deployment_name}
+      containers:
+      - name: ${deployment_name}
+        image: gcr.io/grpc-testing/xds-gke-interop-server-java-sergii-test:latest
+        imagePullPolicy: Always
+        args:
+          - "--port=${port}"
+        ports:
+          - containerPort: ${port}
+        resources:
+          limits:
+            cpu: 800m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 512Mi
