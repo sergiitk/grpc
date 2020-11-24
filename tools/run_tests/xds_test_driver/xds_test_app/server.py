@@ -101,6 +101,12 @@ class KubernetesServerRunner(base_runner.KubernetesBaseRunner):
         self.deployment = self._reuse_deployment(self.deployment_name)
         if not self.deployment:
             self.deployment = self._create_deployment(
+                self.deployment_template,
+                deployment_name=self.deployment_name,
+                service_name=self.service_name,
+                namespace=self.k8s_namespace.name,
+                network_name=self.network_name,
+                replica_count=self.replica_count,
                 port=port,
                 maintenance_port=maintenance_port,
                 secure_mode=secure_mode,
@@ -109,70 +115,79 @@ class KubernetesServerRunner(base_runner.KubernetesBaseRunner):
         self.deployment = self._get_deployment_with_available_replicas(
             self.deployment_name, self.replica_count)
 
+        self.service = self._create_service(
+            self.service_template,
+            service_name=self.service_name,
+            deployment_name=self.deployment_name,
+            namespace=self.k8s_namespace.name,
+            port=port,
+            maintenance_port=maintenance_port,
+            secure_mode=secure_mode)
+
         return XdsTestServer(port, maintenance_port, secure_mode, server_id)
 
     def cleanup(self):
         if self.deployment:
             self._delete_deployment(self.deployment_name)
             self.deployment = None
-
-    def _render_server_template(
-        self,
-        template_file,
-        port,
-        maintenance_port,
-        secure_mode,
-        server_id
-    ):
-        server_template = template.Template(filename=str(template_file))
-        server_documents = server_template.render(
-            deployment_name=self.deployment_name,
-            service_name=self.service_name,
-            namespace=self.k8s_namespace.name,
-            network_name=self.network_name,
-            port=port,
-            maintenance_port=maintenance_port,
-            secure_mode=secure_mode,
-            server_id=server_id)
-        return server_documents
-
-    def _create_server_resources(self, **kwargs) -> k8s.V1Deployment:
-        template_file = self._template_file_from_name(self.deployment_template)
-        logger.info("Creating server from: %s", template_file)
-
-        server_documents = self._render_server_template(template_file, **kwargs)
-        logger.info("Rendered server template:\n%s\n", server_documents)
-        deployment_manifest = next(self._manifests_from_str(server_documents))
-        self.k8s_namespace.apply_manifest(deployment_manifest)
-
-        template_file = self._template_file_from_name(self.service_template)
-        server_documents = self._render_server_template(template_file, **kwargs)
-        logger.info("Rendered server template:\n%s\n", server_documents)
-        service_manifest = next(self._manifests_from_str(server_documents))
-        self.k8s_namespace.apply_manifest(service_manifest)
-
-    def _create_deployment(self, **kwargs) -> k8s.V1Deployment:
-        deployment = self._create_from_template(
-            self.deployment_template,
-            deployment_name=self.deployment_name,
-            service_name=self.service_name,
-            namespace=self.k8s_namespace.name,
-            network_name=self.network_name,
-            port=kwargs['port'],
-            maintenance_port=kwargs['maintenance_port'],
-            secure_mode=kwargs['secure_mode'])
-
-        if not isinstance(deployment, k8s.V1Deployment):
-            raise ServerRunError('Expected exactly one must deployment created '
-                                 f' from manifest {self.deployment_template}')
-
-        if deployment.metadata.name != self.deployment_name:
-            raise ServerRunError(
-                'Client Deployment created with unexpected name: '
-                f'{deployment.metadata.name}')
-
-        logger.info('Deployment %s created at %s',
-                    deployment.metadata.self_link,
-                    deployment.metadata.creation_timestamp)
-
-        return deployment
+    #
+    # def _render_server_template(
+    #     self,
+    #     template_file,
+    #     port,
+    #     maintenance_port,
+    #     secure_mode,
+    #     server_id
+    # ):
+    #     server_template = template.Template(filename=str(template_file))
+    #     server_documents = server_template.render(
+    #         deployment_name=self.deployment_name,
+    #         service_name=self.service_name,
+    #         namespace=self.k8s_namespace.name,
+    #         network_name=self.network_name,
+    #         port=port,
+    #         maintenance_port=maintenance_port,
+    #         secure_mode=secure_mode,
+    #         server_id=server_id)
+    #     return server_documents
+    #
+    # def _create_server_resources(self, **kwargs) -> k8s.V1Deployment:
+    #     template_file = self._template_file_from_name(self.deployment_template)
+    #     logger.info("Creating server from: %s", template_file)
+    #
+    #     server_documents = self._render_server_template(template_file, **kwargs)
+    #     logger.info("Rendered server template:\n%s\n", server_documents)
+    #     deployment_manifest = next(self._manifests_from_str(server_documents))
+    #     self.k8s_namespace.apply_manifest(deployment_manifest)
+    #
+    #     template_file = self._template_file_from_name(self.service_template)
+    #     server_documents = self._render_server_template(template_file, **kwargs)
+    #     logger.info("Rendered server template:\n%s\n", server_documents)
+    #     service_manifest = next(self._manifests_from_str(server_documents))
+    #     self.k8s_namespace.apply_manifest(service_manifest)
+    #
+    # def _create_deployment(self, **kwargs) -> k8s.V1Deployment:
+    #     deployment = self._create_from_template(
+    #         self.deployment_template,
+    #         deployment_name=self.deployment_name,
+    #         service_name=self.service_name,
+    #         namespace=self.k8s_namespace.name,
+    #         network_name=self.network_name,
+    #         port=kwargs['port'],
+    #         maintenance_port=kwargs['maintenance_port'],
+    #         secure_mode=kwargs['secure_mode'])
+    #
+    #     if not isinstance(deployment, k8s.V1Deployment):
+    #         raise ServerRunError('Expected exactly one must deployment created '
+    #                              f' from manifest {self.deployment_template}')
+    #
+    #     if deployment.metadata.name != self.deployment_name:
+    #         raise ServerRunError(
+    #             'Client Deployment created with unexpected name: '
+    #             f'{deployment.metadata.name}')
+    #
+    #     logger.info('Deployment %s created at %s',
+    #                 deployment.metadata.self_link,
+    #                 deployment.metadata.creation_timestamp)
+    #
+    #     return deployment

@@ -79,17 +79,17 @@ class BaselineTest(absltest.TestCase):
             network_name=self.network_name,
             use_port_forwarding=self.client_use_port_forwarding)
 
-        # self.server_runner = xds_test_app.server.KubernetesServerRunner(
-        #     k8s.KubernetesNamespace(self.k8s_api_manager, self.k8s_namespace),
-        #     deployment_name=self.server_name,
-        #     service_name=self.service_name)
+        self.server_runner = xds_test_app.server.KubernetesServerRunner(
+            k8s.KubernetesNamespace(self.k8s_api_manager, self.k8s_namespace),
+            deployment_name=self.server_name,
+            service_name=self.service_name)
 
     def tearDown(self):
         self.client_runner.cleanup()
-        # self.server_runner.cleanup()
+        self.server_runner.cleanup()
 
     def test_ping_pong(self):
-        # test_server = self.server_runner.run(port=self.service_port)
+        test_server = self.server_runner.run(port=self.service_port)
         #
         # # Load Backends
         # neg_name, neg_zones = self.server_runner.k8s_namespace.get_service_neg(

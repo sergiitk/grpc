@@ -101,17 +101,28 @@ class KubernetesBaseRunner:
         if not isinstance(deployment, k8s.V1Deployment):
             raise RunnerError('Expected V1Deployment to be created '
                               f'from manifest {template}')
-
         if deployment.metadata.name != kwargs['deployment_name']:
             raise RunnerError(
                 'Deployment created with unexpected name: '
                 f'{deployment.metadata.name}')
-
         logger.info('Deployment %s created at %s',
                     deployment.metadata.self_link,
                     deployment.metadata.creation_timestamp)
-
         return deployment
+
+    def _create_service(self, template, **kwargs) -> k8s.V1Service:
+        service = self._create_from_template(template, **kwargs)
+        if not isinstance(service, k8s.V1Service):
+            raise RunnerError('Expected V1Service to be created '
+                              f'from manifest {template}')
+        if service.metadata.name != kwargs['service_name']:
+            raise RunnerError(
+                'Service created with unexpected name: '
+                f'{service.metadata.name}')
+        logger.info('Service %s created at %s',
+                    service.metadata.self_link,
+                    service.metadata.creation_timestamp)
+        return service
 
     def _delete_deployment(self, deployment_name, wait_for_deletion=True):
         self.k8s_namespace.delete_deployment(deployment_name)

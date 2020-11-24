@@ -59,10 +59,6 @@ class XdsTestClient:
             return response
 
 
-class ClientRunError(Exception):
-    """Error running Test Client"""
-
-
 class KubernetesClientRunner(base_runner.KubernetesBaseRunner):
     k8s_namespace: k8s.KubernetesNamespace
     deployment: Optional[k8s.V1Deployment]
