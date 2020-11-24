@@ -100,13 +100,13 @@ class KubernetesClientRunner(base_runner.KubernetesBaseRunner):
                 rpc=rpc,
                 qps=qps)
 
-        self.deployment = self._get_deployment_with_available_replicas(
-            self.deployment_name)
+        self._wait_deployment_with_available_replicas(self.deployment_name)
 
         # Load test client pod
         pods = self.k8s_namespace.list_deployment_pods(self.deployment)
         # We need only one client at the moment
-        pod = self._get_pod_started(pods[0].metadata.name)
+        pod = pods[0]
+        self._wait_pod_started(pod.metadata.name)
 
         # Experimental, for local debugging.
         if self.use_port_forwarding:

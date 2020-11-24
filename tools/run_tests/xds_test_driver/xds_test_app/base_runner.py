@@ -70,7 +70,7 @@ class KubernetesBaseRunner:
         logger.info("Loading template: %s", template_file)
 
         yaml_doc = self._render_template(template_file, **kwargs)
-        logger.info("Rendered template:\n%s\n", yaml_doc)
+        logger.debug("Rendered template:\n%s\n", yaml_doc)
 
         manifests = self._manifests_from_str(yaml_doc)
         manifest = next(manifests)
@@ -136,19 +136,27 @@ class KubernetesBaseRunner:
             self.k8s_namespace.wait_for_service_deleted(name)
         logger.info('Service %s deleted', name)
 
-    def _get_deployment_with_available_replicas(self, name, count: int = 1,
-                                                **kwargs):
+    def _wait_deployment_with_available_replicas(self, name, count=1, **kwargs):
+        logger.info('Waiting for deployment %s to have %s available replicas',
+                    name, count)
         self.k8s_namespace.wait_for_deployment_available_replicas(name, count,
                                                                   **kwargs)
         deployment = self.k8s_namespace.get_deployment(name)
         logger.info('Deployment %s has %i replicas available',
                     deployment.metadata.name,
                     deployment.status.available_replicas)
-        return deployment
 
-    def _get_pod_started(self, pod_name) -> k8s.V1Pod:
-        self.k8s_namespace.wait_for_pod_started(pod_name)
-        pod = self.k8s_namespace.get_pod(pod_name)
+    def _wait_pod_started(self, name, **kwargs):
+        logger.info('Waiting for pod %s to start', name)
+        self.k8s_namespace.wait_for_pod_started(name, **kwargs)
+        pod = self.k8s_namespace.get_pod(name)
         logger.info('Pod %s ready, IP: %s', pod.metadata.name,
                     pod.status.pod_ip)
-        return pod
+
+    def _wait_service_neg(self, name, service_port, **kwargs):
+        logger.info('Waiting for NEG for service %s', name)
+        self.k8s_namespace.wait_for_service_neg(name, **kwargs)
+        neg_name, neg_zones = self.k8s_namespace.get_service_neg(
+            name, service_port)
+        logger.info("Service %s: detected NEG=%s in zones=%s", name,
+                    neg_name, neg_zones)

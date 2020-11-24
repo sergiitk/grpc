@@ -102,8 +102,12 @@ class KubernetesServerRunner(base_runner.KubernetesBaseRunner):
             secure_mode=secure_mode,
             server_id=server_id)
 
-        self._get_deployment_with_available_replicas(
+        self._wait_deployment_with_available_replicas(
             self.deployment_name, self.replica_count, timeout_sec=120)
+        # Wait for pods running
+        pods = self.k8s_namespace.list_deployment_pods(self.deployment)
+        for pod in pods:
+            self._wait_pod_started(pod.metadata.name)
 
         self.service = self._create_service(
             self.service_template,
@@ -114,7 +118,7 @@ class KubernetesServerRunner(base_runner.KubernetesBaseRunner):
             maintenance_port=maintenance_port,
             secure_mode=secure_mode)
 
-        self.k8s_namespace.wait_for_service_neg(self.service_name)
+        self._wait_service_neg(self.service_name, port)
         return XdsTestServer(port, maintenance_port, secure_mode, server_id)
 
     def cleanup(self):
