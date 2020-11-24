@@ -90,6 +90,26 @@ class KubernetesNamespace:
     def get_service(self, name) -> V1Service:
         return self.api.core.read_namespaced_service(name, self.name)
 
+    def delete_service(self, name, grace_period_seconds=5):
+        self.api.core.delete_namespaced_service(
+            name=name, namespace=self.name,
+            body=client.V1DeleteOptions(
+                propagation_policy='Foreground',
+                grace_period_seconds=grace_period_seconds))
+
+    def wait_for_service_deleted(self, name: str,
+                                 timeout_sec=60, wait_sec=1):
+        @retrying.retry(retry_on_result=lambda r: r is not None,
+                        stop_max_delay=timeout_sec * 1000,
+                        wait_fixed=wait_sec * 1000)
+        def _wait_for_deleted_service_with_retry():
+            service = self.get_service(name)
+            if service is not None:
+                logger.info('Waiting for service %s to be deleted',
+                            service.metadata.name)
+            return service
+        _wait_for_deleted_service_with_retry()
+
     def get_service_neg(
         self,
         service_name: str,
@@ -112,8 +132,6 @@ class KubernetesNamespace:
             body=client.V1DeleteOptions(
                 propagation_policy='Foreground',
                 grace_period_seconds=grace_period_seconds))
-        # todo(sergiitk): confirm deleted
-        # logger.info('del %s', result)
 
     def list_deployment_pods(self, deployment: V1Deployment) -> List[V1Pod]:
         # V1LabelSelector.match_expressions not supported at the moment
@@ -134,10 +152,8 @@ class KubernetesNamespace:
             return deployment
         _wait_for_deployment_available_replicas()
 
-    def wait_for_deployment_deleted(self,
-                                    deployment_name: str,
-                                    timeout_sec=60,
-                                    wait_sec=1) -> V1Deployment:
+    def wait_for_deployment_deleted(self, deployment_name: str,
+                                    timeout_sec=60, wait_sec=1):
         @retrying.retry(retry_on_result=lambda r: r is not None,
                         stop_max_delay=timeout_sec * 1000,
                         wait_fixed=wait_sec * 1000)

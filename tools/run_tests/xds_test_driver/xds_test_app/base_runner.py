@@ -124,14 +124,22 @@ class KubernetesBaseRunner:
                     service.metadata.creation_timestamp)
         return service
 
-    def _delete_deployment(self, deployment_name, wait_for_deletion=True):
-        self.k8s_namespace.delete_deployment(deployment_name)
+    def _delete_deployment(self, name, wait_for_deletion=True):
+        self.k8s_namespace.delete_deployment(name)
         if wait_for_deletion:
-            self.k8s_namespace.wait_for_deployment_deleted(deployment_name)
-        logger.info('Deployment %s deleted', deployment_name)
+            self.k8s_namespace.wait_for_deployment_deleted(name)
+        logger.info('Deployment %s deleted', name)
 
-    def _get_deployment_with_available_replicas(self, name, count: int = 1):
-        self.k8s_namespace.wait_for_deployment_available_replicas(name, count)
+    def _delete_service(self, name, wait_for_deletion=True):
+        self.k8s_namespace.delete_service(name)
+        if wait_for_deletion:
+            self.k8s_namespace.wait_for_service_deleted(name)
+        logger.info('Service %s deleted', name)
+
+    def _get_deployment_with_available_replicas(self, name, count: int = 1,
+                                                **kwargs):
+        self.k8s_namespace.wait_for_deployment_available_replicas(name, count,
+                                                                  **kwargs)
         deployment = self.k8s_namespace.get_deployment(name)
         logger.info('Deployment %s has %i replicas available',
                     deployment.metadata.name,
