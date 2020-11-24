@@ -114,7 +114,6 @@ class BaselineTest(absltest.TestCase):
         test_server.xds_address = (self.xds_service_host, self.xds_service_port)
 
         # todo(sergiitk): make rpc enum or get it from proto
-        # xds_uri = f'xds:///{self.xds_service_host}:{self.xds_service_port}'
         test_client = self.client_runner.run(server_address=test_server.xds_uri,
                                              rpc='UnaryCall')
         stats_response = test_client.request_load_balancer_stats(num_rpcs=9)

@@ -12,19 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import contextlib
 import logging
-import pathlib
 from typing import Optional
 from typing import Tuple
 
-from mako import template
-import grpc
-import yaml
-
 from infrastructure import k8s
-from src.proto.grpc.testing import test_pb2_grpc
-from src.proto.grpc.testing import messages_pb2
 from xds_test_app import base_runner
 
 logger = logging.getLogger()
@@ -49,7 +41,7 @@ class XdsTestServer:
     def xds_address(self) -> str:
         if not self.xds_host:
             return ''
-        return f'{self.xds_host}:f{self.xds_port}'
+        return f'{self.xds_host}:{self.xds_port}'
 
     @xds_address.setter
     def xds_address(self, tuple_address: Tuple[str, int]):
@@ -122,6 +114,7 @@ class KubernetesServerRunner(base_runner.KubernetesBaseRunner):
             maintenance_port=maintenance_port,
             secure_mode=secure_mode)
 
+        self.k8s_namespace.wait_for_service_neg(self.service_name)
         return XdsTestServer(port, maintenance_port, secure_mode, server_id)
 
     def cleanup(self):

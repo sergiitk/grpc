@@ -78,6 +78,8 @@ class PortForwardingError(Exception):
 
 
 class KubernetesNamespace:
+    NEG_STATUS_META = 'cloud.google.com/neg-status'
+
     def __init__(self, api: KubernetesApiManager, name: str):
         self.name = name
         self.api = api
@@ -110,6 +112,20 @@ class KubernetesNamespace:
             return service
         _wait_for_deleted_service_with_retry()
 
+    def wait_for_service_neg(self, name: str,
+                             timeout_sec=60, wait_sec=1):
+        @retrying.retry(retry_on_result=lambda r: not r,
+                        stop_max_delay=timeout_sec * 1000,
+                        wait_fixed=wait_sec * 1000)
+        def _wait_for_service_neg():
+            service = self.get_service(name)
+            if self.NEG_STATUS_META not in service.metadata.annotations:
+                logger.info('Waiting for service %s NEG',
+                            service.metadata.name)
+                return False
+            return True
+        _wait_for_service_neg()
+
     def get_service_neg(
         self,
         service_name: str,
@@ -117,7 +133,7 @@ class KubernetesNamespace:
     ) -> Tuple[str, List[str]]:
         service = self.get_service(service_name)
         neg_info: dict = json.loads(
-            service.metadata.annotations['cloud.google.com/neg-status'])
+            service.metadata.annotations[self.NEG_STATUS_META])
         neg_name: str = neg_info['network_endpoint_groups'][str(service_port)]
         neg_zones: List[str] = neg_info['zones']
         return neg_name, neg_zones
