@@ -18,6 +18,7 @@ import pathlib
 from typing import Optional
 from typing import Tuple
 
+from mako import template
 import grpc
 import yaml
 
@@ -74,12 +75,15 @@ class KubernetesClientRunner:
                  k8s_client,
                  namespace,
                  deployment_name,
+                 *,
                  stats_port=8079,
+                 network_name='default',
                  template_name='client.deployment.yaml',
                  use_port_forwarding=False):
         self.k8s_context_name = k8s_context_name
         self.k8s_client = k8s_client
         self.namespace = namespace
+        self.network_name = network_name
         self.deployment_name = deployment_name
         self.stats_port = stats_port
         self.template_name = template_name
@@ -89,9 +93,14 @@ class KubernetesClientRunner:
         # Port forwarding kubernetes.stream.ws_client.PortForward
         self.pf = None
 
-    def run(self) -> XdsTestClient:
+    def run(self, *, server_address, rpc, qps=10) -> XdsTestClient:
         # Reuse existing or create a new deployment
-        self.deployment = self._reuse_deployment() or self._create_deployment()
+        self.deployment = self._reuse_deployment()
+        if not self.deployment:
+            self.deployment = self._create_deployment(
+                server_address=server_address,
+                rpc=rpc, qps=qps)
+
         self._wait_for_deployment_available()
 
         # Load test client pod
@@ -117,26 +126,44 @@ class KubernetesClientRunner:
         if self.deployment:
             self._delete_deployment()
 
-    def _create_deployment(self) -> k8s.client.V1Deployment:
-        yaml_file = self._template_file_from_name(self.template_name)
-        logger.info("Creating client from: %s", yaml_file)
-        manifests = self._manifests_from_yaml_file(yaml_file)
+    def _render_deployment_template(self, template_file,
+                                    server_address, rpc, qps):
+        deployment_template = template.Template(filename=str(template_file))
+        deployment_document = deployment_template.render(
+            deployment_name=self.deployment_name,
+            namespace=self.namespace,
+            stats_port=self.stats_port,
+            network_name=self.network_name,
+            server_address=server_address,
+            rpc=rpc,
+            qps=qps)
+        return deployment_document
+
+    def _create_deployment(self, **kwargs) -> k8s.client.V1Deployment:
+        template_file = self._template_file_from_name(self.template_name)
+        logger.info("Creating client from: %s", template_file)
+
+        deployment_document = self._render_deployment_template(
+            template_file, **kwargs)
+        logger.info("Rendered deployment template:\n%s\n", deployment_document)
+
+        manifests = self._manifests_from_str(deployment_document)
         # Load the first document
         # todo(sergiitk): index by type?
-        manifest = next(manifests)
+        deployment_manifest = next(manifests)
         # Error out on multi-document yaml
         if next(manifests, False):
-            raise ClientRunError(
-                f'Exactly one document expected in client manifest {yaml_file}')
+            raise ClientRunError('Exactly one document expected in client '
+                                 f'manifest {template_file}')
 
         # Apply the manifest
-        k8s_objects = k8s.apply_manifest(self.k8s_client, manifest,
+        k8s_objects = k8s.apply_manifest(self.k8s_client, deployment_manifest,
                                          self.namespace)
         # Check correctness
         if len(k8s_objects) != 1 or not isinstance(k8s_objects[0],
                                                    k8s.client.V1Deployment):
             raise ClientRunError('Expected exactly one Deployment created from '
-                                 f'manifest {yaml_file}')
+                                 f'manifest {template_file}')
 
         deployment: k8s.client.V1Deployment = k8s_objects[0]
         if deployment.metadata.name != self.deployment_name:
@@ -192,6 +219,12 @@ class KubernetesClientRunner:
             with contextlib.closing(yaml.safe_load_all(f)) as yml:
                 for manifest in yml:
                     yield manifest
+
+    @staticmethod
+    def _manifests_from_str(document):
+        with contextlib.closing(yaml.safe_load_all(document)) as yml:
+            for manifest in yml:
+                yield manifest
 
     @staticmethod
     def _template_file_from_name(template_name):
