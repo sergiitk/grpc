@@ -65,7 +65,7 @@ class BaselineTest(absltest.TestCase):
 
         # Shared services
         cls.k8s_api_manager = k8s.KubernetesApiManager(cls.k8s_context_name)
-        cls.compute = google_api.build('compute', 'v1', cache_discovery=False)
+        # cls.compute = google_api.build('compute', 'v1', cache_discovery=False)
 
     @classmethod
     def tearDownClass(cls):
@@ -79,40 +79,40 @@ class BaselineTest(absltest.TestCase):
             network_name=self.network_name,
             use_port_forwarding=self.client_use_port_forwarding)
 
-        self.server_runner = xds_test_app.server.KubernetesServerRunner(
-            k8s.KubernetesNamespace(self.k8s_api_manager, self.k8s_namespace),
-            deployment_name=self.server_name,
-            service_name=self.service_name)
+        # self.server_runner = xds_test_app.server.KubernetesServerRunner(
+        #     k8s.KubernetesNamespace(self.k8s_api_manager, self.k8s_namespace),
+        #     deployment_name=self.server_name,
+        #     service_name=self.service_name)
 
     def tearDown(self):
         self.client_runner.cleanup()
-        self.server_runner.cleanup()
+        # self.server_runner.cleanup()
 
     def test_ping_pong(self):
-        test_server = self.server_runner.run(port=self.service_port)
-
-        # Load Backends
-        neg_name, neg_zones = self.server_runner.k8s_namespace.get_service_neg(
-            self.server_runner.service_name, self.service_port)
-
-        backends = []
-        for neg_zone in neg_zones:
-            backend = gcp.get_network_endpoint_group(
-                self.compute, self.project, neg_zone, neg_name)
-            backends.append(backend)
-
-        # Global Backend Service (LB)
-        backend_service = gcp.get_backend_service(self.compute, self.project,
-                                                  self.backend_service_name)
-        gcp.backend_service_add_backend(self.compute, self.project,
-                                        backend_service, backends)
-        gcp.wait_for_backends_healthy_status(self.compute, self.project,
-                                             backend_service, backends)
-
-        test_server.xds_address = (self.xds_service_host, self.xds_service_port)
+        # test_server = self.server_runner.run(port=self.service_port)
+        #
+        # # Load Backends
+        # neg_name, neg_zones = self.server_runner.k8s_namespace.get_service_neg(
+        #     self.server_runner.service_name, self.service_port)
+        #
+        # backends = []
+        # for neg_zone in neg_zones:
+        #     backend = gcp.get_network_endpoint_group(
+        #         self.compute, self.project, neg_zone, neg_name)
+        #     backends.append(backend)
+        #
+        # # Global Backend Service (LB)
+        # backend_service = gcp.get_backend_service(self.compute, self.project,
+        #                                           self.backend_service_name)
+        # gcp.backend_service_add_backend(self.compute, self.project,
+        #                                 backend_service, backends)
+        # gcp.wait_for_backends_healthy_status(self.compute, self.project,
+        #                                      backend_service, backends)
+        # test_server.xds_address = (self.xds_service_host, self.xds_service_port)
 
         # todo(sergiitk): make rpc enum or get it from proto
-        test_client = self.client_runner.run(server_address=test_server.xds_uri,
+        xds_uri = f'xds:///{self.xds_service_host}:{self.xds_service_port}'
+        test_client = self.client_runner.run(server_address=xds_uri,
                                              rpc='UnaryCall')
         stats_response = test_client.request_load_balancer_stats(num_rpcs=9)
         self.assertAllBackendsReceivedRpcs(stats_response)

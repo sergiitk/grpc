@@ -119,25 +119,20 @@ class KubernetesNamespace:
         # V1LabelSelector.match_expressions not supported at the moment
         return self.list_pods_with_labels(deployment.spec.selector.match_labels)
 
-    def wait_for_deployment_minimum_replicas(self,
-                                             deployment: V1Deployment,
-                                             timeout_sec=60,
-                                             wait_sec=1) -> V1Deployment:
-        if self._min_replicas_available(deployment):
-            return deployment
-
+    def wait_for_deployment_available_replicas(self, name, count=1,
+                                               timeout_sec=60, wait_sec=1):
         @retrying.retry(
-            retry_on_result=lambda r: not self._min_replicas_available(r),
+            retry_on_result=lambda r: not self._replicas_available(r, count),
             stop_max_delay=timeout_sec * 1000,
             wait_fixed=wait_sec * 1000)
-        def _get_deployment_with_retry():
-            updated_deployment = self.get_deployment(deployment.metadata.name)
-            logger.info('Waiting for deployment %s replicas, available %s',
-                        updated_deployment.metadata.name,
-                        updated_deployment.status.available_replicas)
-            return updated_deployment
-
-        return _get_deployment_with_retry()
+        def _wait_for_deployment_available_replicas():
+            deployment = self.get_deployment(name)
+            logger.info('Waiting for deployment %s to have %s available '
+                        'replicas, current count %s',
+                        deployment.metadata.name,
+                        count, deployment.status.available_replicas)
+            return deployment
+        _wait_for_deployment_available_replicas()
 
     def wait_for_deployment_deleted(self,
                                     deployment_name: str,
@@ -154,8 +149,7 @@ class KubernetesNamespace:
                             deployment.metadata.name,
                             deployment.status.replicas)
             return deployment
-
-        return _wait_for_deleted_deployment_with_retry()
+        _wait_for_deleted_deployment_with_retry()
 
     def list_pods_with_labels(self, labels: dict) -> List[V1Pod]:
         pod_list: V1PodList = self.api.core.list_namespaced_pod(
@@ -165,26 +159,17 @@ class KubernetesNamespace:
     def get_pod(self, name) -> client.V1Pod:
         return self.api.core.read_namespaced_pod(name, self.name)
 
-    def wait_for_pod_started(
-        self,
-        pod: V1Pod,
-        timeout_sec=60,
-        wait_sec=1
-    ) -> V1Pod:
-        if self._pod_started(pod):
-            return pod
-
+    def wait_for_pod_started(self, pod_name, timeout_sec=60, wait_sec=1):
         @retrying.retry(retry_on_result=lambda r: not self._pod_started(r),
                         stop_max_delay=timeout_sec * 1000,
                         wait_fixed=wait_sec * 1000)
-        def _get_started_pod_with_retry():
-            updated_pod = self.get_pod(pod.metadata.name)
+        def _wait_for_pod_started():
+            pod = self.get_pod(pod_name)
             logger.info('Waiting for pod %s to start, current phase: %s',
-                        updated_pod.metadata.name,
-                        updated_pod.status.phase)
-            return updated_pod
-
-        return _get_started_pod_with_retry()
+                        pod.metadata.name,
+                        pod.status.phase)
+            return pod
+        _wait_for_pod_started()
 
     def port_forward_pod(
         self,
@@ -244,7 +229,7 @@ class KubernetesNamespace:
         return pod.status.phase not in ('Pending', 'Unknown')
 
     @staticmethod
-    def _min_replicas_available(deployment):
+    def _replicas_available(deployment, count):
         return (deployment is not None and
                 deployment.status.available_replicas is not None and
-                deployment.status.available_replicas > 0)
+                deployment.status.available_replicas >= count)
