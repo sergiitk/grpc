@@ -56,17 +56,17 @@ def setup_gke(
     xds_service_host, xds_service_port
 ) -> TrafficDirectorState:
     # Detect NEG name
-    neg_name, neg_zones = k8s.get_service_neg(k8s_core_v1, namespace,
-                                              service_name, service_port)
-    logger.info("Detected NEG=%s in zones=%s", neg_name, neg_zones)
-
-    # Load Backends
-    backends = []
-    for neg_zone in neg_zones:
-        backend = gcp.get_network_endpoint_group(compute, project, neg_zone,
-                                                 neg_name)
-        logger.info("Loaded backend: %s zone %s", backend.name, backend.zone)
-        backends.append(backend)
+    # neg_name, neg_zones = k8s.get_service_neg(k8s_core_v1, namespace,
+    #                                           service_name, service_port)
+    # logger.info("Detected NEG=%s in zones=%s", neg_name, neg_zones)
+    #
+    # # Load Backends
+    # backends = []
+    # for neg_zone in neg_zones:
+    #     backend = gcp.get_network_endpoint_group(compute, project, neg_zone,
+    #                                              neg_name)
+    #     logger.info("Loaded backend: %s zone %s", backend.name, backend.zone)
+    #     backends.append(backend)
 
     # Health check
     try:
@@ -88,11 +88,11 @@ def setup_gke(
             compute, project, backend_service_name, health_check)
         # todo(sergiitk): populate backend on get_backend_service() when empty
         # Add NEGs as backends of Global Backend Service
-        logger.info(
-            'Add NEG %s in zones %s as backends to the Backend Service %s',
-            neg_name, neg_zones, backend_service.name)
-        gcp.backend_service_add_backend(compute, project,
-                                        backend_service, backends)
+        # logger.info(
+        #     'Add NEG %s in zones %s as backends to the Backend Service %s',
+        #     neg_name, neg_zones, backend_service.name)
+        # gcp.backend_service_add_backend(compute, project,
+        #                                 backend_service, backends)
 
     # URL map
     try:
@@ -133,5 +133,5 @@ def setup_gke(
             forwarding_rule_name, xds_service_port,
             target_proxy, network_url)
 
-    return TrafficDirectorState(backends, backend_service, health_check,
-                                url_map, target_proxy, forwarding_rule)
+    # return TrafficDirectorState(backends, backend_service, health_check,
+    #                             url_map, target_proxy, forwarding_rule)

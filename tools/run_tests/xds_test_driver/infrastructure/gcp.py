@@ -154,6 +154,7 @@ def backend_service_add_backend(compute, project,
 
 
 def get_network_endpoint_group(compute, project, zone, neg_name):
+    # todo: retry
     result = compute.networkEndpointGroups().get(
         project=project,
         zone=zone,

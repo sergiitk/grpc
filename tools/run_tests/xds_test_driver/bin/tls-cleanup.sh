@@ -1,0 +1,17 @@
+#!/bin/sh -ux
+
+set -o allexport
+. .env
+set +o allexport
+
+gcloud beta compute backend-services import sergii-psm-test-global-backend-service --global \
+  --source=bin/tls/sergii-psm-test-global-backend-service-orig.yaml -q
+
+# Create MTLS policy on the server side and attach to an ECS
+gcloud alpha network-security server-tls-policies delete server_mtls_policy --location=global -q
+
+gcloud alpha network-services endpoint-config-selectors delete ecs_mtls_psms --location=global -q
+
+# Create MTLS policy on the client side and attach to our backendService
+gcloud alpha network-security client-tls-policies delete client_mtls_policy --location=global -q
+

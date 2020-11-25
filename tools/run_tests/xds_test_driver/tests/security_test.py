@@ -72,11 +72,13 @@ class SecurityTest(absltest.TestCase):
 
     def setUp(self):
         # todo(sergiitk): generate with run id
-        # self.client_runner = xds_test_app.client.KubernetesClientRunner(
-        #     k8s.KubernetesNamespace(self.k8s_api_manager, self.k8s_namespace),
-        #     self.client_deployment_name,
-        #     network_name=self.network_name,
-        #     use_port_forwarding=self.client_use_port_forwarding)
+        self.client_runner = xds_test_app.client.KubernetesClientRunner(
+            k8s.KubernetesNamespace(self.k8s_api_manager, self.k8s_namespace),
+            self.client_deployment_name,
+            network_name=self.network_name,
+            deployment_template='client-secure.deployment.yaml')
+
+        # use_port_forwarding=self.client_use_port_forwarding
 
         self.server_runner = xds_test_app.server.KubernetesServerRunner(
             k8s.KubernetesNamespace(self.k8s_api_manager, self.k8s_namespace),
@@ -85,15 +87,16 @@ class SecurityTest(absltest.TestCase):
             deployment_template='server-secure.deployment.yaml')
 
     def tearDown(self):
+        pass
         # self.client_runner.cleanup()
-        self.server_runner.cleanup()
+        # self.server_runner.cleanup()
 
     def test_mtls(self):
-        test_server = self.server_runner.run(
-            port=self.service_port,
-            maintenance_port=self.server_maintenance_port,
-            secure_mode=True)
-
+        # test_server = self.server_runner.run(
+        #     port=self.service_port,
+        #     maintenance_port=self.server_maintenance_port,
+        #     secure_mode=True)
+        #
         # # Load Backends
         # neg_name, neg_zones = self.server_runner.k8s_namespace.get_service_neg(
         #     self.server_runner.service_name, self.service_port)
@@ -117,8 +120,11 @@ class SecurityTest(absltest.TestCase):
         # test_server.xds_address = (self.xds_service_host, self.xds_service_port)
         #
         # # todo(sergiitk): make rpc enum or get it from proto
-        # test_client = self.client_runner.run(server_address=test_server.xds_uri,
-        #                                      rpc='UnaryCall')
+        xds_uri = f'xds:///{self.xds_service_host}:{self.xds_service_port}'
+        test_client = self.client_runner.run(server_address=xds_uri,
+                                             rpc='UnaryCall',
+                                             qps=1,
+                                             secure_mode=True)
         # stats_response = test_client.request_load_balancer_stats(num_rpcs=9)
         # self.assertAllBackendsReceivedRpcs(stats_response)
         # self.assertFailedRpcsAtMost(stats_response, 0)

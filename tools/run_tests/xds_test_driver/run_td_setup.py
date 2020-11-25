@@ -115,8 +115,8 @@ def main():
         xds_service_host, xds_service_port)
 
     # Wait for global backend instance reporting all backends to be HEALTHY.
-    gcp.wait_for_backends_healthy_status(compute, project,
-                                         td.backend_service, td.backends)
+    # gcp.wait_for_backends_healthy_status(compute, project,
+    #                                      td.backend_service, td.backends)
 
     # todo(sergiitk): finally/context manager.
     compute.close()

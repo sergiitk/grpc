@@ -86,7 +86,8 @@ class KubernetesClientRunner(base_runner.KubernetesBaseRunner):
         # Port forwarding kubernetes.stream.ws_client.PortForward
         self.pf = None
 
-    def run(self, *, server_address, rpc, qps=10) -> XdsTestClient:
+    def run(self, *, server_address, rpc,
+            qps=10, secure_mode=False) -> XdsTestClient:
         # Reuse existing or create a new deployment
         self.deployment = self._reuse_deployment(self.deployment_name)
         if not self.deployment:
@@ -97,6 +98,7 @@ class KubernetesClientRunner(base_runner.KubernetesBaseRunner):
                 stats_port=self.stats_port,
                 network_name=self.network_name,
                 server_address=server_address,
+                secure_mode=secure_mode,
                 rpc=rpc,
                 qps=qps)
 

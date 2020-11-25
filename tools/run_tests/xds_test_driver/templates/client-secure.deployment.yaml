@@ -6,7 +6,7 @@ metadata:
   labels:
     app: ${deployment_name}
 spec:
-  replicas: ${replica_count}
+  replicas: 1
   selector:
     matchLabels:
       app: ${deployment_name}
@@ -18,24 +18,26 @@ spec:
       serviceAccountName: ${deployment_name}
       containers:
       - name: ${deployment_name}
-        image: gcr.io/grpc-testing/xds-gke-interop-server-java-sergii-test:latest
+        image: gcr.io/grpc-testing/xds-gke-interop-client-java-sergii-test:latest
         imagePullPolicy: Always
         args:
-          - "--port=${port}"
-          - "--maintenance_port=${maintenance_port}"
-          - "--secure_mode=${secure_mode}"
+            - "--server=${server_address}"
+            - "--stats_port=${stats_port}"
+            - "--secureMode=${secure_mode}"
+            - "--qps=${qps}"
+            - "--rpc=${rpc}"
+            - "--print_response=true"
         ports:
-          - containerPort: ${port}
-          - containerPort: ${maintenance_port}
+          - containerPort: ${stats_port}
         env:
         - name: GRPC_XDS_BOOTSTRAP
-          value: "/tmp/grpc-xds/secure-server.json"
+          value: "/tmp/grpc-xds/secure-client.json"
         volumeMounts:
         - mountPath: /var/run/gke-spiffe/certs
           name: gke-spiffe-certs-volume
           readOnly: true
-        - mountPath: /tmp/grpc-xds/secure-server.json
-          subPath: secure-server.json
+        - mountPath: /tmp/grpc-xds/secure-client.json
+          subPath: secure-client.json
           name: grpc-td-conf
           readOnly: true
         resources:
