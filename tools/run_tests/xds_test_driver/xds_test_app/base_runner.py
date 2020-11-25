@@ -70,7 +70,7 @@ class KubernetesBaseRunner:
         logger.info("Loading template: %s", template_file)
 
         yaml_doc = self._render_template(template_file, **kwargs)
-        logger.debug("Rendered template:\n%s\n", yaml_doc)
+        logger.info("Rendered template:\n%s\n", yaml_doc)
 
         manifests = self._manifests_from_str(yaml_doc)
         manifest = next(manifests)
@@ -95,6 +95,11 @@ class KubernetesBaseRunner:
         deployment = self.k8s_namespace.get_deployment(deployment_name)
         # todo(sergiitk): check if good or must be recreated
         return deployment
+
+    def _reuse_service(self, service_name) -> k8s.V1Service:
+        service = self.k8s_namespace.get_service(service_name)
+        # todo(sergiitk): check if good or must be recreated
+        return service
 
     def _create_deployment(self, template, **kwargs) -> k8s.V1Deployment:
         deployment = self._create_from_template(template, **kwargs)

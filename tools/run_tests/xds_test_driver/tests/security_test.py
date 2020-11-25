@@ -60,7 +60,7 @@ class SecurityTest(absltest.TestCase):
         # target_proxy_name: str = os.environ['TARGET_PROXY_NAME']
         # forwarding_rule_name: str = os.environ['FORWARDING_RULE_NAME']
         cls.xds_service_host: str = 'sergii-psm-test-xds-host'
-        cls.xds_service_port: int = 8000
+        cls.xds_service_port: int = os.environ['XDS_PORT']
 
         # Shared services
         cls.k8s_api_manager = k8s.KubernetesApiManager(cls.k8s_context_name)

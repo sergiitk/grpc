@@ -91,7 +91,7 @@ def main():
     target_proxy_name: str = os.environ['TARGET_PROXY_NAME']
     forwarding_rule_name: str = os.environ['FORWARDING_RULE_NAME']
     xds_service_hostname: str = 'sergii-psm-test-xds-host'
-    xds_service_port: str = '8000'
+    xds_service_port: str = os.environ['XDS_PORT']
     xds_service_host: str = f'{xds_service_hostname}:{xds_service_port}'
     # todo(sergiitk): detect automatically
 

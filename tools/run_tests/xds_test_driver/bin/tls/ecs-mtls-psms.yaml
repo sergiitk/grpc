@@ -3,7 +3,7 @@ type: "SIDECAR_PROXY"
 serverTlsPolicy: "server_mtls_policy"
 trafficPortSelector:
   ports:
-  - "8000"
+  - "8080"
 endpointMatcher:
   metadataLabelMatcher:
     metadataLabelMatchCriteria: "MATCH_ALL"

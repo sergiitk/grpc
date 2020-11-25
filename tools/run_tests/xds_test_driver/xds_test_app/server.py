@@ -70,7 +70,8 @@ class KubernetesServerRunner(base_runner.KubernetesBaseRunner):
                  service_name=None,
                  network_name='default',
                  deployment_template='server.deployment.yaml',
-                 service_template='server.service.yaml'):
+                 service_template='server.service.yaml',
+                 reuse_service=False):
         super().__init__(k8s_namespace)
 
         # Settings
@@ -81,6 +82,7 @@ class KubernetesServerRunner(base_runner.KubernetesBaseRunner):
         self.network_name = network_name
         # todo(sergiitk): make adjustable
         self.replica_count = 2
+        self.reuse_service = reuse_service
 
         # Mutable state
         self.service = None
@@ -109,14 +111,18 @@ class KubernetesServerRunner(base_runner.KubernetesBaseRunner):
         for pod in pods:
             self._wait_pod_started(pod.metadata.name)
 
-        self.service = self._create_service(
-            self.service_template,
-            service_name=self.service_name,
-            deployment_name=self.deployment_name,
-            namespace=self.k8s_namespace.name,
-            port=port,
-            maintenance_port=maintenance_port,
-            secure_mode=secure_mode)
+        # Reuse existing or create a new deployment
+        if self.reuse_service:
+            self.service = self._reuse_service(self.service_name)
+        if not self.service:
+            self.service = self._create_service(
+                self.service_template,
+                service_name=self.service_name,
+                deployment_name=self.deployment_name,
+                namespace=self.k8s_namespace.name,
+                port=port,
+                maintenance_port=maintenance_port,
+                secure_mode=secure_mode)
 
         self._wait_service_neg(self.service_name, port)
         return XdsTestServer(port, maintenance_port, secure_mode, server_id)
@@ -125,6 +131,6 @@ class KubernetesServerRunner(base_runner.KubernetesBaseRunner):
         if self.deployment:
             self._delete_deployment(self.deployment_name)
             self.deployment = None
-        if self.service:
+        if not self.reuse_service and self.service:
             self._delete_service(self.service_name)
             self.service = None

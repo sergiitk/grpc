@@ -30,6 +30,8 @@ spec:
         env:
         - name: GRPC_XDS_BOOTSTRAP
           value: "/tmp/grpc-xds/secure-server.json"
+        - name: GRPC_XDS_EXPERIMENTAL_SECURITY_SUPPORT
+          value: "true"
         volumeMounts:
         - mountPath: /var/run/gke-spiffe/certs
           name: gke-spiffe-certs-volume

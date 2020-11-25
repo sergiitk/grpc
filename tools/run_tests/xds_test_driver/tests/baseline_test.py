@@ -12,6 +12,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 import os
+import time
 
 import dotenv
 import kubernetes.config
@@ -50,6 +51,7 @@ class BaselineTest(absltest.TestCase):
         cls.server_name = os.environ['SERVER_NAME']
         cls.service_name = os.environ['SERVICE_NAME']
         cls.service_port = os.environ['SERVICE_PORT']
+        cls.debug_reuse_service = os.environ['DEBUG_REUSE_SERVICE']
 
         # Traffic director
         cls.backend_service_name = os.environ['GLOBAL_BACKEND_SERVICE_NAME']
@@ -61,7 +63,7 @@ class BaselineTest(absltest.TestCase):
         # target_proxy_name: str = os.environ['TARGET_PROXY_NAME']
         # forwarding_rule_name: str = os.environ['FORWARDING_RULE_NAME']
         cls.xds_service_host: str = 'sergii-psm-test-xds-host'
-        cls.xds_service_port: int = 8000
+        cls.xds_service_port: int = os.environ['XDS_PORT']
 
         # Shared services
         cls.k8s_api_manager = k8s.KubernetesApiManager(cls.k8s_context_name)
@@ -82,7 +84,8 @@ class BaselineTest(absltest.TestCase):
         self.server_runner = xds_test_app.server.KubernetesServerRunner(
             k8s.KubernetesNamespace(self.k8s_api_manager, self.k8s_namespace),
             deployment_name=self.server_name,
-            service_name=self.service_name)
+            service_name=self.service_name,
+            reuse_service=self.debug_reuse_service)
 
     def tearDown(self):
         self.client_runner.cleanup()
@@ -94,6 +97,8 @@ class BaselineTest(absltest.TestCase):
         # Load Backends
         neg_name, neg_zones = self.server_runner.k8s_namespace.get_service_neg(
             self.server_runner.service_name, self.service_port)
+
+        time.sleep(20)
 
         backends = []
         for neg_zone in neg_zones:

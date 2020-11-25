@@ -18,7 +18,8 @@ gcloud alpha network-security client-tls-policies import client_mtls_policy \
 gcloud beta compute backend-services export sergii-psm-test-global-backend-service --global \
   --destination=bin/tls/sergii-psm-test-global-backend-service-orig.yaml
 
-cat bin/tls/sergii-psm-test-global-backend-service-orig.yaml bin/tls/client-security-settings.yaml > bin/tls/sergii-psm-test-global-backend-service-client-sec.yaml
+cat bin/tls/sergii-psm-test-global-backend-service-orig.yaml bin/tls/client-security-settings.yaml \
+ > bin/tls/sergii-psm-test-global-backend-service-client-sec.yaml
 
 gcloud beta compute backend-services import sergii-psm-test-global-backend-service --global \
   --source=bin/tls/sergii-psm-test-global-backend-service-client-sec.yaml -q

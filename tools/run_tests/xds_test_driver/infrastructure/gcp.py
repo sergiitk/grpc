@@ -87,6 +87,10 @@ def wait_for_backends_healthy_status(compute, project,
                 instance['healthState'])
 
             if instance['healthState'] != 'HEALTHY':
+                logger.info(
+                    'Backend %s zone %s: endpoint %s:%s healthy',
+                    backend.name, backend.zone,
+                    instance['ipAddress'], instance['port'])
                 return False
 
     return True
