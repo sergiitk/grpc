@@ -34,6 +34,8 @@ spec:
           value: "/tmp/grpc-xds/secure-client.json"
         - name: GRPC_XDS_EXPERIMENTAL_SECURITY_SUPPORT
           value: "true"
+        - name: GRPC_XDS_CERT_INSTANCE_OVERRIDE
+          value: "true"
         volumeMounts:
         - mountPath: /var/run/gke-spiffe/certs
           name: gke-spiffe-certs-volume

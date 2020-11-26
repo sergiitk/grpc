@@ -81,7 +81,7 @@ class KubernetesServerRunner(base_runner.KubernetesBaseRunner):
         self.service_template = service_template
         self.network_name = network_name
         # todo(sergiitk): make adjustable
-        self.replica_count = 2
+        self.replica_count = 1
         self.reuse_service = reuse_service
 
         # Mutable state

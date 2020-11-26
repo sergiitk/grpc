@@ -12,6 +12,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 import os
+import time
 
 import dotenv
 import kubernetes.config
@@ -48,6 +49,7 @@ class SecurityTest(absltest.TestCase):
         cls.server_name = os.environ['SERVER_NAME']
         cls.service_name = os.environ['SERVICE_NAME']
         cls.service_port = os.environ['SERVICE_PORT']
+        cls.debug_reuse_service = os.environ['DEBUG_REUSE_SERVICE']
         cls.server_maintenance_port = os.environ['SERVER_MAINTENANCE_PORT']
 
         # Traffic director
@@ -84,7 +86,8 @@ class SecurityTest(absltest.TestCase):
             k8s.KubernetesNamespace(self.k8s_api_manager, self.k8s_namespace),
             deployment_name=self.server_name,
             service_name=self.service_name,
-            deployment_template='server-secure.deployment.yaml')
+            deployment_template='server-secure.deployment.yaml',
+            reuse_service=self.debug_reuse_service)
 
     def tearDown(self):
         pass
@@ -92,42 +95,44 @@ class SecurityTest(absltest.TestCase):
         # self.server_runner.cleanup()
 
     def test_mtls(self):
-        # test_server = self.server_runner.run(
-        #     port=self.service_port,
-        #     maintenance_port=self.server_maintenance_port,
-        #     secure_mode=True)
-        #
-        # # Load Backends
-        # neg_name, neg_zones = self.server_runner.k8s_namespace.get_service_neg(
-        #     self.server_runner.service_name, self.service_port)
-        #
-        # backends = []
-        # for neg_zone in neg_zones:
-        #     backend = gcp.get_network_endpoint_group(
-        #         self.compute, self.project, neg_zone, neg_name)
-        #     logging.info("Loaded backend: %s zone %s", backend.name,
-        #                  backend.zone)
-        #     backends.append(backend)
-        #
-        # # Global Backend Service (LB)
-        # backend_service = gcp.get_backend_service(self.compute, self.project,
-        #                                           self.backend_service_name)
-        # logging.info('Loaded Global Backend Service %s', backend_service.name)
-        # gcp.backend_service_add_backend(self.compute, self.project,
-        #                                 backend_service, backends)
-        # gcp.wait_for_backends_healthy_status(self.compute, self.project,
-        #                                      backend_service, backends)
-        # test_server.xds_address = (self.xds_service_host, self.xds_service_port)
-        #
-        # # todo(sergiitk): make rpc enum or get it from proto
+        test_server = self.server_runner.run(
+            port=self.service_port,
+            maintenance_port=self.server_maintenance_port,
+            secure_mode=True)
+
+        # Load Backends
+        neg_name, neg_zones = self.server_runner.k8s_namespace.get_service_neg(
+            self.server_runner.service_name, self.service_port)
+
+        time.sleep(20)
+
+        backends = []
+        for neg_zone in neg_zones:
+            backend = gcp.get_network_endpoint_group(
+                self.compute, self.project, neg_zone, neg_name)
+            logging.info("Loaded backend: %s zone %s", backend.name,
+                         backend.zone)
+            backends.append(backend)
+
+        # Global Backend Service (LB)
+        backend_service = gcp.get_backend_service(self.compute, self.project,
+                                                  self.backend_service_name)
+        logging.info('Loaded Global Backend Service %s', backend_service.name)
+        gcp.backend_service_add_backend(self.compute, self.project,
+                                        backend_service, backends)
+        gcp.wait_for_backends_healthy_status(self.compute, self.project,
+                                             backend_service, backends)
+        test_server.xds_address = (self.xds_service_host, self.xds_service_port)
+
+        # todo(sergiitk): make rpc enum or get it from proto
         xds_uri = f'xds:///{self.xds_service_host}:{self.xds_service_port}'
         test_client = self.client_runner.run(server_address=xds_uri,
                                              rpc='UnaryCall',
                                              qps=1,
                                              secure_mode=True)
-        # stats_response = test_client.request_load_balancer_stats(num_rpcs=9)
-        # self.assertAllBackendsReceivedRpcs(stats_response)
-        # self.assertFailedRpcsAtMost(stats_response, 0)
+        stats_response = test_client.request_load_balancer_stats(num_rpcs=9)
+        self.assertAllBackendsReceivedRpcs(stats_response)
+        self.assertFailedRpcsAtMost(stats_response, 0)
 
     def assertAllBackendsReceivedRpcs(self, stats_response):
         # todo(sergiitk): assert backends length

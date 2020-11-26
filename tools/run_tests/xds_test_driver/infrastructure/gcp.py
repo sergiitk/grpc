@@ -131,7 +131,7 @@ def create_backend_service(compute, project,
         'name': backend_service_name,
         'loadBalancingScheme': 'INTERNAL_SELF_MANAGED',  # Traffic Director
         'healthChecks': [health_check.url],
-        'protocol': 'GRPC',
+        'protocol': 'HTTP2',
     }
     result = compute.backendServices().insert(
         project=project,
@@ -222,9 +222,12 @@ def create_target_proxy(compute, project, target_proxy_name, url_map):
     target_proxy_spec = {
         'name': target_proxy_name,
         'url_map': url_map.url,
-        'validate_for_proxyless': True,
+        # 'validate_for_proxyless': True,
     }
-    result = compute.targetGrpcProxies().insert(
+    # result = compute.targetGrpcProxies().insert(
+    #     project=project,
+    #     body=target_proxy_spec).execute(num_retries=_GCP_API_RETRIES)
+    result = compute.targetHttpProxies().insert(
         project=project,
         body=target_proxy_spec).execute(num_retries=_GCP_API_RETRIES)
     wait_for_global_operation(compute, project, result['name'])
