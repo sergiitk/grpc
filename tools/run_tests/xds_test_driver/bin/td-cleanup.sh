@@ -7,6 +7,7 @@ set +o allexport
 # Forwarding rule
 gcloud --project="$PROJECT_ID" compute forwarding-rules delete "$FORWARDING_RULE_NAME" --global -q
 gcloud --project="$PROJECT_ID" compute target-grpc-proxies delete "$TARGET_PROXY_NAME" -q
+gcloud --project="$PROJECT_ID" compute target-http-proxies delete "$TARGET_PROXY_NAME" -q
 
 # URL Map
 gcloud --project="$PROJECT_ID" compute url-maps delete "$URL_MAP_NAME" --global -q
