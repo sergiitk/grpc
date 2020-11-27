@@ -26,8 +26,6 @@ import xds_test_app.server
 
 
 class BaselineTest(absltest.TestCase):
-    server_replica_count: str
-
     @classmethod
     def setUpClass(cls):
         # todo(sergiitk): move to args

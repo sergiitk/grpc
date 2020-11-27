@@ -16,8 +16,6 @@ import logging
 
 import retrying
 
-logger = logging.getLogger()
-
 _WAIT_FOR_BACKEND_SEC = 1200
 _WAIT_FOR_OPERATION_SEC = 1200
 _WAIT_FIXES_SEC = 2
@@ -51,7 +49,7 @@ def wait_for_global_operation(compute, project, operation,
                     stop_max_delay=timeout_sec * 1000,
                     wait_fixed=wait_sec * 1000)
     def _retry_until_status_done():
-        logger.debug('Waiting for operation %s', operation)
+        logging.debug('Waiting for operation %s', operation)
         return compute.globalOperations().get(
             project=project, operation=operation).execute()
 
@@ -68,26 +66,27 @@ def wait_for_backends_healthy_status(compute, project,
                                      backend_service, backends):
     # todo(sergiitk): match with the expectation how many instances in each zone
     for backend in backends:
-        logger.info("Requesting Backend Service %s health: backend %s, zone %s",
-                    backend_service.name, backend.name, backend.zone)
+        logging.info(
+            "Requesting Backend Service %s health: backend %s, zone %s",
+            backend_service.name, backend.name, backend.zone)
         result = compute.backendServices().getHealth(
             project=project, backendService=backend_service.name,
             body={"group": backend.url}).execute()
-        logger.debug('%s health: %s', backend.name, result)
+        logging.debug('%s health: %s', backend.name, result)
         if 'healthStatus' not in result:
-            logger.debug('Backend %s in zone %s: no instances found',
-                         backend.name, backend.zone)
+            logging.debug('Backend %s in zone %s: no instances found',
+                          backend.name, backend.zone)
             return False
 
         for instance in result['healthStatus']:
-            logger.debug(
+            logging.debug(
                 'Backend %s in zone %s: instance %s:%s - health state: %s',
                 backend.name, backend.zone,
                 instance['ipAddress'], instance['port'],
                 instance['healthState'])
 
             if instance['healthState'] != 'HEALTHY':
-                logger.info(
+                logging.info(
                     'Backend %s zone %s: endpoint %s:%s healthy',
                     backend.name, backend.zone,
                     instance['ipAddress'], instance['port'])

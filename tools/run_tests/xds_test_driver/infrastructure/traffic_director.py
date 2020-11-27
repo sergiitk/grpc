@@ -19,8 +19,6 @@ from googleapiclient import errors as google_api_errors
 
 from infrastructure import gcp
 
-logger = logging.getLogger()
-
 
 class TrafficDirectorState:
     backends: List[gcp.GcpResource]
@@ -55,9 +53,9 @@ def setup_gke(
     # Health check
     try:
         health_check = gcp.get_health_check(compute, project, health_check_name)
-        logger.info('Loaded TCP HealthCheck %s', health_check.name)
+        logging.info('Loaded TCP HealthCheck %s', health_check.name)
     except google_api_errors.HttpError:
-        logger.info('Creating TCP HealthCheck %s', health_check_name)
+        logging.info('Creating TCP HealthCheck %s', health_check_name)
         health_check = gcp.create_tcp_health_check(compute, project,
                                                    health_check_name)
 
@@ -65,9 +63,9 @@ def setup_gke(
     try:
         backend_service = gcp.get_backend_service(
             compute, project, backend_service_name)
-        logger.info('Loaded Backend Service %s', backend_service.name)
+        logging.info('Loaded Backend Service %s', backend_service.name)
     except google_api_errors.HttpError:
-        logger.info('Creating Backend Service %s', backend_service_name)
+        logging.info('Creating Backend Service %s', backend_service_name)
         backend_service = gcp.create_backend_service(
             compute, project, backend_service_name, health_check)
 
@@ -75,12 +73,12 @@ def setup_gke(
     server_xds_address = f'{server_xds_host}:{server_xds_port}'
     try:
         url_map = gcp.get_url_map(compute, project, url_map_name)
-        logger.info('Loaded URL Map %s', url_map.name)
+        logging.info('Loaded URL Map %s', url_map.name)
     except google_api_errors.HttpError:
-        logger.info('Creating URL map %s xds://%s -> %s',
-                    url_map_name,
-                    server_xds_address,
-                    backend_service.name)
+        logging.info('Creating URL map %s xds://%s -> %s',
+                     url_map_name,
+                     server_xds_address,
+                     backend_service.name)
         url_map = gcp.create_url_map(compute, project,
                                      url_map_name, url_map_path_matcher_name,
                                      server_xds_address, backend_service)
@@ -89,10 +87,10 @@ def setup_gke(
     try:
         target_proxy = gcp.get_target_proxy(compute, project,
                                             target_proxy_name)
-        logger.info('Loaded target proxy %s', target_proxy.name)
+        logging.info('Loaded target proxy %s', target_proxy.name)
     except google_api_errors.HttpError:
-        logger.info('Creating target proxy %s to url map %s',
-                    target_proxy_name, url_map.url)
+        logging.info('Creating target proxy %s to url map %s',
+                     target_proxy_name, url_map.url)
         target_proxy = gcp.create_target_proxy(
             compute, project,
             target_proxy_name, url_map)
@@ -101,11 +99,11 @@ def setup_gke(
     try:
         forwarding_rule = gcp.get_forwarding_rule(compute, project,
                                                   forwarding_rule_name)
-        logger.info('Loaded forwarding rule %s', forwarding_rule.name)
+        logging.info('Loaded forwarding rule %s', forwarding_rule.name)
     except google_api_errors.HttpError:
-        logger.info('Creating forwarding rule %s 0.0.0.0:%s -> %s in %s',
-                    forwarding_rule_name, server_xds_port,
-                    target_proxy.url, network_url)
+        logging.info('Creating forwarding rule %s 0.0.0.0:%s -> %s in %s',
+                     forwarding_rule_name, server_xds_port,
+                     target_proxy.url, network_url)
         forwarding_rule = gcp.create_forwarding_rule(
             compute, project,
             forwarding_rule_name, server_xds_port,
