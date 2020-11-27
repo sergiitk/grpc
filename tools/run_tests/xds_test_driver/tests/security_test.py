@@ -48,9 +48,9 @@ class SecurityTest(absltest.TestCase):
         cls.k8s_namespace = os.environ['NAMESPACE']
         cls.server_name = os.environ['SERVER_NAME']
         cls.service_name = os.environ['SERVICE_NAME']
-        cls.service_port = os.environ['SERVICE_PORT']
-        cls.debug_reuse_service = os.environ['DEBUG_REUSE_SERVICE']
+        cls.server_test_port = os.environ['SERVER_TEST_PORT']
         cls.server_maintenance_port = os.environ['SERVER_MAINTENANCE_PORT']
+        cls.debug_reuse_service = os.environ['DEBUG_REUSE_SERVICE']
 
         # Traffic director
         cls.backend_service_name = os.environ['GLOBAL_BACKEND_SERVICE_NAME']
@@ -87,7 +87,7 @@ class SecurityTest(absltest.TestCase):
             deployment_name=self.server_name,
             service_name=self.service_name,
             deployment_template='server-secure.deployment.yaml',
-            reuse_service=self.debug_reuse_service)
+            debug_reuse_service=self.debug_reuse_service)
 
     def tearDown(self):
         pass
@@ -96,13 +96,13 @@ class SecurityTest(absltest.TestCase):
 
     def test_mtls(self):
         test_server = self.server_runner.run(
-            port=self.service_port,
+            test_port=self.server_test_port,
             maintenance_port=self.server_maintenance_port,
             secure_mode=True)
 
         # Load Backends
         neg_name, neg_zones = self.server_runner.k8s_namespace.get_service_neg(
-            self.server_runner.service_name, self.service_port)
+            self.server_runner.service_name, self.server_test_port)
 
         time.sleep(20)
 

@@ -13,7 +13,7 @@ gcloud --project="$PROJECT_ID" compute target-http-proxies delete "$TARGET_PROXY
 gcloud --project="$PROJECT_ID" compute url-maps delete "$URL_MAP_NAME" --global -q
 
 # Backend
-gcloud --project="$PROJECT_ID" compute backend-services delete "$GLOBAL_BACKEND_SERVICE_NAME" --global -q
+gcloud --project="$PROJECT_ID" compute backend-services delete "$BACKEND_SERVICE_NAME" --global -q
 
 # HC
 gcloud --project="$PROJECT_ID" compute health-checks delete "$HEALTH_CHECK_NAME" --global -q

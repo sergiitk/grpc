@@ -15,11 +15,9 @@ import os
 import time
 
 import dotenv
-import kubernetes.config
-import kubernetes.client
+from absl import logging
 from absl.testing import absltest
 from googleapiclient import discovery as google_api
-from absl import logging
 
 from infrastructure import k8s
 from infrastructure import gcp
@@ -28,7 +26,7 @@ import xds_test_app.server
 
 
 class BaselineTest(absltest.TestCase):
-    k8s_client = None
+    server_replica_count: str
 
     @classmethod
     def setUpClass(cls):
@@ -38,32 +36,36 @@ class BaselineTest(absltest.TestCase):
         cls.project: str = os.environ['PROJECT_ID']
         cls.network_name: str = os.environ['NETWORK_NAME']
         cls.network_url: str = f'global/networks/{cls.network_name}'
-        #
-        # Client
-        cls.client_deployment_name = 'psm-grpc-client'
-
-        cls.client_use_port_forwarding = bool(
-            os.getenv('CLIENT_USE_PORT_FORWARDING', False))
 
         # K8s
         cls.k8s_context_name = os.environ['KUBE_CONTEXT_NAME']
         cls.k8s_namespace = os.environ['NAMESPACE']
-        cls.server_name = os.environ['SERVER_NAME']
-        cls.service_name = os.environ['SERVICE_NAME']
-        cls.service_port = os.environ['SERVICE_PORT']
-        cls.debug_reuse_service = os.environ['DEBUG_REUSE_SERVICE']
 
-        # Traffic director
-        cls.backend_service_name = os.environ['GLOBAL_BACKEND_SERVICE_NAME']
-        # health_check_name: str = os.environ['HEALTH_CHECK_NAME']
-        # global_backend_service_name: str = os.environ[
-        #     'GLOBAL_BACKEND_SERVICE_NAME']
-        # url_map_name: str = os.environ['URL_MAP_NAME']
-        # url_map_path_matcher_name: str = os.environ['URL_MAP_PATH_MATCHER_NAME']
-        # target_proxy_name: str = os.environ['TARGET_PROXY_NAME']
-        # forwarding_rule_name: str = os.environ['FORWARDING_RULE_NAME']
-        cls.xds_service_host: str = 'sergii-psm-test-xds-host'
-        cls.xds_service_port: int = os.environ['XDS_PORT']
+        # Client
+        cls.client_name = os.environ['CLIENT_NAME']
+        cls.client_debug_use_port_forwarding = bool(
+            os.getenv('CLIENT_DEBUG_USE_PORT_FORWARDING', False))
+
+        # Server
+        cls.server_name = os.environ['SERVER_NAME']
+        cls.server_test_port = os.environ['SERVER_TEST_PORT']
+        cls.server_maintenance_port = os.environ['SERVER_MAINTENANCE_PORT']
+        cls.server_replica_count = int(os.environ['SERVER_REPLICA_COUNT'])
+        cls.server_debug_reuse_service = bool(
+            os.getenv('SERVER_DEBUG_REUSE_SERVICE', False))
+
+        # Server xDS settings
+        cls.server_xds_host = os.environ['SERVER_XDS_HOST']
+        cls.server_xds_port = os.environ['SERVER_XDS_PORT']
+
+        # Backend service (Traffic Director)
+        cls.backend_service_name = os.environ['BACKEND_SERVICE_NAME']
+        # cls.health_check_name: str = os.environ['HEALTH_CHECK_NAME']
+        # cls.url_map_name: str = os.environ['URL_MAP_NAME']
+        # cls.url_map_path_matcher_name: str = os.environ[
+        #     'URL_MAP_PATH_MATCHER_NAME']
+        # cls.target_proxy_name: str = os.environ['TARGET_PROXY_NAME']
+        # cls.forwarding_rule_name: str = os.environ['FORWARDING_RULE_NAME']
 
         # Shared services
         cls.k8s_api_manager = k8s.KubernetesApiManager(cls.k8s_context_name)
@@ -77,26 +79,28 @@ class BaselineTest(absltest.TestCase):
         # todo(sergiitk): generate with run id
         self.client_runner = xds_test_app.client.KubernetesClientRunner(
             k8s.KubernetesNamespace(self.k8s_api_manager, self.k8s_namespace),
-            self.client_deployment_name,
+            self.client_name,
             network_name=self.network_name,
-            use_port_forwarding=self.client_use_port_forwarding)
+            debug_use_port_forwarding=self.client_debug_use_port_forwarding)
 
         self.server_runner = xds_test_app.server.KubernetesServerRunner(
             k8s.KubernetesNamespace(self.k8s_api_manager, self.k8s_namespace),
             deployment_name=self.server_name,
-            service_name=self.service_name,
-            reuse_service=self.debug_reuse_service)
+            network_name=self.network_name,
+            debug_reuse_service=self.server_debug_reuse_service)
 
     def tearDown(self):
         self.client_runner.cleanup()
         self.server_runner.cleanup()
 
     def test_ping_pong(self):
-        test_server = self.server_runner.run(port=self.service_port)
+        test_server = self.server_runner.run(
+            test_port=self.server_test_port,
+            replica_count=self.server_replica_count)
 
         # Load Backends
         neg_name, neg_zones = self.server_runner.k8s_namespace.get_service_neg(
-            self.server_runner.service_name, self.service_port)
+            self.server_runner.service_name, self.server_test_port)
 
         time.sleep(20)
 
@@ -116,7 +120,7 @@ class BaselineTest(absltest.TestCase):
                                         backend_service, backends)
         gcp.wait_for_backends_healthy_status(self.compute, self.project,
                                              backend_service, backends)
-        test_server.xds_address = (self.xds_service_host, self.xds_service_port)
+        test_server.xds_address = (self.server_xds_host, self.server_xds_port)
 
         # todo(sergiitk): make rpc enum or get it from proto
         test_client = self.client_runner.run(server_address=test_server.xds_uri,

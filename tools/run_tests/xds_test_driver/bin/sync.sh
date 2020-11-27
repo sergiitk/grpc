@@ -9,9 +9,11 @@ XDS_DRIVER_HOST='xds-kokoro'
 
 #  --delete-excluded \
 rsync \
-  --exclude='.pytest_cache' \
-  --exclude='gke/build/*' \
-  --exclude='venv' --exclude='__pycache__' --exclude='*.pyc' \
+  --exclude='__pycache__' --exclude='*.pyc' \
+  --exclude='.pytest_cache' --exclude='venv' \
   --exclude='*.iml' --exclude='.idea' \
-  --delete --archive --compress --verbose --human-readable --partial --progress \
+  --filter='P gke/build' \
+  --delete-excluded \
+  --archive --delete \
+  --compress --verbose --human-readable --partial --progress \
   ./ "$XDS_DRIVER_HOST:/tmpfs/src/github/grpc/tools/run_tests/xds_test_driver"

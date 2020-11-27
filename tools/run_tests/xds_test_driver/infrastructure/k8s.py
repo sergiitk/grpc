@@ -17,9 +17,7 @@ import json
 import logging
 import subprocess
 import time
-from typing import Optional
-from typing import List
-from typing import Tuple
+from typing import Optional, List, Tuple
 
 import retrying
 import kubernetes.config
@@ -79,6 +77,7 @@ class PortForwardingError(Exception):
 
 class KubernetesNamespace:
     NEG_STATUS_META = 'cloud.google.com/neg-status'
+    PORT_FORWARD_LOCAL_ADDRESS: str = '127.0.0.1'
 
     def __init__(self, api: KubernetesApiManager, name: str):
         self.name = name
@@ -208,9 +207,10 @@ class KubernetesNamespace:
         pod: V1Pod,
         remote_port: int,
         local_port: Optional[int] = None,
-        local_address: Optional[str] = '127.0.0.1'
-    ):
+        local_address: Optional[str] = None,
+    ) -> subprocess.Popen:
         """Experimental"""
+        local_address = local_address or self.PORT_FORWARD_LOCAL_ADDRESS
         local_port = local_port or remote_port
         cmd = [
             "kubectl", "--context", self.api.context,
@@ -245,6 +245,7 @@ class KubernetesNamespace:
             self.port_forward_stop(pf)
             raise
 
+        # todo(sergiitk): return new PortForwarder object
         return pf
 
     @staticmethod

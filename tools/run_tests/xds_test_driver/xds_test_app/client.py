@@ -62,7 +62,6 @@ class XdsTestClient:
 class KubernetesClientRunner(base_runner.KubernetesBaseRunner):
     k8s_namespace: k8s.KubernetesNamespace
     deployment: Optional[k8s.V1Deployment]
-    pod: Optional[k8s.V1Pod]
 
     def __init__(self,
                  k8s_namespace,
@@ -71,61 +70,56 @@ class KubernetesClientRunner(base_runner.KubernetesBaseRunner):
                  stats_port=8079,
                  network_name='default',
                  deployment_template='client.deployment.yaml',
-                 use_port_forwarding=False):
+                 debug_use_port_forwarding=False):
         super().__init__(k8s_namespace)
 
         # Settings
-        self.network_name = network_name
         self.deployment_name = deployment_name
         self.stats_port = stats_port
+        self.network_name = network_name
         self.deployment_template = deployment_template
-        self.use_port_forwarding = use_port_forwarding
+        self.debug_use_port_forwarding = debug_use_port_forwarding
 
         # Mutable state
         self.deployment = None
-        # Port forwarding kubernetes.stream.ws_client.PortForward
-        self.pf = None
+        self.port_forwarder = None
 
-    def run(self, *, server_address, rpc,
-            qps=10, secure_mode=False) -> XdsTestClient:
-        # Reuse existing or create a new deployment
-        self.deployment = self._reuse_deployment(self.deployment_name)
-        if not self.deployment:
-            self.deployment = self._create_deployment(
-                self.deployment_template,
-                deployment_name=self.deployment_name,
-                namespace=self.k8s_namespace.name,
-                stats_port=self.stats_port,
-                network_name=self.network_name,
-                server_address=server_address,
-                secure_mode=secure_mode,
-                rpc=rpc,
-                qps=qps)
+    def run(self, *, server_address, rpc, qps=10,
+            secure_mode=False) -> XdsTestClient:
+        # Always create a new deployment
+        self.deployment = self._create_deployment(
+            self.deployment_template,
+            deployment_name=self.deployment_name,
+            namespace=self.k8s_namespace.name,
+            stats_port=self.stats_port,
+            network_name=self.network_name,
+            server_address=server_address,
+            rpc=rpc,
+            qps=qps,
+            secure_mode=secure_mode)
 
         self._wait_deployment_with_available_replicas(self.deployment_name)
 
-        # Load test client pod
-        pods = self.k8s_namespace.list_deployment_pods(self.deployment)
-        # We need only one client at the moment
-        pod = pods[0]
+        # Load test client pod. We need only one client at the moment
+        pod = self.k8s_namespace.list_deployment_pods(self.deployment)[0]
         self._wait_pod_started(pod.metadata.name)
+        client_host: str = pod.status.pod_ip
 
         # Experimental, for local debugging.
-        if self.use_port_forwarding:
+        if self.debug_use_port_forwarding:
             logger.info('Enabling port forwarding from %s:%s',
-                        pod.status.pod_ip, self.stats_port)
-            local_ipv4 = '127.0.0.1'
-            self.pf = self.k8s_namespace.port_forward_pod(
-                pod, self.stats_port, local_address=local_ipv4)
-            return XdsTestClient(host=local_ipv4, stats_port=self.stats_port)
-        else:
-            return XdsTestClient(host=pod.status.pod_ip,
-                                 stats_port=self.stats_port)
+                        client_host, self.stats_port)
+            self.port_forwarder = self.k8s_namespace.port_forward_pod(
+                pod, remote_port=self.stats_port)
+            client_host = self.k8s_namespace.PORT_FORWARD_LOCAL_ADDRESS
+
+        return XdsTestClient(host=client_host,
+                             stats_port=self.stats_port)
 
     def cleanup(self):
-        if self.pf:
-            self.k8s_namespace.port_forward_stop(self.pf)
-            self.pf = None
+        if self.port_forwarder:
+            self.k8s_namespace.port_forward_stop(self.port_forwarder)
+            self.port_forwarder = None
         if self.deployment:
             self._delete_deployment(self.deployment_name)
             self.deployment = None

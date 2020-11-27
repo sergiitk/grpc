@@ -23,7 +23,7 @@ spec:
         args:
             - "--server=${server_address}"
             - "--stats_port=${stats_port}"
-            - "--secureMode=${secure_mode}"
+            - "--secure_mode=${secure_mode}"
             - "--qps=${qps}"
             - "--rpc=${rpc}"
             - "--print_response=true"

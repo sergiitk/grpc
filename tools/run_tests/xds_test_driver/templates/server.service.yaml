@@ -4,12 +4,12 @@ metadata:
   name: ${service_name}
   namespace: ${namespace}
   annotations:
-    cloud.google.com/neg: '{"exposed_ports": {"${port}":{"name":"interop-test-psm-sec1-us-central1-grpc-test-server-java"}}}'
+    cloud.google.com/neg: '{"exposed_ports": {"${test_port}":{"name":"interop-test-psm-sec1-us-central1-grpc-test-server-java"}}}'
 spec:
   type: ClusterIP
   selector:
     app: ${deployment_name}
   ports:
-  - port: ${port}
+  - port: ${test_port}
     protocol: TCP
-    targetPort: ${port}
+    targetPort: ${test_port}

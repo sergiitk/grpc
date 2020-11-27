@@ -21,9 +21,9 @@ spec:
         image: gcr.io/grpc-testing/xds-gke-interop-server-java-sergii-test:latest
         imagePullPolicy: Always
         args:
-          - "--port=${port}"
+          - "--port=${test_port}"
         ports:
-          - containerPort: ${port}
+          - containerPort: ${test_port}
         resources:
           limits:
             cpu: 800m
