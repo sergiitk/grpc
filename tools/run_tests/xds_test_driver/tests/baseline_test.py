@@ -102,30 +102,44 @@ class BaselineTest(absltest.TestCase):
         neg_name, neg_zones = self.server_runner.k8s_namespace.get_service_neg(
             self.server_runner.service_name, self.server_test_port)
 
-        time.sleep(20)
+        if not self.server_debug_reuse_service:
+            time.sleep(20)
 
         backends = []
         for neg_zone in neg_zones:
             backend = gcp.get_network_endpoint_group(
                 self.compute, self.project, neg_zone, neg_name)
-            logging.info("Loaded backend: %s zone %s", backend.name,
+            logging.info("Loaded NEG backend %s in zone %s", backend.name,
                          backend.zone)
             backends.append(backend)
 
         # Global Backend Service (LB)
+        logging.info('Loading Backend Service: %s', self.backend_service_name)
         backend_service = gcp.get_backend_service(self.compute, self.project,
                                                   self.backend_service_name)
-        logging.info('Loaded Global Backend Service %s', backend_service.name)
+
+        logging.info('Adding backends to Backend Service %s: NEG %s, zones %s',
+                     backend_service.name, neg_name, neg_zones)
         gcp.backend_service_add_backend(self.compute, self.project,
                                         backend_service, backends)
+
+        logging.info('Waiting for Backend Service %s to become healthy',
+                     backend_service.name)
         gcp.wait_for_backends_healthy_status(self.compute, self.project,
                                              backend_service, backends)
+
+        # Todo: get from TD
         test_server.xds_address = (self.server_xds_host, self.server_xds_port)
 
         # todo(sergiitk): make rpc enum or get it from proto
-        test_client = self.client_runner.run(server_address=test_server.xds_uri,
-                                             rpc='UnaryCall')
-        stats_response = test_client.request_load_balancer_stats(num_rpcs=9)
+        # Start the client
+        test_client = self.client_runner.run(
+            server_address=test_server.xds_uri, rpc='UnaryCall', qps=30)
+
+        # Run the test
+        stats_response = test_client.request_load_balancer_stats(num_rpcs=10)
+
+        # Check the results
         self.assertAllBackendsReceivedRpcs(stats_response)
         self.assertFailedRpcsAtMost(stats_response, 0)
 
