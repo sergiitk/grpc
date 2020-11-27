@@ -13,10 +13,13 @@
 # limitations under the License.
 import enum
 import logging
+from typing import Any
+from typing import Dict
 from typing import Optional
 
 import retrying
 from googleapiclient import discovery
+from googleapiclient import errors
 
 _WAIT_FOR_BACKEND_SEC = 1200
 _WAIT_FOR_OPERATION_SEC = 1200
@@ -125,6 +128,8 @@ class ComputeV1(Compute):
         health_check: GcpResource,
         protocol: Optional[BackendServiceProtocol] = None
     ) -> GcpResource:
+        if not isinstance(protocol, self.BackendServiceProtocol):
+            raise TypeError(f'Unexpected Backend Service protocol: {protocol}')
         return self._insert_resource(self.api.backendServices(), {
             'name': name,
             'loadBalancingScheme': 'INTERNAL_SELF_MANAGED',  # Traffic Director
@@ -135,12 +140,21 @@ class ComputeV1(Compute):
     def delete_backend_service(self, name):
         self._delete_resource(self.api.backendServices(), backendService=name)
 
-    def _insert_resource(self, collection, body) -> GcpResource:
+    def _insert_resource(
+        self,
+        collection: discovery.Resource,
+        body: Dict[str, Any]
+    ) -> GcpResource:
+        logging.debug("Creating %s", body)
         resp = self._execute(collection.insert(project=self.project, body=body))
         return GcpResource(body['name'], resp['targetLink'])
 
     def _delete_resource(self, collection, **kwargs):
-        self._execute(collection.delete(project=self.project, **kwargs))
+        try:
+            self._execute(collection.delete(project=self.project, **kwargs))
+            return True
+        except errors.HttpError as e:
+            logging.info('Delete failed: %s', e)
 
     def _execute(self, request):
         operation = request.execute(num_retries=_GCP_API_RETRIES)

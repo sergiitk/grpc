@@ -26,7 +26,8 @@ from infrastructure import traffic_director
 
 logger = logging.getLogger()
 console_handler = logging.StreamHandler()
-formatter = logging.Formatter(fmt='%(asctime)s: %(levelname)-8s %(message)s')
+formatter = logging.Formatter(
+    fmt='%(asctime)s: %(levelname)s [%(module)-24s] --- %(message)s')
 console_handler.setFormatter(formatter)
 logger.handlers = []
 logger.addHandler(console_handler)
@@ -81,8 +82,9 @@ def main():
 
     try:
         # td.create()
-        health_check = td.create_health_check(health_check_name)
-        td.create_backend_service(backend_service_name, health_check)
+        td.create_health_check(health_check_name)
+        td.create_backend_service(backend_service_name)
+        logger.info('Works!')
     finally:
         td.delete_backend_service(backend_service_name)
         td.delete_health_check(health_check_name)
