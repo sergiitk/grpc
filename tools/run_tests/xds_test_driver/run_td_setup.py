@@ -81,8 +81,10 @@ def main():
 
     try:
         # td.create()
-        td.create_health_check(health_check_name)
+        health_check = td.create_health_check(health_check_name)
+        td.create_backend_service(backend_service_name, health_check)
     finally:
+        td.delete_backend_service(backend_service_name)
         td.delete_health_check(health_check_name)
         # td.cleanup()
         # gcp_api_manager.close()
