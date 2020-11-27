@@ -11,10 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import logging
+from typing import Optional
 
 import retrying
+from googleapiclient import discovery
 
 _WAIT_FOR_BACKEND_SEC = 1200
 _WAIT_FOR_OPERATION_SEC = 1200
@@ -39,6 +40,87 @@ class ZonalGcpResource(GcpResource):
     def __repr__(self):
         return f'{self.__class__.__name__}({self.name!r}, {self.url!r}, ' \
                f'{self.zone!r})'
+
+
+class GcpRequestTimeoutError(Exception):
+    """Request timeout"""
+
+
+class GcpApiManager:
+    def __init__(self):
+        self._compute_v1: Optional[discovery.Resource] = None
+
+    @property
+    def compute_v1(self):
+        if not self._compute_v1:
+            self._compute_v1 = discovery.build(
+                'compute', 'v1', cache_discovery=False)
+        return self._compute_v1
+
+    def close(self):
+        if self._compute_v1:
+            self._compute_v1.close()
+
+
+class GCloud:
+    def __init__(self, api: GcpApiManager, project: str):
+        self.api: GcpApiManager = api
+        self.project: str = project
+        self.compute = ComputeV1(self.api.compute_v1, project=project)
+
+
+class Compute:
+    def __init__(self, compute_api: discovery.Resource, project: str):
+        self.api: discovery.Resource = compute_api
+        self.project: str = project
+
+
+class ComputeV1(Compute):
+    def wait_for_global_operation(self,
+                                  operation,
+                                  timeout_sec=_WAIT_FOR_OPERATION_SEC,
+                                  wait_sec=_WAIT_FIXES_SEC):
+
+        @retrying.retry(
+            retry_on_result=lambda result: result['status'] != 'DONE',
+            stop_max_delay=timeout_sec * 1000,
+            wait_fixed=wait_sec * 1000)
+        def _retry_until_status_done():
+            logging.debug('Waiting for operation %s', operation)
+            return self.api.globalOperations().get(
+                project=self.project, operation=operation).execute()
+
+        response = _retry_until_status_done()
+        if 'error' in response:
+            raise Exception(f'Operation {operation} did not complete '
+                            f'within {timeout_sec}, error={response["error"]}')
+
+    def create_tcp_health_check(self, name,
+                                use_serving_port=False) -> GcpResource:
+        health_check_settings = {}
+        if use_serving_port:
+            health_check_settings['portSpecification'] = 'USE_SERVING_PORT'
+
+        return self._insert_resource(self.api.healthChecks(), {
+            'name': name,
+            'type': 'TCP',
+            'tcpHealthCheck': health_check_settings,
+        })
+
+    def delete_health_check(self, name):
+        self._delete_resource(self.api.healthChecks(), healthCheck=name)
+
+    def _insert_resource(self, collection, body) -> GcpResource:
+        resp = self._execute(collection.insert(project=self.project, body=body))
+        return GcpResource(body['name'], resp['targetLink'])
+
+    def _delete_resource(self, collection, **kwargs):
+        self._execute(collection.delete(project=self.project, **kwargs))
+
+    def _execute(self, request):
+        operation = request.execute(num_retries=_GCP_API_RETRIES)
+        self.wait_for_global_operation(operation['name'])
+        return operation
 
 
 def wait_for_global_operation(compute, project, operation,

@@ -17,10 +17,10 @@ import time
 import dotenv
 from absl import logging
 from absl.testing import absltest
-from googleapiclient import discovery as google_api
 
 from infrastructure import k8s
 from infrastructure import gcp
+from infrastructure import traffic_director
 import xds_test_app.client
 import xds_test_app.server
 
@@ -33,7 +33,6 @@ class BaselineTest(absltest.TestCase):
         # GCP
         cls.project: str = os.environ['PROJECT_ID']
         cls.network_name: str = os.environ['NETWORK_NAME']
-        cls.network_url: str = f'global/networks/{cls.network_name}'
 
         # K8s
         cls.k8s_context_name = os.environ['KUBE_CONTEXT_NAME']
@@ -58,29 +57,37 @@ class BaselineTest(absltest.TestCase):
 
         # Backend service (Traffic Director)
         cls.backend_service_name = os.environ['BACKEND_SERVICE_NAME']
-        # cls.health_check_name: str = os.environ['HEALTH_CHECK_NAME']
-        # cls.url_map_name: str = os.environ['URL_MAP_NAME']
-        # cls.url_map_path_matcher_name: str = os.environ[
-        #     'URL_MAP_PATH_MATCHER_NAME']
-        # cls.target_proxy_name: str = os.environ['TARGET_PROXY_NAME']
-        # cls.forwarding_rule_name: str = os.environ['FORWARDING_RULE_NAME']
+        cls.health_check_name: str = os.environ['HEALTH_CHECK_NAME']
+        cls.url_map_name: str = os.environ['URL_MAP_NAME']
+        cls.url_map_path_matcher_name: str = os.environ[
+            'URL_MAP_PATH_MATCHER_NAME']
+        cls.target_proxy_name: str = os.environ['TARGET_PROXY_NAME']
+        cls.forwarding_rule_name: str = os.environ['FORWARDING_RULE_NAME']
 
         # Shared services
         cls.k8s_api_manager = k8s.KubernetesApiManager(cls.k8s_context_name)
-        cls.compute = google_api.build('compute', 'v1', cache_discovery=False)
+        cls.gcp_api_manager = gcp.GcpApiManager()
+        cls.gcloud = gcp.GCloud(cls.gcp_api_manager, cls.project)
 
     @classmethod
     def tearDownClass(cls):
         cls.k8s_api_manager.close()
+        cls.gcp_api_manager.close()
 
     def setUp(self):
         # todo(sergiitk): generate with run id
+        # Traffic Director Configuration
+        self.td = traffic_director.TrafficDirectorManager(
+            self.gcloud, network_name=self.network_name)
+
+        # Test Client Runner
         self.client_runner = xds_test_app.client.KubernetesClientRunner(
             k8s.KubernetesNamespace(self.k8s_api_manager, self.k8s_namespace),
             self.client_name,
             network_name=self.network_name,
             debug_use_port_forwarding=self.client_debug_use_port_forwarding)
 
+        # Test Server Runner
         self.server_runner = xds_test_app.server.KubernetesServerRunner(
             k8s.KubernetesNamespace(self.k8s_api_manager, self.k8s_namespace),
             deployment_name=self.server_name,
@@ -90,6 +97,7 @@ class BaselineTest(absltest.TestCase):
     def tearDown(self):
         self.client_runner.cleanup()
         self.server_runner.cleanup()
+        self.td.cleanup()
 
     def test_ping_pong(self):
         test_server = self.server_runner.run(

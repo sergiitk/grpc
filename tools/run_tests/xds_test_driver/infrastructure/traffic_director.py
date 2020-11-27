@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import enum
 import logging
 from typing import List, Optional
 
@@ -41,6 +41,49 @@ class TrafficDirectorState:
         self.target_proxy = target_proxy
         self.forwarding_rule = forwarding_rule
         self.backends = backends
+
+
+class TrafficDirectorManager:
+    class HealthCheckProtocol(enum.Enum):
+        TCP = enum.auto()
+
+    def __init__(self, gcloud: gcp.GCloud, network_name='default'):
+        self.gcloud: gcp.GCloud = gcloud
+
+        # Settings
+        self.network_name: str = network_name
+
+        # Mutable state
+        self.health_check: Optional[gcp.GcpResource] = None
+
+    @property
+    def network_url(self):
+        return f'global/networks/{self.network_name}'
+
+    def cleanup(self):
+        # todo(sergiitk): continue on errors
+        self.delete_health_check()
+
+    def create(self):
+        # Health check
+        self.create_health_check()
+
+    def create_health_check(self, name, protocol=HealthCheckProtocol.TCP):
+        logging.info('Creating %s health check %s', protocol.name, name)
+        if protocol is self.HealthCheckProtocol.TCP:
+            self.health_check = self.gcloud.compute.create_tcp_health_check(
+                name, use_serving_port=True)
+        else:
+            raise ValueError('Unexpected protocol')
+
+    def delete_health_check(self, name=None):
+        if not name and not self.health_check:
+            return
+
+        name = name or self.health_check.name
+        logging.info('Deleting health check %s', name)
+        self.gcloud.compute.delete_health_check(name)
+
 
 
 def setup_gke(

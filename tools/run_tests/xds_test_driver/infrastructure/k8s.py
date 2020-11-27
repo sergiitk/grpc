@@ -61,8 +61,7 @@ class KubernetesApiManager:
         self.core = client.CoreV1Api(self.client)
 
     def close(self):
-        # todo(sergiitk): close
-        pass
+        self.client.close()
 
     @classmethod
     @functools.lru_cache(None)

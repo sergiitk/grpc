@@ -20,6 +20,7 @@ import os
 from googleapiclient import discovery as google_api
 import dotenv
 
+from infrastructure import gcp
 from infrastructure import traffic_director
 
 
@@ -55,7 +56,8 @@ def main():
 
     # GCP
     project: str = args.project_id
-    network_url: str = f'global/networks/{args.network}'
+    network_name: str = args.network
+    # network_url: str = f'global/networks/{args.network}'
 
     # todo(sergiitk): move to args
     dotenv.load_dotenv()
@@ -72,19 +74,32 @@ def main():
     target_proxy_name: str = os.environ['TARGET_PROXY_NAME']
     forwarding_rule_name: str = os.environ['FORWARDING_RULE_NAME']
 
+    gcp_api_manager = gcp.GcpApiManager()
+    gcloud = gcp.GCloud(gcp_api_manager, project)
+    td = traffic_director.TrafficDirectorManager(
+        gcloud, network_name=network_name)
+
+    try:
+        # td.create()
+        td.create_health_check(health_check_name)
+    finally:
+        td.delete_health_check(health_check_name)
+        # td.cleanup()
+        # gcp_api_manager.close()
+
     # Create compute client
     # todo(sergiitk): see if cache_discovery=False needed
-    compute: google_api.Resource = google_api.build(
-        'compute', 'v1', cache_discovery=False)
-
-    traffic_director.setup_gke(
-        compute, project, network_url,
-        backend_service_name, health_check_name,
-        url_map_name, url_map_path_matcher_name,
-        target_proxy_name, forwarding_rule_name,
-        server_xds_host, server_xds_port)
-
-    compute.close()
+    # compute: google_api.Resource = google_api.build(
+    #     'compute', 'v1', cache_discovery=False)
+    #
+    # traffic_director.setup_gke(
+    #     compute, project, network_url,
+    #     backend_service_name, health_check_name,
+    #     url_map_name, url_map_path_matcher_name,
+    #     target_proxy_name, forwarding_rule_name,
+    #     server_xds_host, server_xds_port)
+    #
+    # compute.close()
 
 
 if __name__ == '__main__':
