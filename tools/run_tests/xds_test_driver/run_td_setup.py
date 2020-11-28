@@ -28,6 +28,9 @@ _PROJECT = flags.DEFINE_string(
     "project", default=None, help="GCP Project ID, required")
 _NETWORK = flags.DEFINE_string(
     "network", default="default", help="GCP Network ID")
+_MODE = flags.DEFINE_enum(
+    'mode', default='full', enum_values=['full', 'create', 'cleanup'],
+    help='Job status.')
 flags.mark_flag_as_required("project")
 
 
@@ -59,23 +62,33 @@ def main(argv):
     gcloud = gcp.GCloud(gcp_api_manager, project)
     td = traffic_director.TrafficDirectorManager(gcloud, network=network)
 
-    try:
-        # td.create()
+    def create_all():
         td.create_health_check(health_check_name)
         td.create_backend_service(backend_service_name)
         td.create_url_map(url_map_name, url_map_path_matcher_name,
                           server_xds_host, server_xds_port)
         td.create_target_grpc_proxy(target_proxy_name)
         td.create_forwarding_rule(forwarding_rule_name, server_xds_port)
-        logger.info('Works!')
-    finally:
+
+    def delete_all():
         td.delete_forwarding_rule(forwarding_rule_name)
         td.delete_target_grpc_proxy(target_proxy_name)
         td.delete_url_map(url_map_name)
         td.delete_backend_service(backend_service_name)
         td.delete_health_check(health_check_name)
-        # td.cleanup()
-        # gcp_api_manager.close()
+
+    if _MODE.value == 'create':
+        logger.info('Create-only mode')
+        create_all()
+    elif _MODE.value == 'cleanup':
+        logger.info('Cleanup mode')
+        delete_all()
+    else:
+        try:
+            create_all()
+            logger.info('Works!')
+        finally:
+            delete_all()
 
 
 if __name__ == '__main__':

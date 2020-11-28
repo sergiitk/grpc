@@ -11,11 +11,10 @@
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
-
+import logging
 import os
 import time
 
-from absl import logging
 from absl.testing import absltest
 import dotenv
 
@@ -24,6 +23,8 @@ from infrastructure import gcp
 from infrastructure import traffic_director
 import xds_test_app.client
 import xds_test_app.server
+
+logger = logging.getLogger(__name__)
 
 
 class BaselineTest(absltest.TestCase):
@@ -69,6 +70,7 @@ class BaselineTest(absltest.TestCase):
         cls.k8s_api_manager = k8s.KubernetesApiManager(cls.k8s_context_name)
         cls.gcp_api_manager = gcp.GcpApiManager()
         cls.gcloud = gcp.GCloud(cls.gcp_api_manager, cls.project)
+        cls.compute = cls.gcloud.compute
 
     @classmethod
     def tearDownClass(cls):
@@ -96,11 +98,30 @@ class BaselineTest(absltest.TestCase):
             debug_reuse_service=self.server_debug_reuse_service)
 
     def tearDown(self):
+        logger.debug(
+            '############# tearDown(): resource cleanup initiated ############')
+        self.td.delete_forwarding_rule(self.forwarding_rule_name)
+        self.td.delete_target_grpc_proxy(self.target_proxy_name)
+        self.td.delete_url_map(self.url_map_name)
+        self.td.delete_backend_service(self.backend_service_name)
+        self.td.delete_health_check(self.health_check_name)
+        # self.td.cleanup()
         self.client_runner.cleanup()
         self.server_runner.cleanup()
-        self.td.cleanup()
 
     def test_ping_pong(self):
+        # Traffic Director
+        self.td.create_health_check(self.health_check_name)
+        self.td.create_backend_service(self.backend_service_name)
+        self.td.create_url_map(self.url_map_name,
+                               self.url_map_path_matcher_name,
+                               self.server_xds_host,
+                               self.server_xds_port)
+        self.td.create_target_grpc_proxy(self.target_proxy_name)
+        self.td.create_forwarding_rule(self.forwarding_rule_name,
+                                       self.server_xds_port)
+
+        # Start test server
         test_server = self.server_runner.run(
             test_port=self.server_test_port,
             replica_count=self.server_replica_count)
@@ -109,31 +130,21 @@ class BaselineTest(absltest.TestCase):
         neg_name, neg_zones = self.server_runner.k8s_namespace.get_service_neg(
             self.server_runner.service_name, self.server_test_port)
 
-        if not self.server_debug_reuse_service:
-            time.sleep(20)
-
+        logger.info('Loading NEGs')
         backends = []
         for neg_zone in neg_zones:
-            backend = gcp.get_network_endpoint_group(
-                self.compute, self.project, neg_zone, neg_name)
-            logging.info("Loaded NEG backend %s in zone %s", backend.name,
-                         backend.zone)
+            backend = self.gcloud.compute.wait_for_network_endpoint_group(
+                neg_name, neg_zone)
             backends.append(backend)
 
-        # Global Backend Service (LB)
-        logging.info('Loading Backend Service: %s', self.backend_service_name)
-        backend_service = gcp.get_backend_service(self.compute, self.project,
-                                                  self.backend_service_name)
+        time.sleep(30)
+        self.td.backend_service_add_backends(backends)
 
-        logging.info('Adding backends to Backend Service %s: NEG %s, zones %s',
-                     backend_service.name, neg_name, neg_zones)
-        gcp.backend_service_add_backend(self.compute, self.project,
-                                        backend_service, backends)
-
-        logging.info('Waiting for Backend Service %s to become healthy',
-                     backend_service.name)
-        gcp.wait_for_backends_healthy_status(self.compute, self.project,
-                                             backend_service, backends)
+        logger.info('Fake waiting for Backend Service %s to become healthy',
+                    self.td.backend_service.name)
+        time.sleep(120)
+        # gcp.wait_for_backends_healthy_status(self.compute, self.project,
+        #                                      backend_service, backends)
 
         # Todo: get from TD
         test_server.xds_address = (self.server_xds_host, self.server_xds_port)
@@ -150,12 +161,13 @@ class BaselineTest(absltest.TestCase):
         self.assertAllBackendsReceivedRpcs(stats_response)
         self.assertFailedRpcsAtMost(stats_response, 0)
 
-    def test_zoo(self):
-        self.assertEqual('FOO', 'FOO')
+    # todo(sergiitk): bring back as a sanity check when td cleanup is better
+    # def test_zoo(self):
+    #     self.assertEqual('FOO', 'FOO')
 
     def assertAllBackendsReceivedRpcs(self, stats_response):
         # todo(sergiitk): assert backends length
-        logging.info(stats_response.rpcs_by_peer)
+        logger.info(stats_response.rpcs_by_peer)
         for backend, rpcs_count in stats_response.rpcs_by_peer.items():
             with self.subTest(f'Backend {backend} received RPCs'):
                 self.assertGreater(int(rpcs_count), 0,

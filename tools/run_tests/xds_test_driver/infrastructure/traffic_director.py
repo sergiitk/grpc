@@ -52,7 +52,8 @@ class TrafficDirectorManager:
         self.delete_health_check()
 
     def create(self):
-        self.create_health_check()
+        # todo(sergiitk): finish
+        pass
 
     def create_health_check(self, name, protocol=HealthCheckProtocol.TCP):
         if self.health_check:
@@ -92,6 +93,12 @@ class TrafficDirectorManager:
             logger.info('Deleting Backend Service %s', name)
             self.compute.delete_backend_service(name)
             self.backend_service = None
+
+    def backend_service_add_backends(self, backends):
+        logging.info('Adding backends to Backend Service %s: %r',
+                     self.backend_service.name, backends)
+        self.compute.backend_service_add_backends(
+            self.backend_service, backends)
 
     def create_url_map(
         self,

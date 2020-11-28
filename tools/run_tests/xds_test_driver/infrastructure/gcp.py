@@ -71,6 +71,7 @@ class GcpApiManager:
 
 class GCloud:
     def __init__(self, api: GcpApiManager, project: str):
+        # todo(sergiitk): remove this class
         self.api: GcpApiManager = api
         self.project: str = project
         self.compute: ComputeV1 = ComputeV1(self.api.compute_v1,
@@ -108,6 +109,7 @@ class ComputeV1(Compute):
         logger.debug('Waiting for global operation %s', operation)
         response = _retry_until_status_done()
         if 'error' in response:
+            logger.debug('Waiting for global op failed, response: %r', response)
             raise Exception(f'Operation {operation} did not complete '
                             f'within {timeout_sec}, error={response["error"]}')
 
@@ -140,6 +142,18 @@ class ComputeV1(Compute):
             'healthChecks': [health_check.url],
             'protocol': protocol.name,
         })
+
+    def backend_service_add_backends(self, backend_service, backends):
+        backend_list = [{
+            'group': backend.url,
+            'balancingMode': 'RATE',
+            'maxRatePerEndpoint': 5
+        } for backend in backends]
+
+        self._patch_resource(
+            collection=self.api.backendServices(),
+            body={'backends': backend_list},
+            backendService=backend_service.name)
 
     def delete_backend_service(self, name):
         self._delete_resource(self.api.backendServices(), backendService=name)
@@ -205,6 +219,37 @@ class ComputeV1(Compute):
         self._delete_resource(self.api.globalForwardingRules(),
                               forwardingRule=name)
 
+    def wait_for_network_endpoint_group(self, name, zone):
+        @retrying.retry(retry_on_result=lambda r: not r,
+                        stop_max_delay=60 * 1000,
+                        wait_fixed=1 * 1000)
+        def _wait_for_network_endpoint_group():
+            try:
+                neg = self.get_network_endpoint_group(name, zone)
+            except errors.HttpError as e:
+                logger.debug('Retrying NEG load, got %s, details %s',
+                             e.resp.status, e.error_details)
+                raise
+            if not neg:
+                logger.error('Unexpected state: no error, but NEG not loaded')
+                raise RuntimeError('Unexpected state loading NEG')
+            logger.info('Loaded NEG %s, zone %s', neg.name, neg.zone)
+            return neg
+
+        return _wait_for_network_endpoint_group()
+
+    def get_network_endpoint_group(self, name, zone):
+        resource = self._get_resource(self.api.networkEndpointGroups(),
+                                      networkEndpointGroup=name, zone=zone)
+        # @todo(sergiitk): fix
+        return ZonalGcpResource(resource.name, resource.url, zone)
+
+    def _get_resource(self, collection: discovery.Resource,
+                      **kwargs) -> GcpResource:
+        resp = collection.get(project=self.project, **kwargs).execute()
+        logger.debug("Loaded %r", resp)
+        return GcpResource(resp['name'], resp['selfLink'])
+
     def _insert_resource(
         self,
         collection: discovery.Resource,
@@ -213,6 +258,11 @@ class ComputeV1(Compute):
         logger.debug("Creating %s", body)
         resp = self._execute(collection.insert(project=self.project, body=body))
         return GcpResource(body['name'], resp['targetLink'])
+
+    def _patch_resource(self, collection, body, **kwargs):
+        logger.debug("Patching %s", body)
+        self._execute(
+            collection.patch(project=self.project, body=body, **kwargs))
 
     def _delete_resource(self, collection, **kwargs):
         try:
