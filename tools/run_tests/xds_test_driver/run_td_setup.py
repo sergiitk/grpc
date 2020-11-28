@@ -12,55 +12,37 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-import argparse
 import logging
 import os
 
-from googleapiclient import discovery as google_api
+from absl import app
+from absl import flags
 import dotenv
 
 from infrastructure import gcp
 from infrastructure import traffic_director
 
+logger = logging.getLogger(__name__)
 
-logger = logging.getLogger()
-console_handler = logging.StreamHandler()
-formatter = logging.Formatter(
-    fmt='%(asctime)s: %(levelname)s [%(module)-24s] --- %(message)s')
-console_handler.setFormatter(formatter)
-logger.handlers = []
-logger.addHandler(console_handler)
-logger.setLevel(logging.DEBUG)
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-        description='Configure Traffic Director for PSN interop tests')
-
-    group_gcp = parser.add_argument_group('GCP settings')
-    group_gcp.add_argument('--project_id', help='Project ID', required=True)
-    group_gcp.add_argument('--network', default='default', help='Network ID')
-
-    group_driver = parser.add_argument_group('Driver settings')
-    group_driver.add_argument(
-        '--verbose', action='store_true',
-        help='Verbose log output')
-    return parser.parse_args()
+# Flags
+_PROJECT = flags.DEFINE_string(
+    "project", default=None, help="GCP Project ID, required")
+_NETWORK = flags.DEFINE_string(
+    "network", default="default", help="GCP Network ID")
+flags.mark_flag_as_required("project")
 
 
-def main():
-    args = parse_args()
-    if not args.verbose:
-        logger.setLevel(logging.INFO)
+def main(argv):
+    if len(argv) > 1:
+        raise app.UsageError('Too many command-line arguments.')
+    # logger = logging.getLogger(__name__)
 
     # GCP
-    project: str = args.project_id
-    network_name: str = args.network
+    project: str = _PROJECT.value
+    network_name: str = _NETWORK.value
     # network_url: str = f'global/networks/{args.network}'
 
-    # todo(sergiitk): move to args
+    # todo(sergiitk): move to flags
     dotenv.load_dotenv()
 
     # Server xDS settings
@@ -83,10 +65,10 @@ def main():
     try:
         # td.create()
         td.create_health_check(health_check_name)
-        td.create_backend_service(backend_service_name)
+        # td.create_backend_service(backend_service_name)
         logger.info('Works!')
     finally:
-        td.delete_backend_service(backend_service_name)
+        # td.delete_backend_service(backend_service_name)
         td.delete_health_check(health_check_name)
         # td.cleanup()
         # gcp_api_manager.close()
@@ -107,4 +89,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    app.run(main)

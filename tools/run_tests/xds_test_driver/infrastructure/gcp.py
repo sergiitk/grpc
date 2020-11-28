@@ -21,6 +21,9 @@ import retrying
 from googleapiclient import discovery
 from googleapiclient import errors
 
+logger = logging.getLogger(__name__)
+
+# Constants
 _WAIT_FOR_BACKEND_SEC = 1200
 _WAIT_FOR_OPERATION_SEC = 1200
 _WAIT_FIXES_SEC = 2
@@ -98,7 +101,7 @@ class ComputeV1(Compute):
             stop_max_delay=timeout_sec * 1000,
             wait_fixed=wait_sec * 1000)
         def _retry_until_status_done():
-            logging.debug('Waiting for operation %s', operation)
+            logger.debug('Waiting for operation %s', operation)
             return self.api.globalOperations().get(
                 project=self.project, operation=operation).execute()
 
@@ -145,7 +148,7 @@ class ComputeV1(Compute):
         collection: discovery.Resource,
         body: Dict[str, Any]
     ) -> GcpResource:
-        logging.debug("Creating %s", body)
+        logger.debug("Creating %s", body)
         resp = self._execute(collection.insert(project=self.project, body=body))
         return GcpResource(body['name'], resp['targetLink'])
 
@@ -154,7 +157,7 @@ class ComputeV1(Compute):
             self._execute(collection.delete(project=self.project, **kwargs))
             return True
         except errors.HttpError as e:
-            logging.info('Delete failed: %s', e)
+            logger.info('Delete failed: %s', e)
 
     def _execute(self, request):
         operation = request.execute(num_retries=_GCP_API_RETRIES)
@@ -169,7 +172,7 @@ class ComputeV1(Compute):
 #                     stop_max_delay=timeout_sec * 1000,
 #                     wait_fixed=wait_sec * 1000)
 #     def _retry_until_status_done():
-#         logging.debug('Waiting for operation %s', operation)
+#         logger.debug('Waiting for operation %s', operation)
 #         return compute.globalOperations().get(
 #             project=project, operation=operation).execute()
 #
@@ -186,27 +189,27 @@ class ComputeV1(Compute):
 #                                      backend_service, backends):
 #     # todo(sergiitk): match with the expectation how many instances in each zone
 #     for backend in backends:
-#         logging.info(
+#         logger.info(
 #             "Requesting Backend Service %s health: backend %s, zone %s",
 #             backend_service.name, backend.name, backend.zone)
 #         result = compute.backendServices().getHealth(
 #             project=project, backendService=backend_service.name,
 #             body={"group": backend.url}).execute()
-#         logging.debug('%s health: %s', backend.name, result)
+#         logger.debug('%s health: %s', backend.name, result)
 #         if 'healthStatus' not in result:
-#             logging.debug('Backend %s in zone %s: no instances found',
+#             logger.debug('Backend %s in zone %s: no instances found',
 #                           backend.name, backend.zone)
 #             return False
 #
 #         for instance in result['healthStatus']:
-#             logging.debug(
+#             logger.debug(
 #                 'Backend %s in zone %s: instance %s:%s - health state: %s',
 #                 backend.name, backend.zone,
 #                 instance['ipAddress'], instance['port'],
 #                 instance['healthState'])
 #
 #             if instance['healthState'] != 'HEALTHY':
-#                 logging.info(
+#                 logger.info(
 #                     'Backend %s zone %s: endpoint %s:%s healthy',
 #                     backend.name, backend.zone,
 #                     instance['ipAddress'], instance['port'])

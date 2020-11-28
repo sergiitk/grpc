@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import functools
 import json
 import logging
@@ -23,6 +22,8 @@ import retrying
 import kubernetes.config
 from kubernetes import client
 from kubernetes import utils
+
+logger = logging.getLogger(__name__)
 
 # Type aliases
 V1Deployment = client.V1Deployment
@@ -41,9 +42,9 @@ def simple_resource_get(func):
                 try:
                     # Try parsing nicer error from the body
                     data = json.loads(e.body)
-                    logging.debug(data['message'])
+                    logger.debug(data['message'])
                 except Exception:
-                    logging.debug('Resource not found. %s', e.body)
+                    logger.debug('Resource not found. %s', e.body)
                 return None
             raise
     return wrap_not_found_return_none
@@ -104,8 +105,8 @@ class KubernetesNamespace:
         def _wait_for_deleted_service_with_retry():
             service = self.get_service(name)
             if service is not None:
-                logging.info('Waiting for service %s to be deleted',
-                             service.metadata.name)
+                logger.info('Waiting for service %s to be deleted',
+                            service.metadata.name)
             return service
         _wait_for_deleted_service_with_retry()
 
@@ -117,8 +118,8 @@ class KubernetesNamespace:
         def _wait_for_service_neg():
             service = self.get_service(name)
             if self.NEG_STATUS_META not in service.metadata.annotations:
-                logging.info('Waiting for service %s NEG',
-                             service.metadata.name)
+                logger.info('Waiting for service %s NEG',
+                            service.metadata.name)
                 return False
             return True
         _wait_for_service_neg()
@@ -158,10 +159,10 @@ class KubernetesNamespace:
             wait_fixed=wait_sec * 1000)
         def _wait_for_deployment_available_replicas():
             deployment = self.get_deployment(name)
-            logging.info('Waiting for deployment %s to have %s available '
-                         'replicas, current count %s',
-                         deployment.metadata.name,
-                         count, deployment.status.available_replicas)
+            logger.info('Waiting for deployment %s to have %s available '
+                        'replicas, current count %s',
+                        deployment.metadata.name,
+                        count, deployment.status.available_replicas)
             return deployment
         _wait_for_deployment_available_replicas()
 
@@ -173,10 +174,10 @@ class KubernetesNamespace:
         def _wait_for_deleted_deployment_with_retry():
             deployment = self.get_deployment(deployment_name)
             if deployment is not None:
-                logging.info('Waiting for deployment %s to be deleted '
-                             'non-terminated replicas: %s',
-                             deployment.metadata.name,
-                             deployment.status.replicas)
+                logger.info('Waiting for deployment %s to be deleted '
+                            'non-terminated replicas: %s',
+                            deployment.metadata.name,
+                            deployment.status.replicas)
             return deployment
         _wait_for_deleted_deployment_with_retry()
 
@@ -194,9 +195,9 @@ class KubernetesNamespace:
                         wait_fixed=wait_sec * 1000)
         def _wait_for_pod_started():
             pod = self.get_pod(pod_name)
-            logging.info('Waiting for pod %s to start, current phase: %s',
-                         pod.metadata.name,
-                         pod.status.phase)
+            logger.info('Waiting for pod %s to start, current phase: %s',
+                        pod.metadata.name,
+                        pod.status.phase)
             return pod
         _wait_for_pod_started()
 
@@ -237,7 +238,7 @@ class KubernetesNamespace:
                     raise PortForwardingError(
                         f'Error forwarding port, unexpected output {output}')
                 else:
-                    logging.info(output)
+                    logger.info(output)
                     break
         except Exception:
             self.port_forward_stop(pf)
@@ -248,12 +249,12 @@ class KubernetesNamespace:
 
     @staticmethod
     def port_forward_stop(pf):
-        logging.info('Shutting down port forwarding, pid %s', pf.pid)
+        logger.info('Shutting down port forwarding, pid %s', pf.pid)
         pf.kill()
         stdout, _stderr = pf.communicate(timeout=5)
-        logging.info('Port forwarding stopped')
+        logger.info('Port forwarding stopped')
         # todo(sergiitk): make debug
-        logging.info('Port forwarding remaining stdout: %s', stdout)
+        logger.info('Port forwarding remaining stdout: %s', stdout)
 
     @staticmethod
     def _pod_started(pod: V1Pod):
