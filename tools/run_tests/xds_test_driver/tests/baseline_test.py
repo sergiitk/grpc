@@ -125,36 +125,37 @@ class BaselineTest(absltest.TestCase):
         test_server = self.server_runner.run(
             test_port=self.server_test_port,
             replica_count=self.server_replica_count)
+        # todo(sergiitk): set from TD?
+        test_server.xds_address = (self.server_xds_host, self.server_xds_port)
 
         # Load Backends
         neg_name, neg_zones = self.server_runner.k8s_namespace.get_service_neg(
             self.server_runner.service_name, self.server_test_port)
 
         logger.info('Loading NEGs')
-        backends = []
         for neg_zone in neg_zones:
-            backend = self.gcloud.compute.wait_for_network_endpoint_group(
+            backend = self.compute.wait_for_network_endpoint_group(
                 neg_name, neg_zone)
-            backends.append(backend)
+            self.td.backends.add(backend)
 
+        logger.info('Fake waiting before adding backends to avoid error '
+                    '400 RESOURCE_NOT_READY')
+        # todo(sergiitk): figure out how to confirm NEG is ready to be added
         time.sleep(30)
-        self.td.backend_service_add_backends(backends)
+        self.td.backend_service_add_backends()
+        self.td.wait_for_backends_healthy_status()
 
-        logger.info('Fake waiting for Backend Service %s to become healthy',
-                    self.td.backend_service.name)
-        time.sleep(120)
-        # gcp.wait_for_backends_healthy_status(self.compute, self.project,
-        #                                      backend_service, backends)
+        # todo(sergiitk): wait until client reports rpc health
+        logger.info('Wait for xDS to stabilize')
+        time.sleep(60)
 
-        # Todo: get from TD
-        test_server.xds_address = (self.server_xds_host, self.server_xds_port)
-
-        # todo(sergiitk): make rpc enum or get it from proto
         # Start the client
+        # todo(sergiitk): make rpc UnaryCall enum or get it from proto
         test_client = self.client_runner.run(
             server_address=test_server.xds_uri, rpc='UnaryCall', qps=30)
 
         # Run the test
+        # time.sleep(30)
         stats_response = test_client.request_load_balancer_stats(num_rpcs=10)
 
         # Check the results

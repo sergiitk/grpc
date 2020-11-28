@@ -14,6 +14,8 @@
 import logging
 from typing import Optional
 
+import retrying
+
 from infrastructure import gcp
 
 logger = logging.getLogger(__name__)
@@ -37,6 +39,7 @@ class TrafficDirectorManager:
         self.url_map: Optional[gcp.GcpResource] = None
         self.target_proxy: Optional[gcp.GcpResource] = None
         self.forwarding_rule: Optional[gcp.GcpResource] = None
+        self.backends = set()
 
     @property
     def network_url(self):
@@ -94,11 +97,11 @@ class TrafficDirectorManager:
             self.compute.delete_backend_service(name)
             self.backend_service = None
 
-    def backend_service_add_backends(self, backends):
+    def backend_service_add_backends(self):
         logging.info('Adding backends to Backend Service %s: %r',
-                     self.backend_service.name, backends)
-        self.compute.backend_service_add_backends(
-            self.backend_service, backends)
+                     self.backend_service.name, self.backends)
+        self.compute.backend_service_add_backends(self.backend_service,
+                                                  self.backends)
 
     def create_url_map(
         self,
@@ -158,4 +161,10 @@ class TrafficDirectorManager:
             logger.info('Deleting Forwarding rule %s', name)
             self.compute.delete_forwarding_rule(name)
             self.forwarding_rule = None
-#
+
+    def wait_for_backends_healthy_status(self):
+        logger.debug(
+            "Waiting for Backend Service %s to report all backends healthy %r",
+            self.backend_service, self.backends)
+        self.compute.wait_for_backends_healthy_status(
+            self.backend_service, self.backends)

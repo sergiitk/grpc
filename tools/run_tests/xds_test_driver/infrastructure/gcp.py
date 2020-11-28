@@ -226,9 +226,11 @@ class ComputeV1(Compute):
         def _wait_for_network_endpoint_group():
             try:
                 neg = self.get_network_endpoint_group(name, zone)
-            except errors.HttpError as e:
+            except errors.HttpError as error:
+                # noinspection PyProtectedMember
+                reason = error._get_reason()
                 logger.debug('Retrying NEG load, got %s, details %s',
-                             e.resp.status, e.error_details)
+                             error.resp.status, reason)
                 raise
             if not neg:
                 logger.error('Unexpected state: no error, but NEG not loaded')
@@ -243,6 +245,53 @@ class ComputeV1(Compute):
                                       networkEndpointGroup=name, zone=zone)
         # @todo(sergiitk): fix
         return ZonalGcpResource(resource.name, resource.url, zone)
+
+    def wait_for_backends_healthy_status(
+        self,
+        backend_service,
+        backends,
+        timeout_sec=_WAIT_FOR_OPERATION_SEC,
+        wait_sec=_WAIT_FIXES_SEC,
+    ):
+        pending = set(backends)
+
+        @retrying.retry(
+            retry_on_result=lambda result: not result,
+            stop_max_delay=timeout_sec * 1000,
+            wait_fixed=wait_sec * 1000)
+        def _retry_backends_health():
+            for backend in pending:
+                result = self.get_backend_service_backend_health(
+                    backend_service, backend)
+
+                if 'healthStatus' not in result:
+                    logger.debug('Backend %s in zone %s: no instances found',
+                                 backend.name, backend.zone)
+                    continue
+
+                backend_healthy = True
+                for instance in result['healthStatus']:
+                    logger.debug(
+                        'Backend %s in zone %s: instance %s:%s health: %s',
+                        backend.name, backend.zone,
+                        instance['ipAddress'], instance['port'],
+                        instance['healthState'])
+                    if instance['healthState'] != 'HEALTHY':
+                        backend_healthy = False
+
+                if backend_healthy:
+                    logger.info('Backend %s in zone %s reported healthy',
+                                backend.name, backend.zone)
+                    pending.remove(backend)
+
+            return not pending
+
+        _retry_backends_health()
+
+    def get_backend_service_backend_health(self, backend_service, backend):
+        return self.api.backendServices().getHealth(
+            project=self.project, backendService=backend_service.name,
+            body={"group": backend.url}).execute()
 
     def _get_resource(self, collection: discovery.Resource,
                       **kwargs) -> GcpResource:
@@ -268,8 +317,11 @@ class ComputeV1(Compute):
         try:
             self._execute(collection.delete(project=self.project, **kwargs))
             return True
-        except errors.HttpError as e:
-            logger.info('Delete failed: %s', e)
+        except errors.HttpError as error:
+            # noinspection PyProtectedMember
+            reason = error._get_reason()
+            logger.info('Delete failed. Error: %s %s',
+                        error.resp.status, reason)
 
     def _execute(self, request):
         operation = request.execute(num_retries=_GCP_API_RETRIES)
