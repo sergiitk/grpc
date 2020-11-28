@@ -67,8 +67,10 @@ def main(argv):
         td.create_backend_service(backend_service_name)
         td.create_url_map(url_map_name, url_map_path_matcher_name,
                           server_xds_host, server_xds_port)
+        td.create_target_grpc_proxy(target_proxy_name)
         logger.info('Works!')
     finally:
+        td.delete_target_grpc_proxy(target_proxy_name)
         td.delete_url_map(url_map_name)
         td.delete_backend_service(backend_service_name)
         td.delete_health_check(health_check_name)

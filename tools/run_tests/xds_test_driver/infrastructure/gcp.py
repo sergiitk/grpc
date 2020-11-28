@@ -170,6 +170,21 @@ class ComputeV1(Compute):
     def delete_url_map(self, name):
         self._delete_resource(self.api.urlMaps(), urlMap=name)
 
+    def create_target_grpc_proxy(
+        self,
+        name: str,
+        url_map: GcpResource,
+    ) -> GcpResource:
+        return self._insert_resource(self.api.targetGrpcProxies(), {
+            'name': name,
+            'url_map': url_map.url,
+            'validate_for_proxyless': True,
+        })
+
+    def delete_target_grpc_proxy(self, name):
+        self._delete_resource(self.api.targetGrpcProxies(),
+                              targetGrpcProxy=name)
+
     def _insert_resource(
         self,
         collection: discovery.Resource,

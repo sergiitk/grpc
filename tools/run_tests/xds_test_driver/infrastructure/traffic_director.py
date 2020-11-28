@@ -58,6 +58,7 @@ class TrafficDirectorManager:
         self.health_check: Optional[gcp.GcpResource] = None
         self.backend_service: Optional[gcp.GcpResource] = None
         self.url_map: Optional[gcp.GcpResource] = None
+        self.target_proxy: Optional[gcp.GcpResource] = None
 
     @property
     def network_url(self):
@@ -66,6 +67,7 @@ class TrafficDirectorManager:
     def cleanup(self):
         # todo(sergiitk): continue on errors
         # Cleanup in the order of dependencies
+        self.delete_url_map()
         self.delete_backend_service()
         self.delete_health_check()
 
@@ -131,8 +133,24 @@ class TrafficDirectorManager:
             name = name or self.url_map.name
             logger.info('Deleting URL Map %s', name)
             self.compute.delete_url_map(name)
-            self.backend_service = None
-#
+            self.url_map = None
+
+    def create_target_grpc_proxy(self, name: str) -> gcp.GcpResource:
+        # todo: different kinds
+        logger.info('Creating target proxy %s to url map %s',
+                    name, self.url_map.name)
+        resource = self.compute.create_target_grpc_proxy(
+            name, self.url_map)
+        self.target_proxy = resource
+        return resource
+
+    def delete_target_grpc_proxy(self, name=None):
+        # todo: different kinds
+        if name or self.target_proxy:
+            name = name or self.target_proxy.name
+            logger.info('Deleting Target proxy %s', name)
+            self.compute.delete_target_grpc_proxy(name)
+            self.target_proxy = None
 #
 # def setup_gke(
 #     compute, project, network_url,
