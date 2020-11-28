@@ -265,7 +265,7 @@ class ComputeV1(Compute):
                     backend_service, backend)
 
                 if 'healthStatus' not in result:
-                    logger.debug('Backend %s in zone %s: no instances found',
+                    logger.debug('Waiting for instances: backend %s, zone %s',
                                  backend.name, backend.zone)
                     continue
 

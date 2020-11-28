@@ -141,13 +141,13 @@ class BaselineTest(absltest.TestCase):
         logger.info('Fake waiting before adding backends to avoid error '
                     '400 RESOURCE_NOT_READY')
         # todo(sergiitk): figure out how to confirm NEG is ready to be added
-        time.sleep(30)
+        time.sleep(10)
         self.td.backend_service_add_backends()
         self.td.wait_for_backends_healthy_status()
 
         # todo(sergiitk): wait until client reports rpc health
         logger.info('Wait for xDS to stabilize')
-        time.sleep(60)
+        time.sleep(90)
 
         # Start the client
         # todo(sergiitk): make rpc UnaryCall enum or get it from proto
@@ -155,7 +155,6 @@ class BaselineTest(absltest.TestCase):
             server_address=test_server.xds_uri, rpc='UnaryCall', qps=30)
 
         # Run the test
-        # time.sleep(30)
         stats_response = test_client.request_load_balancer_stats(num_rpcs=10)
 
         # Check the results
