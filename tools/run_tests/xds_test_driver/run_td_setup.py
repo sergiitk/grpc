@@ -23,7 +23,6 @@ from infrastructure import gcp
 from infrastructure import traffic_director
 
 logger = logging.getLogger(__name__)
-
 # Flags
 _PROJECT = flags.DEFINE_string(
     "project", default=None, help="GCP Project ID, required")
@@ -65,10 +64,13 @@ def main(argv):
     try:
         # td.create()
         td.create_health_check(health_check_name)
-        # td.create_backend_service(backend_service_name)
+        td.create_backend_service(backend_service_name)
+        td.create_url_map(url_map_name, url_map_path_matcher_name,
+                          server_xds_host, server_xds_port)
         logger.info('Works!')
     finally:
-        # td.delete_backend_service(backend_service_name)
+        td.delete_url_map(url_map_name)
+        td.delete_backend_service(backend_service_name)
         td.delete_health_check(health_check_name)
         # td.cleanup()
         # gcp_api_manager.close()

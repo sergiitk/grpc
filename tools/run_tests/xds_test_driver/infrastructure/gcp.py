@@ -95,16 +95,17 @@ class ComputeV1(Compute):
                                   operation,
                                   timeout_sec=_WAIT_FOR_OPERATION_SEC,
                                   wait_sec=_WAIT_FIXES_SEC):
-
         @retrying.retry(
             retry_on_result=lambda result: result['status'] != 'DONE',
             stop_max_delay=timeout_sec * 1000,
             wait_fixed=wait_sec * 1000)
         def _retry_until_status_done():
-            logger.debug('Waiting for operation %s', operation)
+            # todo(sergiitk) try using wait() here
+            # https://googleapis.github.io/google-api-python-client/docs/dyn/compute_v1.globalOperations.html#wait
             return self.api.globalOperations().get(
                 project=self.project, operation=operation).execute()
 
+        logger.debug('Waiting for global operation %s', operation)
         response = _retry_until_status_done()
         if 'error' in response:
             raise Exception(f'Operation {operation} did not complete '
@@ -142,6 +143,32 @@ class ComputeV1(Compute):
 
     def delete_backend_service(self, name):
         self._delete_resource(self.api.backendServices(), backendService=name)
+
+    def create_url_map(
+        self,
+        name: str,
+        matcher_name: str,
+        src_hosts,
+        dst_default_backend_service: GcpResource,
+        dst_host_rule_match_backend_service: Optional[GcpResource] = None,
+    ) -> GcpResource:
+        if dst_host_rule_match_backend_service is None:
+            dst_host_rule_match_backend_service = dst_default_backend_service
+        return self._insert_resource(self.api.urlMaps(), {
+            'name': name,
+            'defaultService': dst_default_backend_service.url,
+            'hostRules': [{
+                'hosts': src_hosts,
+                'pathMatcher': matcher_name,
+            }],
+            'pathMatchers': [{
+                'name': matcher_name,
+                'defaultService': dst_host_rule_match_backend_service.url,
+            }],
+        })
+
+    def delete_url_map(self, name):
+        self._delete_resource(self.api.urlMaps(), urlMap=name)
 
     def _insert_resource(
         self,

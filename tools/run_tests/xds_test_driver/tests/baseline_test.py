@@ -11,12 +11,13 @@
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
+
 import os
 import time
 
-import dotenv
 from absl import logging
 from absl.testing import absltest
+import dotenv
 
 from infrastructure import k8s
 from infrastructure import gcp

@@ -24,7 +24,6 @@ from kubernetes import client
 from kubernetes import utils
 
 logger = logging.getLogger(__name__)
-
 # Type aliases
 V1Deployment = client.V1Deployment
 V1Pod = client.V1Pod
