@@ -68,7 +68,7 @@ class KubernetesServerRunner(base_runner.KubernetesBaseRunner):
                  deployment_name,
                  *,
                  service_name=None,
-                 network_name='default',
+                 network='default',
                  deployment_template='server.deployment.yaml',
                  service_template='server.service.yaml',
                  debug_reuse_service=False):
@@ -77,7 +77,7 @@ class KubernetesServerRunner(base_runner.KubernetesBaseRunner):
         # Settings
         self.deployment_name = deployment_name
         self.service_name = service_name or deployment_name
-        self.network_name = network_name
+        self.network = network
         self.deployment_template = deployment_template
         self.service_template = service_template
         self.debug_reuse_service = debug_reuse_service

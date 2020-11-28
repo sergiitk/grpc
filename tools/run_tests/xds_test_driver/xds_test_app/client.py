@@ -68,7 +68,7 @@ class KubernetesClientRunner(base_runner.KubernetesBaseRunner):
                  deployment_name,
                  *,
                  stats_port=8079,
-                 network_name='default',
+                 network='default',
                  deployment_template='client.deployment.yaml',
                  debug_use_port_forwarding=False):
         super().__init__(k8s_namespace)
@@ -76,7 +76,7 @@ class KubernetesClientRunner(base_runner.KubernetesBaseRunner):
         # Settings
         self.deployment_name = deployment_name
         self.stats_port = stats_port
-        self.network_name = network_name
+        self.network = network
         self.deployment_template = deployment_template
         self.debug_use_port_forwarding = debug_use_port_forwarding
 
@@ -92,7 +92,7 @@ class KubernetesClientRunner(base_runner.KubernetesBaseRunner):
             deployment_name=self.deployment_name,
             namespace=self.k8s_namespace.name,
             stats_port=self.stats_port,
-            network_name=self.network_name,
+            network_name=self.network,
             server_address=server_address,
             rpc=rpc,
             qps=qps,

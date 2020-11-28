@@ -60,7 +60,7 @@ def main(argv):
     td = traffic_director.TrafficDirectorManager(gcloud, network=network)
 
     try:
-        td.create()
+        # td.create()
         td.create_health_check(health_check_name)
         td.create_backend_service(backend_service_name)
         td.create_url_map(url_map_name, url_map_path_matcher_name,

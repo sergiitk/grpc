@@ -77,7 +77,7 @@ class SecurityTest(absltest.TestCase):
         self.client_runner = xds_test_app.client.KubernetesClientRunner(
             k8s.KubernetesNamespace(self.k8s_api_manager, self.k8s_namespace),
             self.client_deployment_name,
-            network_name=self.network_name,
+            network=self.network_name,
             deployment_template='client-secure.deployment.yaml')
 
         # use_port_forwarding=self.client_use_port_forwarding

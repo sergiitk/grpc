@@ -33,7 +33,7 @@ class BaselineTest(absltest.TestCase):
         dotenv.load_dotenv()
         # GCP
         cls.project: str = os.environ['PROJECT_ID']
-        cls.network_name: str = os.environ['NETWORK_NAME']
+        cls.network: str = os.environ['NETWORK_NAME']
 
         # K8s
         cls.k8s_context_name = os.environ['KUBE_CONTEXT_NAME']
@@ -79,20 +79,20 @@ class BaselineTest(absltest.TestCase):
         # todo(sergiitk): generate with run id
         # Traffic Director Configuration
         self.td = traffic_director.TrafficDirectorManager(
-            self.gcloud, network_name=self.network_name)
+            self.gcloud, network=self.network)
 
         # Test Client Runner
         self.client_runner = xds_test_app.client.KubernetesClientRunner(
             k8s.KubernetesNamespace(self.k8s_api_manager, self.k8s_namespace),
             self.client_name,
-            network_name=self.network_name,
+            network=self.network,
             debug_use_port_forwarding=self.client_debug_use_port_forwarding)
 
         # Test Server Runner
         self.server_runner = xds_test_app.server.KubernetesServerRunner(
             k8s.KubernetesNamespace(self.k8s_api_manager, self.k8s_namespace),
             deployment_name=self.server_name,
-            network_name=self.network_name,
+            network=self.network,
             debug_reuse_service=self.server_debug_reuse_service)
 
     def tearDown(self):
