@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import logging
-from typing import List, Optional
+from typing import Optional
 
 from infrastructure import gcp
 
@@ -23,50 +23,30 @@ HealthCheckProtocol = gcp.ComputeV1.HealthCheckProtocol
 BackendServiceProtocol = gcp.ComputeV1.BackendServiceProtocol
 
 
-class TrafficDirectorState:
-    backends: List[gcp.GcpResource]
-    backend_service: gcp.GcpResource
-    health_check: gcp.GcpResource
-    url_map: gcp.GcpResource
-    target_proxy: gcp.GcpResource
-    forwarding_rule: gcp.GcpResource
-
-    def __init__(self,
-                 backend_service: gcp.GcpResource,
-                 health_check: gcp.GcpResource,
-                 url_map: gcp.GcpResource,
-                 target_proxy: gcp.GcpResource,
-                 forwarding_rule: gcp.GcpResource,
-                 backends: Optional[List[gcp.ZonalGcpResource]] = None):
-        self.backend_service = backend_service
-        self.health_check = health_check
-        self.url_map = url_map
-        self.target_proxy = target_proxy
-        self.forwarding_rule = forwarding_rule
-        self.backends = backends
-
-
 class TrafficDirectorManager:
-    def __init__(self, gcloud: gcp.GCloud, network_name='default'):
+    def __init__(self, gcloud: gcp.GCloud, network='default'):
         # self.gcloud: gcp.GCloud = gcloud
         self.compute: gcp.ComputeV1 = gcloud.compute
 
         # Settings
-        self.network_name: str = network_name
+        self.network: str = network
 
         # Mutable state
         self.health_check: Optional[gcp.GcpResource] = None
         self.backend_service: Optional[gcp.GcpResource] = None
         self.url_map: Optional[gcp.GcpResource] = None
         self.target_proxy: Optional[gcp.GcpResource] = None
+        self.forwarding_rule: Optional[gcp.GcpResource] = None
 
     @property
     def network_url(self):
-        return f'global/networks/{self.network_name}'
+        return f'global/networks/{self.network}'
 
     def cleanup(self):
         # todo(sergiitk): continue on errors
         # Cleanup in the order of dependencies
+        self.delete_forwarding_rule()
+        self.delete_target_grpc_proxy()
         self.delete_url_map()
         self.delete_backend_service()
         self.delete_health_check()
@@ -151,72 +131,24 @@ class TrafficDirectorManager:
             logger.info('Deleting Target proxy %s', name)
             self.compute.delete_target_grpc_proxy(name)
             self.target_proxy = None
+
+    def create_forwarding_rule(
+        self,
+        name: str,
+        src_port: int,
+    ) -> gcp.GcpResource:
+        src_port = int(src_port)
+        logging.info('Creating forwarding rule %s 0.0.0.0:%s -> %s in %s',
+                     name, src_port, self.target_proxy.url, self.network)
+        resource = self.compute.create_forwarding_rule(
+            name, src_port, self.target_proxy, self.network_url)
+        self.forwarding_rule = resource
+        return resource
+
+    def delete_forwarding_rule(self, name=None):
+        if name or self.forwarding_rule:
+            name = name or self.forwarding_rule.name
+            logger.info('Deleting Forwarding rule %s', name)
+            self.compute.delete_forwarding_rule(name)
+            self.forwarding_rule = None
 #
-# def setup_gke(
-#     compute, project, network_url,
-#     backend_service_name, health_check_name,
-#     url_map_name, url_map_path_matcher_name,
-#     target_proxy_name, forwarding_rule_name,
-#     server_xds_host, server_xds_port
-# ) -> TrafficDirectorState:
-#     # Health check
-#     try:
-#         health_check = gcp.get_health_check(compute, project, health_check_name)
-#         logging.info('Loaded TCP HealthCheck %s', health_check.name)
-#     except google_api_errors.HttpError:
-#         logging.info('Creating TCP HealthCheck %s', health_check_name)
-#         health_check = gcp.create_tcp_health_check(compute, project,
-#                                                    health_check_name)
-#
-#     # Global Backend Service (LB)
-#     try:
-#         backend_service = gcp.get_backend_service(
-#             compute, project, backend_service_name)
-#         logging.info('Loaded Backend Service %s', backend_service.name)
-#     except google_api_errors.HttpError:
-#         logging.info('Creating Backend Service %s', backend_service_name)
-#         backend_service = gcp.create_backend_service(
-#             compute, project, backend_service_name, health_check)
-#
-#     # URL map
-#     server_xds_address = f'{server_xds_host}:{server_xds_port}'
-#     try:
-#         url_map = gcp.get_url_map(compute, project, url_map_name)
-#         logging.info('Loaded URL Map %s', url_map.name)
-#     except google_api_errors.HttpError:
-#         logging.info('Creating URL map %s xds://%s -> %s',
-#                      url_map_name,
-#                      server_xds_address,
-#                      backend_service.name)
-#         url_map = gcp.create_url_map(compute, project,
-#                                      url_map_name, url_map_path_matcher_name,
-#                                      server_xds_address, backend_service)
-#
-#     # Target Proxy
-#     try:
-#         target_proxy = gcp.get_target_proxy(compute, project,
-#                                             target_proxy_name)
-#         logging.info('Loaded target proxy %s', target_proxy.name)
-#     except google_api_errors.HttpError:
-#         logging.info('Creating target proxy %s to url map %s',
-#                      target_proxy_name, url_map.url)
-#         target_proxy = gcp.create_target_proxy(
-#             compute, project,
-#             target_proxy_name, url_map)
-#
-#     # Global Forwarding Rule
-#     try:
-#         forwarding_rule = gcp.get_forwarding_rule(compute, project,
-#                                                   forwarding_rule_name)
-#         logging.info('Loaded forwarding rule %s', forwarding_rule.name)
-#     except google_api_errors.HttpError:
-#         logging.info('Creating forwarding rule %s 0.0.0.0:%s -> %s in %s',
-#                      forwarding_rule_name, server_xds_port,
-#                      target_proxy.url, network_url)
-#         forwarding_rule = gcp.create_forwarding_rule(
-#             compute, project,
-#             forwarding_rule_name, server_xds_port,
-#             target_proxy, network_url)
-#
-#     return TrafficDirectorState(backend_service, health_check,
-#                                 url_map, target_proxy, forwarding_rule)

@@ -185,6 +185,26 @@ class ComputeV1(Compute):
         self._delete_resource(self.api.targetGrpcProxies(),
                               targetGrpcProxy=name)
 
+    def create_forwarding_rule(
+        self,
+        name: str,
+        src_port: int,
+        target_proxy: GcpResource,
+        network_url: str,
+    ) -> GcpResource:
+        return self._insert_resource(self.api.globalForwardingRules(), {
+            'name': name,
+            'loadBalancingScheme': 'INTERNAL_SELF_MANAGED',  # Traffic Director
+            'portRange': src_port,
+            'IPAddress': '0.0.0.0',
+            'network': network_url,
+            'target': target_proxy.url,
+        })
+
+    def delete_forwarding_rule(self, name):
+        self._delete_resource(self.api.globalForwardingRules(),
+                              forwardingRule=name)
+
     def _insert_resource(
         self,
         collection: discovery.Resource,
