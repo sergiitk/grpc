@@ -106,7 +106,7 @@ class ComputeV1(Compute):
             return self.api.globalOperations().get(
                 project=self.project, operation=operation).execute()
 
-        logger.debug('Waiting for global operation %s', operation)
+        # logger.debug('Waiting for global operation %s', operation)
         response = _retry_until_status_done()
         if 'error' in response:
             logger.debug('Waiting for global op failed, response: %r', response)
