@@ -11,129 +11,20 @@
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
-import logging
-import time
-
-from absl import flags
 from absl.testing import absltest
 
-from infrastructure import k8s
-from infrastructure import gcp
-from infrastructure import traffic_director
-import xds_test_app.client
-import xds_test_app.server
+from framework import xds_k8s_testcase
 
-logger = logging.getLogger(__name__)
-# Flags
-_PROJECT = flags.DEFINE_string(
-    "project", default=None, help="GCP Project ID, required")
-_KUBE_CONTEXT_NAME = flags.DEFINE_string(
-    "kube_context_name", default=None, help="Kubectl context to use")
-_NAMESPACE = flags.DEFINE_string(
-    "namespace", default=None,
-    help="Isolate GCP resources using given namespace / name prefix")
-_NETWORK = flags.DEFINE_string(
-    "network", default="default", help="GCP Network ID")
-_CLIENT_PORT_FORWARDING = flags.DEFINE_bool(
-    "client_debug_use_port_forwarding", default=False,
-    help="Development only: use kubectl port-forward to connect to test client")
-flags.mark_flags_as_required(["project", "namespace"])
+# Type aliases
+XdsTestServer = xds_k8s_testcase.XdsTestServer
+XdsTestClient = xds_k8s_testcase.XdsTestClient
 
 
-class BaselineTest(absltest.TestCase):
-    CLIENT_NAME = 'psm-grpc-client'
-    SERVER_NAME = 'psm-grpc-server'
-    SERVER_XDS_HOST = 'xds-test-server'
-    SERVER_XDS_PORT = 8000
-
-    @classmethod
-    def setUpClass(cls):
-        # GCP
-        cls.project: str = _PROJECT.value
-        cls.network: str = _NETWORK.value
-
-        # Base namespace
-        # todo(sergiitk): generate for each test
-        cls.namespace: str = _NAMESPACE.value
-
-        # todo(sergiitk): move to args
-        # Client
-        cls.client_debug_use_port_forwarding = _CLIENT_PORT_FORWARDING.value
-
-        # Shared services
-        cls.k8s_api_manager = k8s.KubernetesApiManager(_KUBE_CONTEXT_NAME.value)
-        cls.gcp_api_manager = gcp.GcpApiManager()
-        cls.gcloud = gcp.GCloud(cls.gcp_api_manager, cls.project)
-        cls.compute = cls.gcloud.compute
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.k8s_api_manager.close()
-        cls.gcp_api_manager.close()
-
-    def setUp(self):
-        # todo(sergiitk): generate with run id
-        namespace = self.namespace
-        client_namespace = self.namespace
-        server_namespace = self.namespace
-
-        # Traffic Director Configuration
-        self.td = traffic_director.TrafficDirectorManager(
-            self.gcloud, network=self.network, namespace=namespace)
-
-        # Test Client Runner
-        self.client_runner = xds_test_app.client.KubernetesClientRunner(
-            k8s.KubernetesNamespace(self.k8s_api_manager, client_namespace),
-            self.CLIENT_NAME,
-            network=self.network,
-            debug_use_port_forwarding=self.client_debug_use_port_forwarding)
-
-        # Test Server Runner
-        self.server_runner = xds_test_app.server.KubernetesServerRunner(
-            k8s.KubernetesNamespace(self.k8s_api_manager, server_namespace),
-            deployment_name=self.SERVER_NAME,
-            network=self.network)
-
-    def tearDown(self):
-        logger.debug('######## tearDown(): resource cleanup initiated ########')
-        self.td.cleanup()
-        self.client_runner.cleanup()
-        self.server_runner.cleanup()
-
+class BaselineTest(xds_k8s_testcase.XdsKubernetesTestCase):
     def test_ping_pong(self):
-        # Traffic Director
-        self.td.setup_for_grpc(self.SERVER_XDS_HOST, self.SERVER_XDS_PORT)
-
-        # Start test server
-        server_replica_count = 1
-        test_server = self.server_runner.run(replica_count=server_replica_count)
-        test_server.xds_address = (self.SERVER_XDS_HOST, self.SERVER_XDS_PORT)
-
-        # Load Backends
-        neg_name, neg_zones = self.server_runner.k8s_namespace.get_service_neg(
-            self.server_runner.service_name, test_server.port)
-
-        logger.info('Loading NEGs')
-        for neg_zone in neg_zones:
-            backend = self.compute.wait_for_network_endpoint_group(
-                neg_name, neg_zone)
-            self.td.backends.add(backend)
-
-        logger.info('Fake waiting before adding backends to avoid error '
-                    '400 RESOURCE_NOT_READY')
-        # todo(sergiitk): figure out how to confirm NEG is ready to be added
-        time.sleep(10)
-        self.td.backend_service_add_backends()
-        self.td.wait_for_backends_healthy_status()
-
-        # todo(sergiitk): wait until client reports rpc health
-        logger.info('Wait for xDS to stabilize')
-        time.sleep(90)
-
-        # Start the client
-        # todo(sergiitk): make rpc UnaryCall enum or get it from proto
-        test_client = self.client_runner.run(
-            server_address=test_server.xds_uri, rpc='UnaryCall', qps=30)
+        test_server: XdsTestServer = self.startTestServer(replica_count=1)
+        self.setupXdsForServer(test_server)
+        test_client: XdsTestClient = self.startTestClientForServer(test_server)
 
         # Run the test
         stats_response = test_client.request_load_balancer_stats(num_rpcs=10)
@@ -141,23 +32,6 @@ class BaselineTest(absltest.TestCase):
         # Check the results
         self.assertAllBackendsReceivedRpcs(stats_response)
         self.assertFailedRpcsAtMost(stats_response, 0)
-
-    def test_true(self):
-        # Sanity check for setUp() / tearDown() hooks
-        self.assertEqual(True, True)
-
-    def assertAllBackendsReceivedRpcs(self, stats_response):
-        # todo(sergiitk): assert backends length
-        logger.info(stats_response.rpcs_by_peer)
-        for backend, rpcs_count in stats_response.rpcs_by_peer.items():
-            with self.subTest(f'Backend {backend} received RPCs'):
-                self.assertGreater(int(rpcs_count), 0,
-                                   msg='Did not receive a single RPC')
-
-    def assertFailedRpcsAtMost(self, stats_response, count):
-        self.assertLessEqual(int(stats_response.num_failures), count,
-                             msg='Unexpected number of RPC failures '
-                                 f'{stats_response.num_failures} > {count}')
 
 
 if __name__ == '__main__':
