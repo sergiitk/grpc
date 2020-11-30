@@ -95,18 +95,21 @@ class XdsKubernetesTestCase(absltest.TestCase):
         self.td = traffic_director.TrafficDirectorManager(
             self.gcloud, network=self.network, namespace=namespace)
 
+        # Test Server Runner
+        self.server_runner = xds_test_app.server.KubernetesServerRunner(
+            k8s.KubernetesNamespace(self.k8s_api_manager, server_namespace),
+            gcp_service_account=_GCP_SERVICE_ACCOUNT.value,
+            deployment_name=self.SERVER_NAME,
+            network=self.network)
+
         # Test Client Runner
         self.client_runner = xds_test_app.client.KubernetesClientRunner(
             k8s.KubernetesNamespace(self.k8s_api_manager, client_namespace),
             self.CLIENT_NAME,
+            gcp_service_account=_GCP_SERVICE_ACCOUNT.value,
             network=self.network,
-            debug_use_port_forwarding=self.client_debug_use_port_forwarding)
-
-        # Test Server Runner
-        self.server_runner = xds_test_app.server.KubernetesServerRunner(
-            k8s.KubernetesNamespace(self.k8s_api_manager, server_namespace),
-            deployment_name=self.SERVER_NAME,
-            network=self.network)
+            debug_use_port_forwarding=self.client_debug_use_port_forwarding,
+            reuse_namespace=True)
 
     def tearDown(self):
         logger.debug('######## tearDown(): resource cleanup initiated ########')
