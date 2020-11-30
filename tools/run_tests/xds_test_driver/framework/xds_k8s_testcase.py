@@ -99,7 +99,7 @@ class XdsKubernetesTestCase(absltest.TestCase):
         self.client_runner.cleanup()
         self.server_runner.cleanup()
 
-    def startTestServer(self, replica_count) -> XdsTestServer:
+    def startTestServer(self, replica_count=1) -> XdsTestServer:
         test_server = self.server_runner.run(
             replica_count=replica_count,
             test_port=self.server_port)

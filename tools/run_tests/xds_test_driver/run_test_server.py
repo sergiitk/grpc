@@ -23,9 +23,9 @@ import xds_test_app.server
 
 logger = logging.getLogger(__name__)
 # Flags
-_MODE = flags.DEFINE_enum(
-    'mode', default='run', enum_values=['run', 'cleanup'],
-    help='Run mode.')
+_CMD = flags.DEFINE_enum(
+    'cmd', default='run', enum_values=['run', 'cleanup'],
+    help='Command')
 flags.adopt_module_key_flags(xds_flags)
 flags.adopt_module_key_flags(xds_k8s_flags)
 
@@ -40,13 +40,13 @@ def main(argv):
         k8s.KubernetesNamespace(k8s_api_manager, xds_flags.NAMESPACE.value),
         deployment_name=xds_flags.SERVER_NAME.value,
         network=xds_flags.NETWORK.value,
-        gcp_service_account=xds_k8s_flags.GCP_SERVICE_ACCOUNT.name,
+        gcp_service_account=xds_k8s_flags.GCP_SERVICE_ACCOUNT.value,
         reuse_namespace=True)
 
-    if _MODE.value == 'run':
+    if _CMD.value == 'run':
         logger.info('Run server')
         server_runner.run(test_port=xds_flags.SERVER_PORT.value)
-    elif _MODE.value == 'cleanup':
+    elif _CMD.value == 'cleanup':
         logger.info('Cleanup server')
         server_runner.cleanup(force=True, force_namespace=True)
 

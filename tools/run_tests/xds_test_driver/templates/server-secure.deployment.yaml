@@ -21,25 +21,26 @@ spec:
         image: gcr.io/grpc-testing/xds-gke-interop-server-java-sergii-test:latest
         imagePullPolicy: Always
         args:
-          - "--port=${port}"
+          - "--port=${test_port}"
           - "--maintenance_port=${maintenance_port}"
           - "--secure_mode=${secure_mode}"
         ports:
-          - containerPort: ${port}
+          - containerPort: ${test_port}
           - containerPort: ${maintenance_port}
         env:
         - name: GRPC_XDS_BOOTSTRAP
-          value: "/tmp/grpc-xds/secure-server.json"
+          value: "/tmp/grpc-xds/td-grpc-bootstrap.json"
         - name: GRPC_XDS_EXPERIMENTAL_SECURITY_SUPPORT
           value: "true"
         - name: GRPC_XDS_CERT_INSTANCE_OVERRIDE
           value: "true"
+        - name: JAVA_OPTS
+          value: "-Djava.util.logging.config.file=./logging-debug.properties"
         volumeMounts:
         - mountPath: /var/run/gke-spiffe/certs
           name: gke-spiffe-certs-volume
           readOnly: true
-        - mountPath: /tmp/grpc-xds/secure-server.json
-          subPath: secure-server.json
+        - mountPath: /tmp/grpc-xds/
           name: grpc-td-conf
           readOnly: true
         resources:
@@ -49,10 +50,29 @@ spec:
           requests:
             cpu: 100m
             memory: 512Mi
+      initContainers:
+        - name: grpc-td-init
+          image: ${td_bootstrap_image}
+          imagePullPolicy: Always
+          args:
+            - "--output=/tmp/bootstrap/td-grpc-bootstrap.json"
+            - "--vpc-network-name=${network_name}"
+            - "--include-psm-security"
+          resources:
+            limits:
+              cpu: 100m
+              memory: 100Mi
+            requests:
+              cpu: 10m
+              memory: 100Mi
+          volumeMounts:
+            - mountPath: /tmp/bootstrap/
+              name: grpc-td-conf
       volumes:
         - name: gke-spiffe-certs-volume
           csi:
             driver: certs.spiffe.gke.io
         - name: grpc-td-conf
-          configMap:
-            name: td-grpc-bootstrap
+          emptyDir:
+            medium: Memory
+

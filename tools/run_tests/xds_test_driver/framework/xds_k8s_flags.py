@@ -19,6 +19,9 @@ KUBE_CONTEXT_NAME = flags.DEFINE_string(
 GCP_SERVICE_ACCOUNT = flags.DEFINE_string(
     "gcp_service_account", default=None,
     help="GCP Service account for GKE workloads to impersonate")
+TD_BOOTSTRAP_IMAGE = flags.DEFINE_string(
+    "td_bootstrap_image", default=None,
+    help="Traffic Director gRPC Bootstrap Docker image")
 
 # Test client
 CLIENT_PORT_FORWARDING = flags.DEFINE_bool(
@@ -27,5 +30,6 @@ CLIENT_PORT_FORWARDING = flags.DEFINE_bool(
 
 flags.mark_flags_as_required([
     "gcp_service_account",
-    "kube_context_name"
+    "kube_context_name",
+    "td_bootstrap_image",
 ])

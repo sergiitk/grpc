@@ -199,6 +199,20 @@ class ComputeV1(Compute):
         self._delete_resource(self.api.targetGrpcProxies(),
                               targetGrpcProxy=name)
 
+    def create_target_http_proxy(
+        self,
+        name: str,
+        url_map: GcpResource,
+    ) -> GcpResource:
+        return self._insert_resource(self.api.targetHttpProxies(), {
+            'name': name,
+            'url_map': url_map.url,
+        })
+
+    def delete_target_http_proxy(self, name):
+        self._delete_resource(self.api.targetHttpProxies(),
+                              targetHttpProxy=name)
+
     def create_forwarding_rule(
         self,
         name: str,

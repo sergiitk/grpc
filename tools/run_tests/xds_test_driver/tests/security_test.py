@@ -11,21 +11,27 @@
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
-import os
-import time
-
-import dotenv
-import kubernetes.config
-import kubernetes.client
 from absl.testing import absltest
-from googleapiclient import discovery as google_api
-from absl import logging
 
-from infrastructure import k8s
-from infrastructure import gcp
-import xds_test_app.client
-import xds_test_app.server
+from framework import xds_k8s_testcase
 
+# Type aliases
+XdsTestServer = xds_k8s_testcase.XdsTestServer
+XdsTestClient = xds_k8s_testcase.XdsTestClient
+
+
+# class SecurityTest(xds_k8s_testcase.XdsKubernetesTestCase):
+#     def test_mtls(self):
+#         test_server: XdsTestServer = self.startSecureTestServer()
+#         # self.setupXdsForServer(test_server)
+#         # test_client: XdsTestClient = self.startTestClientForServer(test_server)
+#         #
+#         # # Run the test
+#         # stats_response = test_client.request_load_balancer_stats(num_rpcs=10)
+#         #
+#         # # Check the results
+#         # self.assertAllBackendsReceivedRpcs(stats_response)
+#         # self.assertFailedRpcsAtMost(stats_response, 0)
 
 class SecurityTest(absltest.TestCase):
     @classmethod

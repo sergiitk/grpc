@@ -8,10 +8,13 @@ set +o allexport
 #  --source=bin/tls/sergii-psm-test-global-backend-service-orig.yaml -q
 
 # Endpoint Config Selector
-gcloud alpha network-services endpoint-config-selectors delete ecs_mtls_psms --location=global -q
+gcloud -q --log-http --verbosity=debug alpha network-services endpoint-config-selectors \
+  delete ecs_mtls_psms --location=global
 
 # Create MTLS policy on the server side and attach to an ECS
-gcloud alpha network-security server-tls-policies delete server_mtls_policy --location=global -q
+gcloud -q --log-http --verbosity=debug alpha network-security server-tls-policies \
+  delete server_mtls_policy --location=global
 
 # Create MTLS policy on the client side and attach to our backendService
-gcloud alpha network-security client-tls-policies delete client_mtls_policy --location=global -q
+gcloud -q --log-http --verbosity=debug alpha network-security client-tls-policies \
+  delete client_mtls_policy --location=global

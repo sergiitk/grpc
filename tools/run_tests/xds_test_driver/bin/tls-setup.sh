@@ -5,14 +5,17 @@ set -o allexport
 set +o allexport
 
 # Create MTLS policy on the server side and attach to an ECS
-gcloud --log-http --verbosity=debug alpha network-security server-tls-policies import server_mtls_policy \
+gcloud --log-http --verbosity=debug alpha network-security server-tls-policies \
+  import server_mtls_policy \
   --source=bin/tls/server-mtls-policy.yaml --location=global
 
-gcloud --log-http --verbosity=debug alpha network-services endpoint-config-selectors import ecs_mtls_psms \
+gcloud --log-http --verbosity=debug alpha network-services endpoint-config-selectors \
+  import ecs_mtls_psms \
   --source=bin/tls/ecs-mtls-psms.yaml --location=global
 
 # Create MTLS policy on the client side and attach to our backendService
-gcloud --log-http --verbosity=debug alpha network-security client-tls-policies import client_mtls_policy \
+gcloud --log-http --verbosity=debug alpha network-security client-tls-policies \
+  import client_mtls_policy \
   --source=bin/tls/client-mtls-policy.yaml --location=global
 
 gcloud beta compute backend-services export sergii-psm-test-global-backend-service --global \

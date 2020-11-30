@@ -44,6 +44,8 @@ class TrafficDirectorManager:
         self.backend_service: Optional[gcp.GcpResource] = None
         self.url_map: Optional[gcp.GcpResource] = None
         self.target_proxy: Optional[gcp.GcpResource] = None
+        # todo(sergiitk): fix
+        self.target_proxy_is_http = False
         self.forwarding_rule: Optional[gcp.GcpResource] = None
         self.backends = set()
 
@@ -58,10 +60,21 @@ class TrafficDirectorManager:
         self.create_target_grpc_proxy()
         self.create_forwarding_rule(service_port)
 
+    def setup_for_grpc_security(self, service_host, service_port):
+        # todo(sergiitk): merge with setup_for_grpc
+        self.create_health_check()
+        self.create_backend_service(protocol=BackendServiceProtocol.HTTP2)
+        self.create_url_map(service_host, service_port)
+        self.create_target_grpc_proxy()
+        self.create_forwarding_rule(service_port)
+
     def cleanup(self, *, force=False):
         # Cleanup in the reverse order of creation
         self.delete_forwarding_rule(force=force)
-        self.delete_target_grpc_proxy(force=force)
+        if self.target_proxy_is_http:
+            self.delete_target_http_proxy(force=force)
+        else:
+            self.delete_target_grpc_proxy(force=force)
         self.delete_url_map(force=force)
         self.delete_backend_service(force=force)
         self.delete_health_check(force=force)
@@ -156,7 +169,7 @@ class TrafficDirectorManager:
     def create_target_grpc_proxy(self):
         # todo: different kinds
         name = self._ns_name(self.TARGET_PROXY_NAME)
-        logger.info('Creating target proxy %s to url map %s',
+        logger.info('Creating target GRPC proxy %s to url map %s',
                     name, self.url_map.name)
         resource = self.compute.create_target_grpc_proxy(
             name, self.url_map)
@@ -169,9 +182,32 @@ class TrafficDirectorManager:
             name = self.target_proxy.name
         else:
             return
-        logger.info('Deleting Target proxy %s', name)
+        logger.info('Deleting Target GRPC proxy %s', name)
         self.compute.delete_target_grpc_proxy(name)
         self.target_proxy = None
+        self.target_proxy_is_http = False
+
+    def create_target_http_proxy(self):
+        # todo: different kinds
+        name = self._ns_name(self.TARGET_PROXY_NAME)
+        logger.info('Creating target HTTP proxy %s to url map %s',
+                    name, self.url_map.name)
+        resource = self.compute.create_target_http_proxy(
+            name, self.url_map)
+        self.target_proxy = resource
+        self.target_proxy_is_http = True
+
+    def delete_target_http_proxy(self, force=False):
+        if force:
+            name = self._ns_name(self.TARGET_PROXY_NAME)
+        elif self.target_proxy:
+            name = self.target_proxy.name
+        else:
+            return
+        logger.info('Deleting HTTP Target proxy %s', name)
+        self.compute.delete_target_http_proxy(name)
+        self.target_proxy = None
+        self.target_proxy_is_http = False
 
     def create_forwarding_rule(self, src_port: int):
         name = self._ns_name(self.FORWARDING_RULE_NAME)

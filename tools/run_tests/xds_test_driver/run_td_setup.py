@@ -23,10 +23,28 @@ from infrastructure import traffic_director
 
 logger = logging.getLogger(__name__)
 # Flags
-_MODE = flags.DEFINE_enum(
-    'mode', default='full', enum_values=['full', 'create', 'cleanup'],
-    help='Run mode.')
+_CMD = flags.DEFINE_enum(
+    'cmd', default='create', enum_values=['test', 'create', 'cleanup'],
+    help='Command')
+_SECURITY_MODE = flags.DEFINE_enum(
+    'security_mode', default=None, enum_values=['mtls'],
+    help='Configure td with security')
 flags.adopt_module_key_flags(xds_flags)
+
+BackendServiceProtocol = gcp.ComputeV1.BackendServiceProtocol
+
+
+def create_all(td, server_xds_host, server_xds_port, security_mode=None):
+    if security_mode is None:
+        td.setup_for_grpc(server_xds_host, server_xds_port)
+        return
+    if security_mode == 'mtls':
+        logger.info('Setting up mtls')
+        td.setup_for_grpc_security(server_xds_host, server_xds_port)
+
+
+def delete_all(td):
+    td.cleanup(force=True)
 
 
 def main(argv):
@@ -39,28 +57,22 @@ def main(argv):
         gcloud,
         namespace=xds_flags.NAMESPACE.value,
         network=xds_flags.NETWORK.value)
+    server_xds_host = xds_flags.SERVER_XDS_HOST.value
+    server_xds_port = xds_flags.SERVER_XDS_PORT.value
+    security_mode = _SECURITY_MODE.value
 
-    def create_all():
-
-        td.setup_for_grpc(
-            xds_flags.SERVER_XDS_HOST.value,
-            xds_flags.SERVER_XDS_PORT.value)
-
-    def delete_all():
-        td.cleanup(force=True)
-
-    if _MODE.value == 'create':
+    if _CMD.value == 'create':
         logger.info('Create-only mode')
-        create_all()
-    elif _MODE.value == 'cleanup':
+        create_all(td, server_xds_host, server_xds_port, security_mode)
+    elif _CMD.value == 'cleanup':
         logger.info('Cleanup mode')
-        delete_all()
+        delete_all(td)
     else:
         try:
-            create_all()
+            create_all(td, server_xds_host, server_xds_port)
             logger.info('Works!')
         finally:
-            delete_all()
+            delete_all(td)
 
 
 if __name__ == '__main__':

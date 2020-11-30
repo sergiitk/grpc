@@ -15,12 +15,12 @@ from absl import flags
 
 # GCP
 PROJECT = flags.DEFINE_string(
-    "project", default=None, help="GCP Project ID, required")
-NETWORK = flags.DEFINE_string(
-    "network", default="default", help="GCP Network ID")
+    "project", default=None, help="GCP Project ID. Required")
 NAMESPACE = flags.DEFINE_string(
     "namespace", default=None,
-    help="Isolate GCP resources using given namespace / name prefix")
+    help="Isolate GCP resources using given namespace / name prefix. Required")
+NETWORK = flags.DEFINE_string(
+    "network", default="default", help="GCP Network ID")
 
 # Test server
 SERVER_NAME = flags.DEFINE_string(
