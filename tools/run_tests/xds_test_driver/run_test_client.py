@@ -17,7 +17,7 @@ from absl import app
 from absl import flags
 
 from infrastructure import k8s
-import xds_test_app.server
+import xds_test_app.client
 
 logger = logging.getLogger(__name__)
 # Flags
@@ -33,12 +33,18 @@ _GCP_SERVICE_ACCOUNT = flags.DEFINE_string(
     help="GCP Service account for GKE workloads to impersonate")
 _NETWORK = flags.DEFINE_string(
     "network", default="default", help="GCP Network ID")
+_CLIENT_NAME = flags.DEFINE_string(
+    "client_name", default="psm-grpc-client",
+    help="Client deployment and service name")
 _SERVER_NAME = flags.DEFINE_string(
     "server_name", default="psm-grpc-server",
     help="Server deployment and service name")
 _SERVER_PORT = flags.DEFINE_integer(
     "server_port", default=8080,
     help="Server test port")
+_CLIENT_PORT_FORWARDING = flags.DEFINE_bool(
+    "client_debug_use_port_forwarding", default=False,
+    help="Development only: use kubectl port-forward to connect to test client")
 _MODE = flags.DEFINE_enum(
     'mode', default='run', enum_values=['run', 'cleanup'],
     help='Run mode.')
@@ -55,19 +61,20 @@ def main(argv):
         raise app.UsageError('Too many command-line arguments.')
 
     k8s_api_manager = k8s.KubernetesApiManager(_KUBE_CONTEXT_NAME.value)
-    server_runner = xds_test_app.server.KubernetesServerRunner(
+    client_runner = xds_test_app.client.KubernetesClientRunner(
         k8s.KubernetesNamespace(k8s_api_manager, _NAMESPACE.value),
-        deployment_name=_SERVER_NAME.value,
+        deployment_name=_CLIENT_NAME.value,
         network=_NETWORK.value,
         gcp_service_account=_GCP_SERVICE_ACCOUNT.name,
         reuse_namespace=True)
 
     if _MODE.value == 'run':
-        logger.info('Run server')
-        server_runner.run(test_port=_SERVER_PORT.value)
+        logger.info('Run client')
+        client_runner.run(
+            server_address=f'{_SERVER_NAME.value}:{_SERVER_PORT.value}')
     elif _MODE.value == 'cleanup':
-        logger.info('Cleanup server')
-        server_runner.cleanup(force=True, force_namespace=True)
+        logger.info('Cleanup client')
+        client_runner.cleanup(force=True)
 
 
 if __name__ == '__main__':

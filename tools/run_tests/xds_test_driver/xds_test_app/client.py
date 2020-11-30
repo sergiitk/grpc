@@ -60,36 +60,54 @@ class XdsTestClient:
 
 
 class KubernetesClientRunner(base_runner.KubernetesBaseRunner):
-    k8s_namespace: k8s.KubernetesNamespace
-    deployment: Optional[k8s.V1Deployment]
-
     def __init__(self,
                  k8s_namespace,
                  deployment_name,
+                 gcp_service_account,
                  *,
+                 service_account_name=None,
                  stats_port=8079,
                  network='default',
                  deployment_template='client.deployment.yaml',
+                 service_account_template='service-account.yaml',
+                 reuse_namespace=False,
+                 namespace_template=None,
                  debug_use_port_forwarding=False):
-        super().__init__(k8s_namespace)
+        super().__init__(k8s_namespace, namespace_template, reuse_namespace)
 
         # Settings
         self.deployment_name = deployment_name
+        self.gcp_service_account = gcp_service_account
+        self.service_account_name = service_account_name or deployment_name
         self.stats_port = stats_port
         self.network = network
         self.deployment_template = deployment_template
+        self.service_account_template = service_account_template
         self.debug_use_port_forwarding = debug_use_port_forwarding
 
         # Mutable state
-        self.deployment = None
+        self.deployment: Optional[k8s.V1Deployment] = None
+        self.service_account: Optional[k8s.V1ServiceAccount] = None
         self.port_forwarder = None
 
-    def run(self, *, server_address, rpc, qps=10,
+    def run(self, *,
+            server_address,
+            rpc='UnaryCall', qps=10,
             secure_mode=False) -> XdsTestClient:
+        super().run()
+
+        # Create service account
+        self.service_account = self._create_service_account(
+            self.service_account_template,
+            service_account_name=self.service_account_name,
+            namespace_name=self.k8s_namespace.name,
+            gcp_service_account=self.gcp_service_account)
+
         # Always create a new deployment
         self.deployment = self._create_deployment(
             self.deployment_template,
             deployment_name=self.deployment_name,
+            service_account_name=self.service_account_name,
             namespace_name=self.k8s_namespace.name,
             stats_port=self.stats_port,
             network_name=self.network,
@@ -116,10 +134,14 @@ class KubernetesClientRunner(base_runner.KubernetesBaseRunner):
         return XdsTestClient(host=client_host,
                              stats_port=self.stats_port)
 
-    def cleanup(self):
+    def cleanup(self, *, force=False, force_namespace=False):
         if self.port_forwarder:
             self.k8s_namespace.port_forward_stop(self.port_forwarder)
             self.port_forwarder = None
-        if self.deployment:
+        if self.deployment or force:
             self._delete_deployment(self.deployment_name)
             self.deployment = None
+        if self.service_account or force:
+            self._delete_service_account(self.service_account_name)
+            self.service_account = None
+        super().cleanup(force=force_namespace and force)

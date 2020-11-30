@@ -15,7 +15,7 @@ spec:
       labels:
         app: ${deployment_name}
     spec:
-      serviceAccountName: ${deployment_name}
+      serviceAccountName: ${service_account_name}
       containers:
       - name: ${deployment_name}
         image: gcr.io/grpc-testing/xds-gke-interop-client-java-sergii-test:latest

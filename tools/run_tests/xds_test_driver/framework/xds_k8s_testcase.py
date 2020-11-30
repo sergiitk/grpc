@@ -149,8 +149,7 @@ class XdsKubernetesTestCase(absltest.TestCase):
         test_server: XdsTestServer
     ) -> XdsTestClient:
         # todo(sergiitk): make rpc UnaryCall enum or get it from proto
-        test_client = self.client_runner.run(
-            server_address=test_server.xds_uri, rpc='UnaryCall', qps=30)
+        test_client = self.client_runner.run(server_address=test_server.xds_uri)
         return test_client
 
     def assertAllBackendsReceivedRpcs(self, stats_response):

@@ -143,7 +143,7 @@ class KubernetesServerRunner(base_runner.KubernetesBaseRunner):
         return XdsTestServer(test_port, maintenance_port, secure_mode,
                              server_id)
 
-    def cleanup(self, *, force=False):
+    def cleanup(self, *, force=False, force_namespace=False):
         if self.deployment or force:
             self._delete_deployment(self.deployment_name)
             self.deployment = None
@@ -153,4 +153,4 @@ class KubernetesServerRunner(base_runner.KubernetesBaseRunner):
         if self.service_account or force:
             self._delete_service_account(self.service_account_name)
             self.service_account = None
-        super().cleanup(force=force)
+        super().cleanup(force=(force_namespace and force))
