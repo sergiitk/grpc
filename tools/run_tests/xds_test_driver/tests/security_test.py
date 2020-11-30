@@ -87,7 +87,7 @@ class SecurityTest(absltest.TestCase):
             deployment_name=self.server_name,
             service_name=self.service_name,
             deployment_template='server-secure.deployment.yaml',
-            debug_reuse_service=self.debug_reuse_service)
+            reuse_service=self.debug_reuse_service)
 
     def tearDown(self):
         pass

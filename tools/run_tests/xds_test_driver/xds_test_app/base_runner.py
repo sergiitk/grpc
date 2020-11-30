@@ -15,6 +15,7 @@
 import contextlib
 import logging
 import pathlib
+from typing import Optional
 
 import mako.template
 import yaml
@@ -29,17 +30,30 @@ class RunnerError(Exception):
 
 
 class KubernetesBaseRunner:
-    k8s_namespace: k8s.KubernetesNamespace
-
-    def __init__(self, k8s_namespace):
+    def __init__(self,
+                 k8s_namespace,
+                 namespace_template=None,
+                 reuse_namespace=False):
         # Kubernetes namespaced resources manager
-        self.k8s_namespace = k8s_namespace
+        self.k8s_namespace: k8s.KubernetesNamespace = k8s_namespace
+        self.reuse_namespace = reuse_namespace
+        self.namespace_template = namespace_template or 'namespace.yaml'
+
+        # Mutable state
+        self.namespace: Optional[k8s.V1Namespace] = None
 
     def run(self, **kwargs):
-        raise NotImplementedError('Must be overridden')
+        if self.reuse_namespace:
+            self.namespace = self._reuse_namespace()
+        if not self.namespace:
+            self.namespace = self._create_namespace(
+                self.namespace_template,
+                namespace_name=self.k8s_namespace.name)
 
-    def cleanup(self):
-        raise NotImplementedError('Must be overridden')
+    def cleanup(self, *, force=False):
+        if (self.namespace and not self.reuse_namespace) or force:
+            self._delete_namespace()
+            self.namespace = None
 
     @staticmethod
     def _render_template(template_file, **kwargs):
@@ -101,6 +115,41 @@ class KubernetesBaseRunner:
         # todo(sergiitk): check if good or must be recreated
         return service
 
+    def _reuse_namespace(self) -> k8s.V1Namespace:
+        return self.k8s_namespace.get()
+
+    def _create_namespace(self, template, **kwargs) -> k8s.V1Namespace:
+        namespace = self._create_from_template(template, **kwargs)
+        if not isinstance(namespace, k8s.V1Namespace):
+            raise RunnerError('Expected V1Namespace to be created '
+                              f'from manifest {template}')
+        if namespace.metadata.name != kwargs['namespace_name']:
+            raise RunnerError(
+                'Namespace created with unexpected name: '
+                f'{namespace.metadata.name}')
+        logger.info('Deployment %s created at %s',
+                    namespace.metadata.self_link,
+                    namespace.metadata.creation_timestamp)
+        return namespace
+
+    def _create_service_account(
+        self,
+        template,
+        **kwargs
+    ) -> k8s.V1ServiceAccount:
+        resource = self._create_from_template(template, **kwargs)
+        if not isinstance(resource, k8s.V1ServiceAccount):
+            raise RunnerError('Expected V1ServiceAccount to be created '
+                              f'from manifest {template}')
+        if resource.metadata.name != kwargs['service_account_name']:
+            raise RunnerError(
+                'V1ServiceAccount created with unexpected name: '
+                f'{resource.metadata.name}')
+        logger.info('V1ServiceAccount %s created at %s',
+                    resource.metadata.self_link,
+                    resource.metadata.creation_timestamp)
+        return resource
+
     def _create_deployment(self, template, **kwargs) -> k8s.V1Deployment:
         deployment = self._create_from_template(template, **kwargs)
         if not isinstance(deployment, k8s.V1Deployment):
@@ -130,16 +179,52 @@ class KubernetesBaseRunner:
         return service
 
     def _delete_deployment(self, name, wait_for_deletion=True):
-        self.k8s_namespace.delete_deployment(name)
+        try:
+            self.k8s_namespace.delete_deployment(name)
+        except k8s.ApiException as e:
+            logger.info('Deployment %s deletion failed, error: %s %s',
+                        name, e.status, e.reason)
+            return
+
         if wait_for_deletion:
             self.k8s_namespace.wait_for_deployment_deleted(name)
         logger.info('Deployment %s deleted', name)
 
     def _delete_service(self, name, wait_for_deletion=True):
-        self.k8s_namespace.delete_service(name)
+        try:
+            self.k8s_namespace.delete_service(name)
+        except k8s.ApiException as e:
+            logger.info('Service %s deletion failed, error: %s %s',
+                        name, e.status, e.reason)
+            return
+
         if wait_for_deletion:
             self.k8s_namespace.wait_for_service_deleted(name)
         logger.info('Service %s deleted', name)
+
+    def _delete_service_account(self, name, wait_for_deletion=True):
+        try:
+            self.k8s_namespace.delete_service_account(name)
+        except k8s.ApiException as e:
+            logger.info('Service account %s deletion failed, error: %s %s',
+                        name, e.status, e.reason)
+            return
+
+        if wait_for_deletion:
+            self.k8s_namespace.wait_for_service_account_deleted(name)
+        logger.info('Service account %s deleted', name)
+
+    def _delete_namespace(self, wait_for_deletion=True):
+        try:
+            self.k8s_namespace.delete()
+        except k8s.ApiException as e:
+            logger.info('Namespace %s deletion failed, error: %s %s',
+                        self.k8s_namespace.name, e.status, e.reason)
+            return
+
+        if wait_for_deletion:
+            self.k8s_namespace.wait_for_namespace_deleted()
+        logger.info('Namespace %s deleted', self.k8s_namespace.name)
 
     def _wait_deployment_with_available_replicas(self, name, count=1, **kwargs):
         logger.info('Waiting for deployment %s to have %s available replicas',

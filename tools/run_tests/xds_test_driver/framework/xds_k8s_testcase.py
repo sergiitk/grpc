@@ -28,17 +28,25 @@ logger = logging.getLogger(__name__)
 # Flags
 _PROJECT = flags.DEFINE_string(
     "project", default=None, help="GCP Project ID, required")
-_KUBE_CONTEXT_NAME = flags.DEFINE_string(
-    "kube_context_name", default=None, help="Kubectl context to use")
 _NAMESPACE = flags.DEFINE_string(
     "namespace", default=None,
     help="Isolate GCP resources using given namespace / name prefix")
+_KUBE_CONTEXT_NAME = flags.DEFINE_string(
+    "kube_context_name", default=None, help="Kubectl context to use")
+_GCP_SERVICE_ACCOUNT = flags.DEFINE_string(
+    "gcp_service_account", default=None,
+    help="GCP Service account for GKE workloads to impersonate")
 _NETWORK = flags.DEFINE_string(
     "network", default="default", help="GCP Network ID")
 _CLIENT_PORT_FORWARDING = flags.DEFINE_bool(
     "client_debug_use_port_forwarding", default=False,
     help="Development only: use kubectl port-forward to connect to test client")
-flags.mark_flags_as_required(["project", "namespace"])
+flags.mark_flags_as_required([
+    "project",
+    "namespace",
+    "gcp_service_account",
+    "kube_context_name"
+])
 # Type aliases
 XdsTestServer = xds_test_app.server.XdsTestServer
 XdsTestClient = xds_test_app.client.XdsTestClient

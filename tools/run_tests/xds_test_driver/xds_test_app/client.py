@@ -90,7 +90,7 @@ class KubernetesClientRunner(base_runner.KubernetesBaseRunner):
         self.deployment = self._create_deployment(
             self.deployment_template,
             deployment_name=self.deployment_name,
-            namespace=self.k8s_namespace.name,
+            namespace_name=self.k8s_namespace.name,
             stats_port=self.stats_port,
             network_name=self.network,
             server_address=server_address,

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # Copyright 2016 gRPC authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,8 +16,8 @@ import logging
 from absl import app
 from absl import flags
 
-from infrastructure import gcp
-from infrastructure import traffic_director
+from infrastructure import k8s
+import xds_test_app.server
 
 logger = logging.getLogger(__name__)
 # Flags
@@ -27,48 +26,45 @@ _PROJECT = flags.DEFINE_string(
 _NAMESPACE = flags.DEFINE_string(
     "namespace", default=None,
     help="Isolate GCP resources using given namespace / name prefix")
-_SERVER_XDS_HOST = flags.DEFINE_string(
-    "server_xds_host", default='xds-test-server',
-    help="Test server xDS hostname")
-_SERVER_XDS_PORT = flags.DEFINE_integer(
-    "server_xds_port", default=8000, help="Test server xDS port")
+_KUBE_CONTEXT_NAME = flags.DEFINE_string(
+    "kube_context_name", default=None, help="Kubectl context to use")
+_GCP_SERVICE_ACCOUNT = flags.DEFINE_string(
+    "gcp_service_account", default=None,
+    help="GCP Service account for GKE workloads to impersonate")
 _NETWORK = flags.DEFINE_string(
     "network", default="default", help="GCP Network ID")
+_SERVER_NAME = flags.DEFINE_string(
+    "server_name", default="psm-grpc-server",
+    help="Server deployment and service name")
 _MODE = flags.DEFINE_enum(
-    'mode', default='full', enum_values=['full', 'create', 'cleanup'],
+    'mode', default='run', enum_values=['run', 'cleanup'],
     help='Run mode.')
-flags.mark_flags_as_required(["project", "namespace"])
+flags.mark_flags_as_required([
+    "project",
+    "namespace",
+    "gcp_service_account",
+    "kube_context_name"
+])
 
 
 def main(argv):
     if len(argv) > 1:
         raise app.UsageError('Too many command-line arguments.')
 
-    gcp_api_manager = gcp.GcpApiManager()
-    gcloud = gcp.GCloud(gcp_api_manager, _PROJECT.value)
-    td = traffic_director.TrafficDirectorManager(
-        gcloud, namespace=_NAMESPACE.value, network=_NETWORK.value)
+    k8s_api_manager = k8s.KubernetesApiManager(_KUBE_CONTEXT_NAME.value)
+    server_runner = xds_test_app.server.KubernetesServerRunner(
+        k8s.KubernetesNamespace(k8s_api_manager, _NAMESPACE.value),
+        deployment_name=_SERVER_NAME.value,
+        network=_NETWORK.value,
+        gcp_service_account=_GCP_SERVICE_ACCOUNT.name,
+        reuse_namespace=True)
 
-    def create_all():
-        td.setup_for_grpc(
-            f'{_NAMESPACE.value}-{_SERVER_XDS_HOST.value}',
-            _SERVER_XDS_PORT.value)
-
-    def delete_all():
-        td.cleanup(force=True)
-
-    if _MODE.value == 'create':
-        logger.info('Create-only mode')
-        create_all()
+    if _MODE.value == 'run':
+        logger.info('Run server')
+        server_runner.run()
     elif _MODE.value == 'cleanup':
-        logger.info('Cleanup mode')
-        delete_all()
-    else:
-        try:
-            create_all()
-            logger.info('Works!')
-        finally:
-            delete_all()
+        logger.info('Cleanup server')
+        server_runner.cleanup(force=True)
 
 
 if __name__ == '__main__':

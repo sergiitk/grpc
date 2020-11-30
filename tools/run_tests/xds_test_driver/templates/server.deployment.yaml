@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ${deployment_name}
-  namespace: ${namespace}
+  namespace: ${namespace_name}
   labels:
     app: ${deployment_name}
 spec:
@@ -15,7 +15,7 @@ spec:
       labels:
         app: ${deployment_name}
     spec:
-      serviceAccountName: ${deployment_name}
+      serviceAccountName: ${service_account_name}
       containers:
       - name: ${deployment_name}
         image: gcr.io/grpc-testing/xds-gke-interop-server-java-sergii-test:latest

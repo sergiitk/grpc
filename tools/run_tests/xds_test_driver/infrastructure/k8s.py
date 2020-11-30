@@ -26,9 +26,12 @@ from kubernetes import utils
 logger = logging.getLogger(__name__)
 # Type aliases
 V1Deployment = client.V1Deployment
+V1ServiceAccount = client.V1ServiceAccount
 V1Pod = client.V1Pod
 V1PodList = client.V1PodList
 V1Service = client.V1Service
+V1Namespace = client.V1Namespace
+ApiException = client.ApiException
 
 
 def simple_resource_get(func):
@@ -76,6 +79,7 @@ class PortForwardingError(Exception):
 class KubernetesNamespace:
     NEG_STATUS_META = 'cloud.google.com/neg-status'
     PORT_FORWARD_LOCAL_ADDRESS: str = '127.0.0.1'
+    DELETE_GRACE_PERIOD_SEC: int = 5
 
     def __init__(self, api: KubernetesApiManager, name: str):
         self.name = name
@@ -89,9 +93,39 @@ class KubernetesNamespace:
     def get_service(self, name) -> V1Service:
         return self.api.core.read_namespaced_service(name, self.name)
 
-    def delete_service(self, name, grace_period_seconds=5):
+    @simple_resource_get
+    def get_service_account(self, name) -> V1Service:
+        return self.api.core.read_namespaced_service_account(name, self.name)
+
+    def delete_service(
+        self,
+        name,
+        grace_period_seconds=DELETE_GRACE_PERIOD_SEC
+    ):
         self.api.core.delete_namespaced_service(
             name=name, namespace=self.name,
+            body=client.V1DeleteOptions(
+                propagation_policy='Foreground',
+                grace_period_seconds=grace_period_seconds))
+
+    def delete_service_account(
+        self,
+        name,
+        grace_period_seconds=DELETE_GRACE_PERIOD_SEC
+    ):
+        self.api.core.delete_namespaced_service_account(
+            name=name, namespace=self.name,
+            body=client.V1DeleteOptions(
+                propagation_policy='Foreground',
+                grace_period_seconds=grace_period_seconds))
+
+    @simple_resource_get
+    def get(self) -> V1Namespace:
+        return self.api.core.read_namespace(self.name)
+
+    def delete(self, grace_period_seconds=DELETE_GRACE_PERIOD_SEC):
+        self.api.core.delete_namespace(
+            name=self.name,
             body=client.V1DeleteOptions(
                 propagation_policy='Foreground',
                 grace_period_seconds=grace_period_seconds))
@@ -108,6 +142,32 @@ class KubernetesNamespace:
                             service.metadata.name)
             return service
         _wait_for_deleted_service_with_retry()
+
+    def wait_for_service_account_deleted(self, name: str,
+                                         timeout_sec=60, wait_sec=1):
+        @retrying.retry(retry_on_result=lambda r: r is not None,
+                        stop_max_delay=timeout_sec * 1000,
+                        wait_fixed=wait_sec * 1000)
+        def _wait_for_deleted_service_account_with_retry():
+            service_account = self.get_service_account(name)
+            if service_account is not None:
+                logger.info('Waiting for service account %s to be deleted',
+                            service_account.metadata.name)
+            return service_account
+        _wait_for_deleted_service_account_with_retry()
+
+    def wait_for_namespace_deleted(self,
+                                   timeout_sec=120, wait_sec=2):
+        @retrying.retry(retry_on_result=lambda r: r is not None,
+                        stop_max_delay=timeout_sec * 1000,
+                        wait_fixed=wait_sec * 1000)
+        def _wait_for_deleted_namespace_with_retry():
+            namespace = self.get()
+            if namespace is not None:
+                logger.info('Waiting for namespace %s to be deleted',
+                            namespace.metadata.name)
+            return namespace
+        _wait_for_deleted_namespace_with_retry()
 
     def wait_for_service_neg(self, name: str,
                              timeout_sec=60, wait_sec=1):
@@ -139,7 +199,11 @@ class KubernetesNamespace:
     def get_deployment(self, name) -> V1Deployment:
         return self.api.apps.read_namespaced_deployment(name, self.name)
 
-    def delete_deployment(self, name, grace_period_seconds=5):
+    def delete_deployment(
+        self,
+        name,
+        grace_period_seconds=DELETE_GRACE_PERIOD_SEC
+    ):
         self.api.apps.delete_namespaced_deployment(
             name=name, namespace=self.name,
             body=client.V1DeleteOptions(

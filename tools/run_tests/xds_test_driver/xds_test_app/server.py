@@ -60,41 +60,57 @@ class ServerRunError(Exception):
 
 
 class KubernetesServerRunner(base_runner.KubernetesBaseRunner):
-    k8s_namespace: k8s.KubernetesNamespace
-    deployment: Optional[k8s.V1Deployment]
-
     def __init__(self,
                  k8s_namespace,
                  deployment_name,
+                 gcp_service_account,
                  *,
+                 service_account_name=None,
                  service_name=None,
                  network='default',
                  deployment_template='server.deployment.yaml',
+                 service_account_template='service-account.yaml',
                  service_template='server.service.yaml',
-                 debug_reuse_service=False):
-        super().__init__(k8s_namespace)
+                 reuse_service=False,
+                 reuse_namespace=False,
+                 namespace_template=None):
+        super().__init__(k8s_namespace, namespace_template, reuse_namespace)
 
         # Settings
         self.deployment_name = deployment_name
+        self.gcp_service_account = gcp_service_account
+        self.service_account_name = service_account_name or deployment_name
         self.service_name = service_name or deployment_name
         self.network = network
         self.deployment_template = deployment_template
+        self.service_account_template = service_account_template
         self.service_template = service_template
-        self.debug_reuse_service = debug_reuse_service
+        self.reuse_service = reuse_service
 
         # Mutable state
-        self.service = None
-        self.deployment = None
+        self.deployment: Optional[k8s.V1Deployment] = None
+        self.service_account: Optional[k8s.V1ServiceAccount] = None
+        self.service: Optional[k8s.V1Service] = None
 
     def run(self, *,
             test_port=8080, maintenance_port=8080,
             secure_mode=False, server_id=None,
             replica_count=1) -> XdsTestServer:
+        super().run()
+
+        # Create service account
+        self.service_account = self._create_service_account(
+            self.service_account_template,
+            service_account_name=self.service_account_name,
+            namespace_name=self.k8s_namespace.name,
+            gcp_service_account=self.gcp_service_account)
+
         # Always create a new deployment
         self.deployment = self._create_deployment(
             self.deployment_template,
             deployment_name=self.deployment_name,
-            namespace=self.k8s_namespace.name,
+            namespace_name=self.k8s_namespace.name,
+            service_account_name=self.service_account_name,
             replica_count=replica_count,
             test_port=test_port,
             maintenance_port=maintenance_port,
@@ -111,13 +127,13 @@ class KubernetesServerRunner(base_runner.KubernetesBaseRunner):
 
         # Reuse existing if requested, create a new deployment when missing.
         # Useful for debugging to avoid NEG loosing relation to deleted service.
-        if self.debug_reuse_service:
+        if self.reuse_service:
             self.service = self._reuse_service(self.service_name)
         if not self.service:
             self.service = self._create_service(
                 self.service_template,
                 service_name=self.service_name,
-                namespace=self.k8s_namespace.name,
+                namespace_name=self.k8s_namespace.name,
                 deployment_name=self.deployment_name,
                 test_port=test_port,
                 # todo(sergiitk): expose maintenance_port via service
@@ -127,10 +143,14 @@ class KubernetesServerRunner(base_runner.KubernetesBaseRunner):
         return XdsTestServer(test_port, maintenance_port, secure_mode,
                              server_id)
 
-    def cleanup(self):
-        if self.deployment:
+    def cleanup(self, *, force=False):
+        if self.deployment or force:
             self._delete_deployment(self.deployment_name)
             self.deployment = None
-        if self.service and not self.debug_reuse_service:
+        if (self.service and not self.reuse_service) or force:
             self._delete_service(self.service_name)
             self.service = None
+        if self.service_account or force:
+            self._delete_service_account(self.service_account_name)
+            self.service_account = None
+        super().cleanup(force=force)
