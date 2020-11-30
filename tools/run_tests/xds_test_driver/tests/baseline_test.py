@@ -12,10 +12,8 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 import logging
-import os
 import time
 
-import dotenv
 from absl import flags
 from absl.testing import absltest
 
@@ -36,10 +34,18 @@ _NAMESPACE = flags.DEFINE_string(
     help="Isolate GCP resources using given namespace / name prefix")
 _NETWORK = flags.DEFINE_string(
     "network", default="default", help="GCP Network ID")
+_CLIENT_PORT_FORWARDING = flags.DEFINE_bool(
+    "client_debug_use_port_forwarding", default=False,
+    help="Development only: use kubectl port-forward to connect to test client")
 flags.mark_flags_as_required(["project", "namespace"])
 
 
 class BaselineTest(absltest.TestCase):
+    CLIENT_NAME = 'psm-grpc-client'
+    SERVER_NAME = 'psm-grpc-server'
+    SERVER_XDS_HOST = 'xds-test-server'
+    SERVER_XDS_PORT = 8000
+
     @classmethod
     def setUpClass(cls):
         # GCP
@@ -50,30 +56,12 @@ class BaselineTest(absltest.TestCase):
         # todo(sergiitk): generate for each test
         cls.namespace: str = _NAMESPACE.value
 
-        # K8s
-        cls.k8s_context_name = _KUBE_CONTEXT_NAME.value
-
         # todo(sergiitk): move to args
-        dotenv.load_dotenv()
         # Client
-        cls.client_name = os.environ['CLIENT_NAME']
-        cls.client_debug_use_port_forwarding = bool(
-            os.getenv('CLIENT_DEBUG_USE_PORT_FORWARDING', False))
-
-        # Server
-        cls.server_name = os.environ['SERVER_NAME']
-        cls.server_test_port = os.environ['SERVER_TEST_PORT']
-        cls.server_maintenance_port = os.environ['SERVER_MAINTENANCE_PORT']
-        cls.server_replica_count = int(os.environ['SERVER_REPLICA_COUNT'])
-        cls.server_debug_reuse_service = bool(
-            os.getenv('SERVER_DEBUG_REUSE_SERVICE', False))
-
-        # Server xDS settings
-        cls.server_xds_host = os.environ['SERVER_XDS_HOST']
-        cls.server_xds_port = os.environ['SERVER_XDS_PORT']
+        cls.client_debug_use_port_forwarding = _CLIENT_PORT_FORWARDING.value
 
         # Shared services
-        cls.k8s_api_manager = k8s.KubernetesApiManager(cls.k8s_context_name)
+        cls.k8s_api_manager = k8s.KubernetesApiManager(_KUBE_CONTEXT_NAME.value)
         cls.gcp_api_manager = gcp.GcpApiManager()
         cls.gcloud = gcp.GCloud(cls.gcp_api_manager, cls.project)
         cls.compute = cls.gcloud.compute
@@ -96,16 +84,15 @@ class BaselineTest(absltest.TestCase):
         # Test Client Runner
         self.client_runner = xds_test_app.client.KubernetesClientRunner(
             k8s.KubernetesNamespace(self.k8s_api_manager, client_namespace),
-            self.client_name,
+            self.CLIENT_NAME,
             network=self.network,
             debug_use_port_forwarding=self.client_debug_use_port_forwarding)
 
         # Test Server Runner
         self.server_runner = xds_test_app.server.KubernetesServerRunner(
             k8s.KubernetesNamespace(self.k8s_api_manager, server_namespace),
-            deployment_name=self.server_name,
-            network=self.network,
-            debug_reuse_service=self.server_debug_reuse_service)
+            deployment_name=self.SERVER_NAME,
+            network=self.network)
 
     def tearDown(self):
         logger.debug('######## tearDown(): resource cleanup initiated ########')
@@ -115,17 +102,16 @@ class BaselineTest(absltest.TestCase):
 
     def test_ping_pong(self):
         # Traffic Director
-        self.td.setup_for_grpc(self.server_xds_host, self.server_xds_port)
+        self.td.setup_for_grpc(self.SERVER_XDS_HOST, self.SERVER_XDS_PORT)
 
         # Start test server
-        test_server = self.server_runner.run(
-            test_port=self.server_test_port,
-            replica_count=self.server_replica_count)
-        test_server.xds_address = (self.server_xds_host, self.server_xds_port)
+        server_replica_count = 1
+        test_server = self.server_runner.run(replica_count=server_replica_count)
+        test_server.xds_address = (self.SERVER_XDS_HOST, self.SERVER_XDS_PORT)
 
         # Load Backends
         neg_name, neg_zones = self.server_runner.k8s_namespace.get_service_neg(
-            self.server_runner.service_name, self.server_test_port)
+            self.server_runner.service_name, test_server.port)
 
         logger.info('Loading NEGs')
         for neg_zone in neg_zones:
@@ -157,7 +143,7 @@ class BaselineTest(absltest.TestCase):
         self.assertFailedRpcsAtMost(stats_response, 0)
 
     def test_true(self):
-        # Sanity check for infrastructure creation
+        # Sanity check for setUp() / tearDown() hooks
         self.assertEqual(True, True)
 
     def assertAllBackendsReceivedRpcs(self, stats_response):

@@ -124,7 +124,8 @@ class KubernetesServerRunner(base_runner.KubernetesBaseRunner):
                 maintenance_port=maintenance_port)
 
         self._wait_service_neg(self.service_name, test_port)
-        return XdsTestServer(test_port, maintenance_port, secure_mode, server_id)
+        return XdsTestServer(test_port, maintenance_port, secure_mode,
+                             server_id)
 
     def cleanup(self):
         if self.deployment:

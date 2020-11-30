@@ -24,12 +24,12 @@ BackendServiceProtocol = gcp.ComputeV1.BackendServiceProtocol
 
 
 class TrafficDirectorManager:
-    BACKEND_SERVICE_DEFAULT_NAME = "backend-service"
-    HEALTH_CHECK_DEFAULT_NAME = "health-check"
-    URL_MAP_DEFAULT_NAME = "url-map"
-    URL_MAP_PATH_MATCHER_DEFAULT_NAME = "path-matcher"
-    TARGET_PROXY_DEFAULT_NAME = "target-proxy"
-    FORWARDING_RULE_DEFAULT_NAME = "forwarding-rule"
+    BACKEND_SERVICE_NAME = "backend-service"
+    HEALTH_CHECK_NAME = "health-check"
+    URL_MAP_NAME = "url-map"
+    URL_MAP_PATH_MATCHER_NAME = "path-matcher"
+    TARGET_PROXY_NAME = "target-proxy"
+    FORWARDING_RULE_NAME = "forwarding-rule"
 
     def __init__(self, gcloud: gcp.GCloud, namespace: str, network='default'):
         # self.gcloud: gcp.GCloud = gcloud
@@ -73,7 +73,7 @@ class TrafficDirectorManager:
         if self.health_check:
             raise ValueError('Health check %s already created, delete it first',
                              self.health_check.name)
-        name = self._ns_name(self.HEALTH_CHECK_DEFAULT_NAME)
+        name = self._ns_name(self.HEALTH_CHECK_NAME)
         logger.info('Creating %s Health Check %s', protocol.name, name)
         if protocol is HealthCheckProtocol.TCP:
             resource = self.compute.create_health_check_tcp(
@@ -84,7 +84,7 @@ class TrafficDirectorManager:
 
     def delete_health_check(self, force=False):
         if force:
-            name = self._ns_name(self.HEALTH_CHECK_DEFAULT_NAME)
+            name = self._ns_name(self.HEALTH_CHECK_NAME)
         elif self.health_check:
             name = self.health_check.name
         else:
@@ -97,7 +97,7 @@ class TrafficDirectorManager:
         self,
         protocol: BackendServiceProtocol = BackendServiceProtocol.GRPC
     ):
-        name = self._ns_name(self.BACKEND_SERVICE_DEFAULT_NAME)
+        name = self._ns_name(self.BACKEND_SERVICE_NAME)
         logger.info('Creating %s Backend Service %s', protocol.name, name)
         resource = self.compute.create_backend_service_traffic_director(
             name, health_check=self.health_check, protocol=protocol)
@@ -105,7 +105,7 @@ class TrafficDirectorManager:
 
     def delete_backend_service(self, force=False):
         if force:
-            name = self._ns_name(self.BACKEND_SERVICE_DEFAULT_NAME)
+            name = self._ns_name(self.BACKEND_SERVICE_NAME)
         elif self.backend_service:
             name = self.backend_service.name
         else:
@@ -133,8 +133,8 @@ class TrafficDirectorManager:
         src_port: int,
     ) -> gcp.GcpResource:
         src_address = f'{src_host}:{src_port}'
-        name = self._ns_name(self.URL_MAP_DEFAULT_NAME)
-        matcher_name = self._ns_name(self.URL_MAP_PATH_MATCHER_DEFAULT_NAME)
+        name = self._ns_name(self.URL_MAP_NAME)
+        matcher_name = self._ns_name(self.URL_MAP_PATH_MATCHER_NAME)
         logger.info('Creating URL map %s %s -> %s',
                     name, src_address, self.backend_service.name)
         resource = self.compute.create_url_map(
@@ -144,7 +144,7 @@ class TrafficDirectorManager:
 
     def delete_url_map(self, force=False):
         if force:
-            name = self._ns_name(self.URL_MAP_DEFAULT_NAME)
+            name = self._ns_name(self.URL_MAP_NAME)
         elif self.url_map:
             name = self.url_map.name
         else:
@@ -155,7 +155,7 @@ class TrafficDirectorManager:
 
     def create_target_grpc_proxy(self):
         # todo: different kinds
-        name = self._ns_name(self.TARGET_PROXY_DEFAULT_NAME)
+        name = self._ns_name(self.TARGET_PROXY_NAME)
         logger.info('Creating target proxy %s to url map %s',
                     name, self.url_map.name)
         resource = self.compute.create_target_grpc_proxy(
@@ -164,7 +164,7 @@ class TrafficDirectorManager:
 
     def delete_target_grpc_proxy(self, force=False):
         if force:
-            name = self._ns_name(self.TARGET_PROXY_DEFAULT_NAME)
+            name = self._ns_name(self.TARGET_PROXY_NAME)
         elif self.target_proxy:
             name = self.target_proxy.name
         else:
@@ -174,7 +174,7 @@ class TrafficDirectorManager:
         self.target_proxy = None
 
     def create_forwarding_rule(self, src_port: int):
-        name = self._ns_name(self.FORWARDING_RULE_DEFAULT_NAME)
+        name = self._ns_name(self.FORWARDING_RULE_NAME)
         src_port = int(src_port)
         logging.info('Creating forwarding rule %s 0.0.0.0:%s -> %s in %s',
                      name, src_port, self.target_proxy.url, self.network)
@@ -185,7 +185,7 @@ class TrafficDirectorManager:
 
     def delete_forwarding_rule(self, force=False):
         if force:
-            name = self._ns_name(self.FORWARDING_RULE_DEFAULT_NAME)
+            name = self._ns_name(self.FORWARDING_RULE_NAME)
         elif self.forwarding_rule:
             name = self.forwarding_rule.name
         else:
