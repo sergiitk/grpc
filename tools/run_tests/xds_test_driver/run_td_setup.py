@@ -17,27 +17,16 @@ import logging
 from absl import app
 from absl import flags
 
+from framework import xds_flags
 from infrastructure import gcp
 from infrastructure import traffic_director
 
 logger = logging.getLogger(__name__)
 # Flags
-_PROJECT = flags.DEFINE_string(
-    "project", default=None, help="GCP Project ID, required")
-_NAMESPACE = flags.DEFINE_string(
-    "namespace", default=None,
-    help="Isolate GCP resources using given namespace / name prefix")
-_SERVER_XDS_HOST = flags.DEFINE_string(
-    "server_xds_host", default='xds-test-server',
-    help="Test server xDS hostname")
-_SERVER_XDS_PORT = flags.DEFINE_integer(
-    "server_xds_port", default=8000, help="Test server xDS port")
-_NETWORK = flags.DEFINE_string(
-    "network", default="default", help="GCP Network ID")
 _MODE = flags.DEFINE_enum(
     'mode', default='full', enum_values=['full', 'create', 'cleanup'],
     help='Run mode.')
-flags.mark_flags_as_required(["project", "namespace"])
+flags.adopt_module_key_flags(xds_flags)
 
 
 def main(argv):
@@ -45,14 +34,17 @@ def main(argv):
         raise app.UsageError('Too many command-line arguments.')
 
     gcp_api_manager = gcp.GcpApiManager()
-    gcloud = gcp.GCloud(gcp_api_manager, _PROJECT.value)
+    gcloud = gcp.GCloud(gcp_api_manager, xds_flags.PROJECT.value)
     td = traffic_director.TrafficDirectorManager(
-        gcloud, namespace=_NAMESPACE.value, network=_NETWORK.value)
+        gcloud,
+        namespace=xds_flags.NAMESPACE.value,
+        network=xds_flags.NETWORK.value)
 
     def create_all():
+
         td.setup_for_grpc(
-            f'{_NAMESPACE.value}-{_SERVER_XDS_HOST.value}',
-            _SERVER_XDS_PORT.value)
+            xds_flags.SERVER_XDS_HOST.value,
+            xds_flags.SERVER_XDS_PORT.value)
 
     def delete_all():
         td.cleanup(force=True)

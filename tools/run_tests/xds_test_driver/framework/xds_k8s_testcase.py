@@ -16,6 +16,7 @@ import time
 
 from absl.testing import absltest
 
+from framework import xds_flags
 from framework import xds_k8s_flags
 from infrastructure import k8s
 from infrastructure import gcp
@@ -33,25 +34,25 @@ XdsTestClient = xds_test_app.client.XdsTestClient
 class XdsKubernetesTestCase(absltest.TestCase):
     k8s_api_manager: k8s.KubernetesApiManager
     gcp_api_manager: gcp.GcpApiManager
-    SERVER_XDS_HOST = 'xds-test-server'
-    SERVER_XDS_PORT = 8000
 
     @classmethod
     def setUpClass(cls):
         # GCP
-        cls.project: str = xds_k8s_flags.PROJECT.value
-        cls.network: str = xds_k8s_flags.NETWORK.value
+        cls.project: str = xds_flags.PROJECT.value
+        cls.network: str = xds_flags.NETWORK.value
         cls.gcp_service_account: str = xds_k8s_flags.GCP_SERVICE_ACCOUNT.value
 
         # Base namespace
         # todo(sergiitk): generate for each test
-        cls.namespace: str = xds_k8s_flags.NAMESPACE.value
+        cls.namespace: str = xds_flags.NAMESPACE.value
 
         # todo(sergiitk): move to args
         # Test app
-        cls.server_name = xds_k8s_flags.SERVER_NAME.value
-        cls.server_port = xds_k8s_flags.SERVER_PORT.value
-        cls.client_name = xds_k8s_flags.CLIENT_NAME.value
+        cls.server_name = xds_flags.SERVER_NAME.value
+        cls.server_port = xds_flags.SERVER_PORT.value
+        cls.server_xds_host = xds_flags.SERVER_NAME.value
+        cls.server_xds_port = xds_flags.SERVER_XDS_PORT.value
+        cls.client_name = xds_flags.CLIENT_NAME.value
         cls.client_port_forwarding = xds_k8s_flags.CLIENT_PORT_FORWARDING.value
 
         # Shared services
@@ -102,7 +103,7 @@ class XdsKubernetesTestCase(absltest.TestCase):
         test_server = self.server_runner.run(
             replica_count=replica_count,
             test_port=self.server_port)
-        test_server.xds_address = (self.SERVER_XDS_HOST, self.SERVER_XDS_PORT)
+        test_server.xds_address = (self.server_xds_host, self.server_xds_port)
         return test_server
 
     def setupXdsForServer(self, test_server: XdsTestServer):
