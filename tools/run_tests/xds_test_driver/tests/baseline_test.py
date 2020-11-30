@@ -15,8 +15,9 @@ import logging
 import os
 import time
 
-from absl.testing import absltest
 import dotenv
+from absl import flags
+from absl.testing import absltest
 
 from infrastructure import k8s
 from infrastructure import gcp
@@ -25,21 +26,35 @@ import xds_test_app.client
 import xds_test_app.server
 
 logger = logging.getLogger(__name__)
+# Flags
+_PROJECT = flags.DEFINE_string(
+    "project", default=None, help="GCP Project ID, required")
+_KUBE_CONTEXT_NAME = flags.DEFINE_string(
+    "kube_context_name", default=None, help="Kubectl context to use")
+_NAMESPACE = flags.DEFINE_string(
+    "namespace", default=None,
+    help="Isolate GCP resources using given namespace / name prefix")
+_NETWORK = flags.DEFINE_string(
+    "network", default="default", help="GCP Network ID")
+flags.mark_flags_as_required(["project", "namespace"])
 
 
 class BaselineTest(absltest.TestCase):
     @classmethod
     def setUpClass(cls):
-        # todo(sergiitk): move to args
-        dotenv.load_dotenv()
         # GCP
-        cls.project: str = os.environ['PROJECT_ID']
-        cls.network: str = os.environ['NETWORK_NAME']
+        cls.project: str = _PROJECT.value
+        cls.network: str = _NETWORK.value
+
+        # Base namespace
+        # todo(sergiitk): generate for each test
+        cls.namespace: str = _NAMESPACE.value
 
         # K8s
-        cls.k8s_context_name = os.environ['KUBE_CONTEXT_NAME']
-        cls.k8s_namespace = os.environ['NAMESPACE']
+        cls.k8s_context_name = _KUBE_CONTEXT_NAME.value
 
+        # todo(sergiitk): move to args
+        dotenv.load_dotenv()
         # Client
         cls.client_name = os.environ['CLIENT_NAME']
         cls.client_debug_use_port_forwarding = bool(
@@ -57,15 +72,6 @@ class BaselineTest(absltest.TestCase):
         cls.server_xds_host = os.environ['SERVER_XDS_HOST']
         cls.server_xds_port = os.environ['SERVER_XDS_PORT']
 
-        # Backend service (Traffic Director)
-        cls.backend_service_name = os.environ['BACKEND_SERVICE_NAME']
-        cls.health_check_name: str = os.environ['HEALTH_CHECK_NAME']
-        cls.url_map_name: str = os.environ['URL_MAP_NAME']
-        cls.url_map_path_matcher_name: str = os.environ[
-            'URL_MAP_PATH_MATCHER_NAME']
-        cls.target_proxy_name: str = os.environ['TARGET_PROXY_NAME']
-        cls.forwarding_rule_name: str = os.environ['FORWARDING_RULE_NAME']
-
         # Shared services
         cls.k8s_api_manager = k8s.KubernetesApiManager(cls.k8s_context_name)
         cls.gcp_api_manager = gcp.GcpApiManager()
@@ -79,53 +85,42 @@ class BaselineTest(absltest.TestCase):
 
     def setUp(self):
         # todo(sergiitk): generate with run id
+        namespace = self.namespace
+        client_namespace = self.namespace
+        server_namespace = self.namespace
+
         # Traffic Director Configuration
         self.td = traffic_director.TrafficDirectorManager(
-            self.gcloud, network=self.network)
+            self.gcloud, network=self.network, namespace=namespace)
 
         # Test Client Runner
         self.client_runner = xds_test_app.client.KubernetesClientRunner(
-            k8s.KubernetesNamespace(self.k8s_api_manager, self.k8s_namespace),
+            k8s.KubernetesNamespace(self.k8s_api_manager, client_namespace),
             self.client_name,
             network=self.network,
             debug_use_port_forwarding=self.client_debug_use_port_forwarding)
 
         # Test Server Runner
         self.server_runner = xds_test_app.server.KubernetesServerRunner(
-            k8s.KubernetesNamespace(self.k8s_api_manager, self.k8s_namespace),
+            k8s.KubernetesNamespace(self.k8s_api_manager, server_namespace),
             deployment_name=self.server_name,
             network=self.network,
             debug_reuse_service=self.server_debug_reuse_service)
 
     def tearDown(self):
-        logger.debug(
-            '############# tearDown(): resource cleanup initiated ############')
-        self.td.delete_forwarding_rule(self.forwarding_rule_name)
-        self.td.delete_target_grpc_proxy(self.target_proxy_name)
-        self.td.delete_url_map(self.url_map_name)
-        self.td.delete_backend_service(self.backend_service_name)
-        self.td.delete_health_check(self.health_check_name)
-        # self.td.cleanup()
+        logger.debug('######## tearDown(): resource cleanup initiated ########')
+        self.td.cleanup()
         self.client_runner.cleanup()
         self.server_runner.cleanup()
 
     def test_ping_pong(self):
         # Traffic Director
-        self.td.create_health_check(self.health_check_name)
-        self.td.create_backend_service(self.backend_service_name)
-        self.td.create_url_map(self.url_map_name,
-                               self.url_map_path_matcher_name,
-                               self.server_xds_host,
-                               self.server_xds_port)
-        self.td.create_target_grpc_proxy(self.target_proxy_name)
-        self.td.create_forwarding_rule(self.forwarding_rule_name,
-                                       self.server_xds_port)
+        self.td.setup_for_grpc(self.server_xds_host, self.server_xds_port)
 
         # Start test server
         test_server = self.server_runner.run(
             test_port=self.server_test_port,
             replica_count=self.server_replica_count)
-        # todo(sergiitk): set from TD?
         test_server.xds_address = (self.server_xds_host, self.server_xds_port)
 
         # Load Backends
@@ -161,9 +156,9 @@ class BaselineTest(absltest.TestCase):
         self.assertAllBackendsReceivedRpcs(stats_response)
         self.assertFailedRpcsAtMost(stats_response, 0)
 
-    # todo(sergiitk): bring back as a sanity check when td cleanup is better
-    # def test_zoo(self):
-    #     self.assertEqual('FOO', 'FOO')
+    def test_true(self):
+        # Sanity check for infrastructure creation
+        self.assertEqual(True, True)
 
     def assertAllBackendsReceivedRpcs(self, stats_response):
         # todo(sergiitk): assert backends length

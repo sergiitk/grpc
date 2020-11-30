@@ -55,7 +55,7 @@ def main(argv):
             _SERVER_XDS_PORT.value)
 
     def delete_all():
-        td.cleanup()
+        td.cleanup(force=True)
 
     if _MODE.value == 'create':
         logger.info('Create-only mode')

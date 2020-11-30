@@ -58,13 +58,13 @@ class TrafficDirectorManager:
         self.create_target_grpc_proxy()
         self.create_forwarding_rule(service_port)
 
-    def cleanup(self):
+    def cleanup(self, *, force=False):
         # Cleanup in the reverse order of creation
-        self.delete_forwarding_rule()
-        self.delete_target_grpc_proxy()
-        self.delete_url_map()
-        self.delete_backend_service()
-        self.delete_health_check()
+        self.delete_forwarding_rule(force=force)
+        self.delete_target_grpc_proxy(force=force)
+        self.delete_url_map(force=force)
+        self.delete_backend_service(force=force)
+        self.delete_health_check(force=force)
 
     def _ns_name(self, name):
         return f'{self.namespace}-{name}'
@@ -82,8 +82,13 @@ class TrafficDirectorManager:
             raise ValueError('Unexpected protocol')
         self.health_check = resource
 
-    def delete_health_check(self):
-        name = self._ns_name(self.HEALTH_CHECK_DEFAULT_NAME)
+    def delete_health_check(self, force=False):
+        if force:
+            name = self._ns_name(self.HEALTH_CHECK_DEFAULT_NAME)
+        elif self.health_check:
+            name = self.health_check.name
+        else:
+            return
         logger.info('Deleting Health Check %s', name)
         self.compute.delete_health_check(name)
         self.health_check = None
@@ -98,8 +103,13 @@ class TrafficDirectorManager:
             name, health_check=self.health_check, protocol=protocol)
         self.backend_service = resource
 
-    def delete_backend_service(self):
-        name = self._ns_name(self.BACKEND_SERVICE_DEFAULT_NAME)
+    def delete_backend_service(self, force=False):
+        if force:
+            name = self._ns_name(self.BACKEND_SERVICE_DEFAULT_NAME)
+        elif self.backend_service:
+            name = self.backend_service.name
+        else:
+            return
         logger.info('Deleting Backend Service %s', name)
         self.compute.delete_backend_service(name)
         self.backend_service = None
@@ -132,8 +142,13 @@ class TrafficDirectorManager:
         self.url_map = resource
         return resource
 
-    def delete_url_map(self):
-        name = self._ns_name(self.URL_MAP_DEFAULT_NAME)
+    def delete_url_map(self, force=False):
+        if force:
+            name = self._ns_name(self.URL_MAP_DEFAULT_NAME)
+        elif self.url_map:
+            name = self.url_map.name
+        else:
+            return
         logger.info('Deleting URL Map %s', name)
         self.compute.delete_url_map(name)
         self.url_map = None
@@ -147,9 +162,13 @@ class TrafficDirectorManager:
             name, self.url_map)
         self.target_proxy = resource
 
-    def delete_target_grpc_proxy(self):
-        # todo: different kinds
-        name = self._ns_name(self.TARGET_PROXY_DEFAULT_NAME)
+    def delete_target_grpc_proxy(self, force=False):
+        if force:
+            name = self._ns_name(self.TARGET_PROXY_DEFAULT_NAME)
+        elif self.target_proxy:
+            name = self.target_proxy.name
+        else:
+            return
         logger.info('Deleting Target proxy %s', name)
         self.compute.delete_target_grpc_proxy(name)
         self.target_proxy = None
@@ -164,8 +183,13 @@ class TrafficDirectorManager:
         self.forwarding_rule = resource
         return resource
 
-    def delete_forwarding_rule(self):
-        name = self._ns_name(self.FORWARDING_RULE_DEFAULT_NAME)
+    def delete_forwarding_rule(self, force=False):
+        if force:
+            name = self._ns_name(self.FORWARDING_RULE_DEFAULT_NAME)
+        elif self.forwarding_rule:
+            name = self.forwarding_rule.name
+        else:
+            return
         logger.info('Deleting Forwarding rule %s', name)
         self.compute.delete_forwarding_rule(name)
         self.forwarding_rule = None
