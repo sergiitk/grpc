@@ -67,6 +67,7 @@ class KubernetesServerRunner(base_runner.KubernetesBaseRunner):
                  *,
                  service_account_name=None,
                  service_name=None,
+                 neg_name=None,
                  network='default',
                  deployment_template='server.deployment.yaml',
                  service_account_template='service-account.yaml',
@@ -81,6 +82,10 @@ class KubernetesServerRunner(base_runner.KubernetesBaseRunner):
         self.gcp_service_account = gcp_service_account
         self.service_account_name = service_account_name or deployment_name
         self.service_name = service_name or deployment_name
+        # This only works in k8s >= 1.18.10-gke.600
+        # https://cloud.google.com/kubernetes-engine/docs/how-to/standalone-neg#naming_negs
+        self.neg_name = neg_name or (f'{self.k8s_namespace.name}-'
+                                     f'{self.service_name}')
         self.network = network
         self.deployment_template = deployment_template
         self.service_account_template = service_account_template
@@ -135,6 +140,7 @@ class KubernetesServerRunner(base_runner.KubernetesBaseRunner):
                 service_name=self.service_name,
                 namespace_name=self.k8s_namespace.name,
                 deployment_name=self.deployment_name,
+                neg_name=self.neg_name,
                 test_port=test_port,
                 # todo(sergiitk): expose maintenance_port via service
                 maintenance_port=maintenance_port)
