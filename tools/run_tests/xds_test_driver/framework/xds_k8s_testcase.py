@@ -13,11 +13,10 @@
 #  limitations under the License.
 import logging
 import time
-from typing import Optional
 
 from absl.testing import absltest
-from absl import flags
 
+from framework import xds_k8s_flags
 from infrastructure import k8s
 from infrastructure import gcp
 from infrastructure import traffic_director
@@ -25,57 +24,39 @@ import xds_test_app.client
 import xds_test_app.server
 
 logger = logging.getLogger(__name__)
-# Flags
-_PROJECT = flags.DEFINE_string(
-    "project", default=None, help="GCP Project ID, required")
-_NAMESPACE = flags.DEFINE_string(
-    "namespace", default=None,
-    help="Isolate GCP resources using given namespace / name prefix")
-_KUBE_CONTEXT_NAME = flags.DEFINE_string(
-    "kube_context_name", default=None, help="Kubectl context to use")
-_GCP_SERVICE_ACCOUNT = flags.DEFINE_string(
-    "gcp_service_account", default=None,
-    help="GCP Service account for GKE workloads to impersonate")
-_NETWORK = flags.DEFINE_string(
-    "network", default="default", help="GCP Network ID")
-_CLIENT_PORT_FORWARDING = flags.DEFINE_bool(
-    "client_debug_use_port_forwarding", default=False,
-    help="Development only: use kubectl port-forward to connect to test client")
-flags.mark_flags_as_required([
-    "project",
-    "namespace",
-    "gcp_service_account",
-    "kube_context_name"
-])
+
 # Type aliases
 XdsTestServer = xds_test_app.server.XdsTestServer
 XdsTestClient = xds_test_app.client.XdsTestClient
 
 
 class XdsKubernetesTestCase(absltest.TestCase):
-    k8s_api_manager: Optional[k8s.KubernetesApiManager] = None
-    gcp_api_manager: Optional[gcp.GcpApiManager] = None
-    CLIENT_NAME = 'psm-grpc-client'
-    SERVER_NAME = 'psm-grpc-server'
+    k8s_api_manager: k8s.KubernetesApiManager
+    gcp_api_manager: gcp.GcpApiManager
     SERVER_XDS_HOST = 'xds-test-server'
     SERVER_XDS_PORT = 8000
 
     @classmethod
     def setUpClass(cls):
         # GCP
-        cls.project: str = _PROJECT.value
-        cls.network: str = _NETWORK.value
+        cls.project: str = xds_k8s_flags.PROJECT.value
+        cls.network: str = xds_k8s_flags.NETWORK.value
+        cls.gcp_service_account: str = xds_k8s_flags.GCP_SERVICE_ACCOUNT.value
 
         # Base namespace
         # todo(sergiitk): generate for each test
-        cls.namespace: str = _NAMESPACE.value
+        cls.namespace: str = xds_k8s_flags.NAMESPACE.value
 
         # todo(sergiitk): move to args
-        # Client
-        cls.client_debug_use_port_forwarding = _CLIENT_PORT_FORWARDING.value
+        # Test app
+        cls.server_name = xds_k8s_flags.SERVER_NAME.value
+        cls.server_port = xds_k8s_flags.SERVER_PORT.value
+        cls.client_name = xds_k8s_flags.CLIENT_NAME.value
+        cls.client_port_forwarding = xds_k8s_flags.CLIENT_PORT_FORWARDING.value
 
         # Shared services
-        cls.k8s_api_manager = k8s.KubernetesApiManager(_KUBE_CONTEXT_NAME.value)
+        cls.k8s_api_manager = k8s.KubernetesApiManager(
+            xds_k8s_flags.KUBE_CONTEXT_NAME.value)
         cls.gcp_api_manager = gcp.GcpApiManager()
         cls.gcloud = gcp.GCloud(cls.gcp_api_manager, cls.project)
         cls.compute = cls.gcloud.compute
@@ -98,17 +79,17 @@ class XdsKubernetesTestCase(absltest.TestCase):
         # Test Server Runner
         self.server_runner = xds_test_app.server.KubernetesServerRunner(
             k8s.KubernetesNamespace(self.k8s_api_manager, server_namespace),
-            gcp_service_account=_GCP_SERVICE_ACCOUNT.value,
-            deployment_name=self.SERVER_NAME,
+            gcp_service_account=self.gcp_service_account,
+            deployment_name=self.server_name,
             network=self.network)
 
         # Test Client Runner
         self.client_runner = xds_test_app.client.KubernetesClientRunner(
             k8s.KubernetesNamespace(self.k8s_api_manager, client_namespace),
-            self.CLIENT_NAME,
-            gcp_service_account=_GCP_SERVICE_ACCOUNT.value,
+            self.client_name,
+            gcp_service_account=self.gcp_service_account,
             network=self.network,
-            debug_use_port_forwarding=self.client_debug_use_port_forwarding,
+            debug_use_port_forwarding=self.client_port_forwarding,
             reuse_namespace=True)
 
     def tearDown(self):
@@ -118,7 +99,9 @@ class XdsKubernetesTestCase(absltest.TestCase):
         self.server_runner.cleanup()
 
     def startTestServer(self, replica_count) -> XdsTestServer:
-        test_server = self.server_runner.run(replica_count=replica_count)
+        test_server = self.server_runner.run(
+            replica_count=replica_count,
+            test_port=self.server_port)
         test_server.xds_address = (self.SERVER_XDS_HOST, self.SERVER_XDS_PORT)
         return test_server
 

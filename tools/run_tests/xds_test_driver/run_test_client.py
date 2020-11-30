@@ -16,62 +16,37 @@ import logging
 from absl import app
 from absl import flags
 
+from framework import xds_k8s_flags
 from infrastructure import k8s
 import xds_test_app.client
 
 logger = logging.getLogger(__name__)
 # Flags
-_PROJECT = flags.DEFINE_string(
-    "project", default=None, help="GCP Project ID, required")
-_NAMESPACE = flags.DEFINE_string(
-    "namespace", default=None,
-    help="Isolate GCP resources using given namespace / name prefix")
-_KUBE_CONTEXT_NAME = flags.DEFINE_string(
-    "kube_context_name", default=None, help="Kubectl context to use")
-_GCP_SERVICE_ACCOUNT = flags.DEFINE_string(
-    "gcp_service_account", default=None,
-    help="GCP Service account for GKE workloads to impersonate")
-_NETWORK = flags.DEFINE_string(
-    "network", default="default", help="GCP Network ID")
-_CLIENT_NAME = flags.DEFINE_string(
-    "client_name", default="psm-grpc-client",
-    help="Client deployment and service name")
-_SERVER_NAME = flags.DEFINE_string(
-    "server_name", default="psm-grpc-server",
-    help="Server deployment and service name")
-_SERVER_PORT = flags.DEFINE_integer(
-    "server_port", default=8080,
-    help="Server test port")
-_CLIENT_PORT_FORWARDING = flags.DEFINE_bool(
-    "client_debug_use_port_forwarding", default=False,
-    help="Development only: use kubectl port-forward to connect to test client")
 _MODE = flags.DEFINE_enum(
     'mode', default='run', enum_values=['run', 'cleanup'],
     help='Run mode.')
-flags.mark_flags_as_required([
-    "project",
-    "namespace",
-    "gcp_service_account",
-    "kube_context_name"
-])
+flags.adopt_module_key_flags(xds_k8s_flags)
 
 
 def main(argv):
     if len(argv) > 1:
         raise app.UsageError('Too many command-line arguments.')
 
-    k8s_api_manager = k8s.KubernetesApiManager(_KUBE_CONTEXT_NAME.value)
+    k8s_api_manager = k8s.KubernetesApiManager(
+        xds_k8s_flags.KUBE_CONTEXT_NAME.value)
+
     client_runner = xds_test_app.client.KubernetesClientRunner(
-        k8s.KubernetesNamespace(k8s_api_manager, _NAMESPACE.value),
-        deployment_name=_CLIENT_NAME.value,
-        network=_NETWORK.value,
-        gcp_service_account=_GCP_SERVICE_ACCOUNT.name,
+        k8s.KubernetesNamespace(k8s_api_manager, xds_k8s_flags.NAMESPACE.value),
+        deployment_name=xds_k8s_flags.CLIENT_NAME.value,
+        network=xds_k8s_flags.NETWORK.value,
+        gcp_service_account=xds_k8s_flags.GCP_SERVICE_ACCOUNT.name,
         reuse_namespace=True)
 
     if _MODE.value == 'run':
         logger.info('Run client')
-        client_runner.run(
-            server_address=f'{_SERVER_NAME.value}:{_SERVER_PORT.value}')
+        server_service_address = (f'{xds_k8s_flags.SERVER_NAME.value}:'
+                                  f'{xds_k8s_flags.SERVER_PORT.value}')
+        client_runner.run(server_address=server_service_address)
     elif _MODE.value == 'cleanup':
         logger.info('Cleanup client')
         client_runner.cleanup(force=True)
