@@ -31,17 +31,19 @@ spec:
           - containerPort: ${stats_port}
         env:
         - name: GRPC_XDS_BOOTSTRAP
-          value: "/tmp/grpc-xds/secure-client.json"
+          value: "/tmp/grpc-xds/td-grpc-bootstrap.json"
         - name: GRPC_XDS_EXPERIMENTAL_SECURITY_SUPPORT
           value: "true"
         - name: GRPC_XDS_CERT_INSTANCE_OVERRIDE
           value: "true"
+        # Enable verbose logging
+        # - name: JAVA_OPTS
+        #   value: "-Djava.util.logging.config.file=./logging-debug.properties"
         volumeMounts:
         - mountPath: /var/run/gke-spiffe/certs
           name: gke-spiffe-certs-volume
           readOnly: true
-        - mountPath: /tmp/grpc-xds/secure-client.json
-          subPath: secure-client.json
+        - mountPath: /tmp/grpc-xds/
           name: grpc-td-conf
           readOnly: true
         resources:
@@ -51,10 +53,46 @@ spec:
           requests:
             cpu: 100m
             memory: 512Mi
+      initContainers:
+        - name: grpc-td-init
+          image: ${td_bootstrap_image}
+          imagePullPolicy: Always
+          args:
+            - "--output=/tmp/bootstrap/td-grpc-bootstrap.json"
+            - "--vpc-network-name=${network_name}"
+            - "--include-psm-security"
+          resources:
+            limits:
+              cpu: 100m
+              memory: 100Mi
+            requests:
+              cpu: 10m
+              memory: 100Mi
+          volumeMounts:
+            - mountPath: /tmp/bootstrap/
+              name: grpc-td-conf
+        - name: bootstrap-hack
+          image: alpine:latest
+          imagePullPolicy: Always
+          command:
+            - "sed"
+            - "-i"
+            - 's/${network_name}"/${network_name}",\n      "version": "production"/'
+            - "/tmp/grpc-xds/td-grpc-bootstrap.json"
+          resources:
+            limits:
+              cpu: 100m
+              memory: 100Mi
+            requests:
+              cpu: 10m
+              memory: 100Mi
+          volumeMounts:
+            - mountPath: /tmp/grpc-xds/
+              name: grpc-td-conf
       volumes:
         - name: gke-spiffe-certs-volume
           csi:
             driver: certs.spiffe.gke.io
         - name: grpc-td-conf
-          configMap:
-            name: td-grpc-bootstrap
+          emptyDir:
+            medium: Memory

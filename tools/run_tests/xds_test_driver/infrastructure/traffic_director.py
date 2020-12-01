@@ -134,6 +134,22 @@ class TrafficDirectorManager:
         self.compute.backend_service_add_backends(
             self.backend_service, self.backends)
 
+    def backend_service_apply_client_mtls_policy(
+        self,
+        client_policy_url,
+        server_spiffe
+    ):
+        logging.info('Adding Client mTls Policy to Backend Service %s: %s, '
+                     'server %s',
+                     self.backend_service.name,
+                     client_policy_url,
+                     server_spiffe)
+        self.compute.patch_backend_service(self.backend_service, {
+            'securitySettings': {
+                'clientTlsPolicy': client_policy_url,
+                'subjectAltNames': [server_spiffe]
+            }})
+
     def wait_for_backends_healthy_status(self):
         logger.debug(
             "Waiting for Backend Service %s to report all backends healthy %r",

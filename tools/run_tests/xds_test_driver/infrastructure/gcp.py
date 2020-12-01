@@ -143,6 +143,13 @@ class ComputeV1(Compute):
             'protocol': protocol.name,
         })
 
+    def patch_backend_service(self, backend_service, body, **kwargs):
+        self._patch_resource(
+            collection=self.api.backendServices(),
+            backendService=backend_service.name,
+            body=body,
+            **kwargs)
+
     def backend_service_add_backends(self, backend_service, backends):
         backend_list = [{
             'group': backend.url,

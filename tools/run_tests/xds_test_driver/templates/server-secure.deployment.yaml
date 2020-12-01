@@ -91,4 +91,3 @@ spec:
         - name: grpc-td-conf
           emptyDir:
             medium: Memory
-

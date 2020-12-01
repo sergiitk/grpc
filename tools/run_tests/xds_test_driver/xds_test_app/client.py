@@ -67,6 +67,7 @@ class KubernetesClientRunner(base_runner.KubernetesBaseRunner):
                  *,
                  service_account_name=None,
                  stats_port=8079,
+                 td_bootstrap_image=None,
                  network='default',
                  deployment_template='client.deployment.yaml',
                  service_account_template='service-account.yaml',
@@ -80,6 +81,8 @@ class KubernetesClientRunner(base_runner.KubernetesBaseRunner):
         self.gcp_service_account = gcp_service_account
         self.service_account_name = service_account_name or deployment_name
         self.stats_port = stats_port
+        # xDS bootstrap generator
+        self.td_bootstrap_image = td_bootstrap_image
         self.network = network
         self.deployment_template = deployment_template
         self.service_account_template = service_account_template
@@ -114,6 +117,7 @@ class KubernetesClientRunner(base_runner.KubernetesBaseRunner):
             server_address=server_address,
             rpc=rpc,
             qps=qps,
+            td_bootstrap_image=self.td_bootstrap_image,
             secure_mode=secure_mode)
 
         self._wait_deployment_with_available_replicas(self.deployment_name)

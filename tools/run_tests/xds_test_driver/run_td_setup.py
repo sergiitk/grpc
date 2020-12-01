@@ -42,6 +42,9 @@ def create_all(td, server_xds_host, server_xds_port, security_mode=None):
         logger.info('Setting up mtls')
         td.setup_for_grpc(server_xds_host, server_xds_port,
                           backend_protocol=BackendServiceProtocol.HTTP2)
+        td.backend_service_apply_client_mtls_policy(
+            'projects/grpc-testing/locations/global/clientTlsPolicies/client_mtls_policy',
+            'spiffe://grpc-testing.svc.id.goog/ns/sergii-psm-test/sa/psm-grpc-server')
 
 
 def delete_all(td, security_mode):
