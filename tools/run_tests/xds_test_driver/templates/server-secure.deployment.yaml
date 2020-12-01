@@ -34,8 +34,6 @@ spec:
           value: "true"
         - name: GRPC_XDS_CERT_INSTANCE_OVERRIDE
           value: "true"
-        - name: JAVA_OPTS
-          value: "-Djava.util.logging.config.file=./logging-debug.properties"
         volumeMounts:
         - mountPath: /var/run/gke-spiffe/certs
           name: gke-spiffe-certs-volume
@@ -74,7 +72,7 @@ spec:
           command:
             - "sed"
             - "-i"
-            - 's/default-vpc"/default-vpc",\n      "version": "production"/'
+            - 's/${network_name}"/${network_name}",\n      "version": "production"/'
             - "/tmp/grpc-xds/td-grpc-bootstrap.json"
           resources:
             limits:
