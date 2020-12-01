@@ -59,8 +59,6 @@ class XdsKubernetesTestCase(absltest.TestCase):
         cls.k8s_api_manager = k8s.KubernetesApiManager(
             xds_k8s_flags.KUBE_CONTEXT_NAME.value)
         cls.gcp_api_manager = gcp.GcpApiManager()
-        cls.gcloud = gcp.GCloud(cls.gcp_api_manager, cls.project)
-        cls.compute = cls.gcloud.compute
 
     @classmethod
     def tearDownClass(cls):
@@ -75,7 +73,10 @@ class XdsKubernetesTestCase(absltest.TestCase):
 
         # Traffic Director Configuration
         self.td = traffic_director.TrafficDirectorManager(
-            self.gcloud, network=self.network, namespace=namespace)
+            self.gcp_api_manager,
+            project=self.project,
+            resource_prefix=namespace,
+            network=self.network)
 
         # Test Server Runner
         self.server_runner = xds_test_app.server.KubernetesServerRunner(
@@ -99,10 +100,11 @@ class XdsKubernetesTestCase(absltest.TestCase):
         self.client_runner.cleanup()
         self.server_runner.cleanup()
 
-    def startTestServer(self, replica_count=1) -> XdsTestServer:
+    def startTestServer(self, replica_count=1, **kwargs) -> XdsTestServer:
         test_server = self.server_runner.run(
             replica_count=replica_count,
-            test_port=self.server_port)
+            test_port=self.server_port,
+            **kwargs)
         test_server.xds_address = (self.server_xds_host, self.server_xds_port)
         return test_server
 
@@ -114,29 +116,19 @@ class XdsKubernetesTestCase(absltest.TestCase):
         neg_name, neg_zones = self.server_runner.k8s_namespace.get_service_neg(
             self.server_runner.service_name, test_server.port)
 
-        logger.info('Loading NEGs')
-        for neg_zone in neg_zones:
-            backend = self.compute.wait_for_network_endpoint_group(
-                neg_name, neg_zone)
-            self.td.backends.add(backend)
+        self.td.backend_service_add_neg_backends(neg_name, neg_zones)
 
-        logger.info('Fake waiting before adding backends to avoid error '
-                    '400 RESOURCE_NOT_READY')
-        # todo(sergiitk): figure out how to confirm NEG is ready to be added
-        time.sleep(10)
-        self.td.backend_service_add_backends()
-        self.td.wait_for_backends_healthy_status()
-
-        # todo(sergiitk): wait until client reports rpc health
         logger.info('Wait for xDS to stabilize')
-        time.sleep(90)
+        # todo(sergiitk): wait until client reports rpc health
+        time.sleep(120)
 
     def startTestClientForServer(
         self,
-        test_server: XdsTestServer
+        test_server: XdsTestServer,
+        **kwargs
     ) -> XdsTestClient:
-        # todo(sergiitk): make rpc UnaryCall enum or get it from proto
-        test_client = self.client_runner.run(server_address=test_server.xds_uri)
+        test_client = self.client_runner.run(
+            server_address=test_server.xds_uri, **kwargs)
         return test_client
 
     def assertAllBackendsReceivedRpcs(self, stats_response):

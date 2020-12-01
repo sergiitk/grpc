@@ -24,7 +24,8 @@ class BaselineTest(xds_k8s_testcase.XdsKubernetesTestCase):
     def test_ping_pong(self):
         test_server: XdsTestServer = self.startTestServer()
         self.setupXdsForServer(test_server)
-        test_client: XdsTestClient = self.startTestClientForServer(test_server)
+        test_client: XdsTestClient = self.startTestClientForServer(
+            test_server, qps=30)
 
         # Run the test
         stats_response = test_client.request_load_balancer_stats(num_rpcs=10)

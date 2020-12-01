@@ -24,10 +24,27 @@ from googleapiclient import errors
 logger = logging.getLogger(__name__)
 
 # Constants
+# todo(sergiitk): move somplace better
 _WAIT_FOR_BACKEND_SEC = 1200
 _WAIT_FOR_OPERATION_SEC = 1200
 _WAIT_FIXES_SEC = 2
 _GCP_API_RETRIES = 5
+
+
+class GcpApiManager:
+    def __init__(self):
+        self._compute_v1: Optional[discovery.Resource] = None
+
+    @property
+    def compute_v1(self):
+        if not self._compute_v1:
+            self._compute_v1 = discovery.build(
+                'compute', 'v1', cache_discovery=False)
+        return self._compute_v1
+
+    def close(self):
+        if self._compute_v1:
+            self._compute_v1.close()
 
 
 class GcpResource:
@@ -49,42 +66,11 @@ class ZonalGcpResource(GcpResource):
                f'{self.zone!r})'
 
 
-class GcpRequestTimeoutError(Exception):
-    """Request timeout"""
-
-
-class GcpApiManager:
-    def __init__(self):
-        self._compute_v1: Optional[discovery.Resource] = None
-
-    @property
-    def compute_v1(self):
-        if not self._compute_v1:
-            self._compute_v1 = discovery.build(
-                'compute', 'v1', cache_discovery=False)
-        return self._compute_v1
-
-    def close(self):
-        if self._compute_v1:
-            self._compute_v1.close()
-
-
-class GCloud:
-    def __init__(self, api: GcpApiManager, project: str):
-        # todo(sergiitk): remove this class
-        self.api: GcpApiManager = api
-        self.project: str = project
-        self.compute: ComputeV1 = ComputeV1(self.api.compute_v1,
-                                            project=project)
-
-
-class Compute:
-    def __init__(self, compute_api: discovery.Resource, project: str):
-        self.api: discovery.Resource = compute_api
+class ComputeV1:
+    def __init__(self, api_manager: GcpApiManager, project: str):
+        self.api: discovery.Resource = api_manager.compute_v1
         self.project: str = project
 
-
-class ComputeV1(Compute):
     class HealthCheckProtocol(enum.Enum):
         TCP = enum.auto()
 

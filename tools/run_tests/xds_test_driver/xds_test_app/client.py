@@ -95,9 +95,10 @@ class KubernetesClientRunner(base_runner.KubernetesBaseRunner):
 
     def run(self, *,
             server_address,
-            rpc='UnaryCall', qps=10,
+            rpc='UnaryCall', qps=25,
             secure_mode=False) -> XdsTestClient:
         super().run()
+        # todo(sergiitk): make rpc UnaryCall enum or get it from proto
 
         # Create service account
         self.service_account = self._create_service_account(

@@ -21,31 +21,31 @@ spec:
         image: gcr.io/grpc-testing/xds-gke-interop-client-java-sergii-test:latest
         imagePullPolicy: Always
         args:
-            - "--server=${server_address}"
-            - "--stats_port=${stats_port}"
-            - "--secure_mode=${secure_mode}"
-            - "--qps=${qps}"
-            - "--rpc=${rpc}"
-            - "--print_response=true"
+          - "--server=${server_address}"
+          - "--stats_port=${stats_port}"
+          - "--secure_mode=${secure_mode}"
+          - "--qps=${qps}"
+          - "--rpc=${rpc}"
+          - "--print_response=true"
         ports:
           - containerPort: ${stats_port}
         env:
-        - name: GRPC_XDS_BOOTSTRAP
-          value: "/tmp/grpc-xds/td-grpc-bootstrap.json"
-        - name: GRPC_XDS_EXPERIMENTAL_SECURITY_SUPPORT
-          value: "true"
-        - name: GRPC_XDS_CERT_INSTANCE_OVERRIDE
-          value: "true"
-        # Enable verbose logging
-        # - name: JAVA_OPTS
-        #   value: "-Djava.util.logging.config.file=./logging-debug.properties"
+          - name: GRPC_XDS_BOOTSTRAP
+            value: "/tmp/grpc-xds/td-grpc-bootstrap.json"
+          - name: GRPC_XDS_EXPERIMENTAL_SECURITY_SUPPORT
+            value: "true"
+          - name: GRPC_XDS_CERT_INSTANCE_OVERRIDE
+            value: "true"
+          # Enable verbose logging
+          # - name: JAVA_OPTS
+          #   value: "-Djava.util.logging.config.file=./logging-debug.properties"
         volumeMounts:
-        - mountPath: /var/run/gke-spiffe/certs
-          name: gke-spiffe-certs-volume
-          readOnly: true
-        - mountPath: /tmp/grpc-xds/
-          name: grpc-td-conf
-          readOnly: true
+          - mountPath: /tmp/grpc-xds/
+            name: grpc-td-conf
+            readOnly: true
+          - mountPath: /var/run/gke-spiffe/certs
+            name: gke-spiffe-certs-volume
+            readOnly: true
         resources:
           limits:
             cpu: 800m
@@ -90,9 +90,9 @@ spec:
             - mountPath: /tmp/grpc-xds/
               name: grpc-td-conf
       volumes:
-        - name: gke-spiffe-certs-volume
-          csi:
-            driver: certs.spiffe.gke.io
         - name: grpc-td-conf
           emptyDir:
             medium: Memory
+        - name: gke-spiffe-certs-volume
+          csi:
+            driver: certs.spiffe.gke.io

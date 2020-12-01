@@ -21,11 +21,11 @@ spec:
         image: gcr.io/grpc-testing/xds-gke-interop-client-java-sergii-test:latest
         imagePullPolicy: Always
         args:
-            - "--server=${server_address}"
-            - "--stats_port=${stats_port}"
-            - "--qps=${qps}"
-            - "--rpc=${rpc}"
-            - "--print_response=true"
+          - "--server=${server_address}"
+          - "--stats_port=${stats_port}"
+          - "--qps=${qps}"
+          - "--rpc=${rpc}"
+          - "--print_response=true"
         ports:
           - containerPort: ${stats_port}
         env:
@@ -43,13 +43,11 @@ spec:
             memory: 512Mi
       initContainers:
         - name: grpc-td-init
-          image: gcr.io/trafficdirector-prod/td-grpc-bootstrap:0.9.0
-          imagePullPolicy: IfNotPresent
+          image: ${td_bootstrap_image}
+          imagePullPolicy: Always
           args:
-            - --output
-            - "/tmp/bootstrap/td-grpc-bootstrap.json"
-            - --vpc-network-name
-            - ${network_name}
+            - "--output=/tmp/bootstrap/td-grpc-bootstrap.json"
+            - "--vpc-network-name=${network_name}"
           resources:
             limits:
               cpu: 100m

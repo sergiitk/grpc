@@ -40,11 +40,12 @@ def create_all(td, server_xds_host, server_xds_port, security_mode=None):
         return
     if security_mode == 'mtls':
         logger.info('Setting up mtls')
-        td.setup_for_grpc(server_xds_host, server_xds_port,
-                          backend_protocol=BackendServiceProtocol.HTTP2)
-        td.backend_service_apply_client_mtls_policy(
-            'projects/grpc-testing/locations/global/clientTlsPolicies/client_mtls_policy',
-            'spiffe://grpc-testing.svc.id.goog/ns/sergii-psm-test/sa/psm-grpc-server')
+        td.create_server_tls_policy()
+        # td.setup_for_grpc(server_xds_host, server_xds_port,
+        #                   backend_protocol=BackendServiceProtocol.HTTP2)
+        # td.backend_service_apply_client_mtls_policy(
+        #     'projects/grpc-testing/locations/global/clientTlsPolicies/client_mtls_policy',
+        #     'spiffe://grpc-testing.svc.id.goog/ns/sergii-psm-test/sa/psm-grpc-server')
 
 
 def delete_all(td, security_mode):
@@ -58,10 +59,10 @@ def main(argv):
         raise app.UsageError('Too many command-line arguments.')
 
     gcp_api_manager = gcp.GcpApiManager()
-    gcloud = gcp.GCloud(gcp_api_manager, xds_flags.PROJECT.value)
     td = traffic_director.TrafficDirectorManager(
-        gcloud,
-        namespace=xds_flags.NAMESPACE.value,
+        gcp_api_manager,
+        project=xds_flags.PROJECT.value,
+        resource_prefix=xds_flags.NAMESPACE.value,
         network=xds_flags.NETWORK.value)
     server_xds_host = xds_flags.SERVER_XDS_HOST.value
     server_xds_port = xds_flags.SERVER_XDS_PORT.value

@@ -15,6 +15,7 @@ import logging
 from typing import Optional
 
 from infrastructure import gcp
+from infrastructure.gcp import ComputeV1
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,7 @@ BackendServiceProtocol = gcp.ComputeV1.BackendServiceProtocol
 
 
 class TrafficDirectorManager:
+    compute: ComputeV1
     BACKEND_SERVICE_NAME = "backend-service"
     HEALTH_CHECK_NAME = "health-check"
     URL_MAP_NAME = "url-map"
@@ -31,13 +33,21 @@ class TrafficDirectorManager:
     TARGET_PROXY_NAME = "target-proxy"
     FORWARDING_RULE_NAME = "forwarding-rule"
 
-    def __init__(self, gcloud: gcp.GCloud, namespace: str, network='default'):
-        # self.gcloud: gcp.GCloud = gcloud
-        self.compute: gcp.ComputeV1 = gcloud.compute
+    def __init__(
+        self,
+        gcp_api_manager: gcp.GcpApiManager,
+        project: str,
+        *,
+        resource_prefix: str,
+        network: str = 'default',
+    ):
+        # Api
+        self.compute = gcp.ComputeV1(gcp_api_manager, project)
 
         # Settings
-        self.namespace: str = namespace
+        self.project: str = project
         self.network: str = network
+        self.resource_prefix: str = resource_prefix
 
         # Mutable state
         self.health_check: Optional[gcp.GcpResource] = None
@@ -81,7 +91,7 @@ class TrafficDirectorManager:
         self.delete_health_check(force=force)
 
     def _ns_name(self, name):
-        return f'{self.namespace}-{name}'
+        return f'{self.resource_prefix}-{name}'
 
     def create_health_check(self, protocol=HealthCheckProtocol.TCP):
         if self.health_check:
@@ -127,6 +137,19 @@ class TrafficDirectorManager:
         logger.info('Deleting Backend Service %s', name)
         self.compute.delete_backend_service(name)
         self.backend_service = None
+
+    def backend_service_add_neg_backends(self, name, zones):
+        logger.info('Loading NEGs')
+        for zone in zones:
+            backend = self.compute.wait_for_network_endpoint_group(name, zone)
+            self.backends.add(backend)
+
+        # logger.info('Fake waiting before adding backends to avoid error '
+        #             '400 RESOURCE_NOT_READY')
+        # todo(sergiitk): figure out how to confirm NEG is ready to be added
+        # time.sleep(10)
+        self.backend_service_add_backends()
+        self.wait_for_backends_healthy_status()
 
     def backend_service_add_backends(self):
         logging.info('Adding backends to Backend Service %s: %r',
