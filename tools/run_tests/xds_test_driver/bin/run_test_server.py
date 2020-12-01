@@ -1,4 +1,16 @@
-# Copyright 2016 gRPC authors.
+#  Copyright 2020 gRPC authors.
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,7 +31,7 @@ from absl import flags
 from framework import xds_flags
 from framework import xds_k8s_flags
 from infrastructure import k8s
-import xds_test_app.client
+import xds_test_app.server
 
 logger = logging.getLogger(__name__)
 # Flags
@@ -36,22 +48,20 @@ def main(argv):
 
     k8s_api_manager = k8s.KubernetesApiManager(
         xds_k8s_flags.KUBE_CONTEXT_NAME.value)
-
-    client_runner = xds_test_app.client.KubernetesClientRunner(
+    server_runner = xds_test_app.server.KubernetesServerRunner(
         k8s.KubernetesNamespace(k8s_api_manager, xds_flags.NAMESPACE.value),
-        deployment_name=xds_flags.CLIENT_NAME.value,
+        image_name=xds_k8s_flags.SERVER_IMAGE.value,
+        deployment_name=xds_flags.SERVER_NAME.value,
         network=xds_flags.NETWORK.value,
         gcp_service_account=xds_k8s_flags.GCP_SERVICE_ACCOUNT.value,
         reuse_namespace=True)
 
     if _CMD.value == 'run':
-        logger.info('Run client')
-        server_service_address = (f'{xds_flags.SERVER_NAME.value}:'
-                                  f'{xds_flags.SERVER_PORT.value}')
-        client_runner.run(server_address=server_service_address)
+        logger.info('Run server')
+        server_runner.run(test_port=xds_flags.SERVER_PORT.value)
     elif _CMD.value == 'cleanup':
-        logger.info('Cleanup client')
-        client_runner.cleanup(force=True)
+        logger.info('Cleanup server')
+        server_runner.cleanup(force=True, force_namespace=True)
 
 
 if __name__ == '__main__':

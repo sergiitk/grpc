@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # Copyright 2016 gRPC authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +17,7 @@ from absl import app
 from absl import flags
 
 from framework import xds_flags
+from framework import xds_k8s_flags
 from infrastructure import gcp
 from infrastructure import traffic_director
 
@@ -30,6 +30,7 @@ _SECURITY_MODE = flags.DEFINE_enum(
     'security_mode', default=None, enum_values=['mtls'],
     help='Configure td with security')
 flags.adopt_module_key_flags(xds_flags)
+flags.adopt_module_key_flags(xds_k8s_flags)
 
 BackendServiceProtocol = gcp.ComputeV1.BackendServiceProtocol
 

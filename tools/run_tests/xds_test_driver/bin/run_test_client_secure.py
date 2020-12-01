@@ -1,4 +1,16 @@
-# Copyright 2016 gRPC authors.
+#  Copyright 2020 gRPC authors.
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -43,6 +55,7 @@ def main(argv):
     client_runner = xds_test_app.client.KubernetesClientRunner(
         k8s.KubernetesNamespace(k8s_api_manager, xds_flags.NAMESPACE.value),
         deployment_name=xds_flags.CLIENT_NAME.value,
+        image_name=xds_k8s_flags.CLIENT_IMAGE.value,
         gcp_service_account=xds_k8s_flags.GCP_SERVICE_ACCOUNT.value,
         network=xds_flags.NETWORK.value,
         td_bootstrap_image=xds_k8s_flags.TD_BOOTSTRAP_IMAGE.value,
