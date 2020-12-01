@@ -40,10 +40,13 @@ def create_all(td, server_xds_host, server_xds_port, security_mode=None):
         return
     if security_mode == 'mtls':
         logger.info('Setting up mtls')
-        td.setup_for_grpc_security(server_xds_host, server_xds_port)
+        td.setup_for_grpc(server_xds_host, server_xds_port,
+                          backend_protocol=BackendServiceProtocol.HTTP2)
 
 
-def delete_all(td):
+def delete_all(td, security_mode):
+    if security_mode == 'mtls':
+        td.target_proxy_is_http=True
     td.cleanup(force=True)
 
 
@@ -66,13 +69,13 @@ def main(argv):
         create_all(td, server_xds_host, server_xds_port, security_mode)
     elif _CMD.value == 'cleanup':
         logger.info('Cleanup mode')
-        delete_all(td)
+        delete_all(td, security_mode)
     else:
         try:
             create_all(td, server_xds_host, server_xds_port)
             logger.info('Works!')
         finally:
-            delete_all(td)
+            delete_all(td, security_mode)
 
 
 if __name__ == '__main__':

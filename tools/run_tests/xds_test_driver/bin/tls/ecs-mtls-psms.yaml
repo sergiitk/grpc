@@ -6,5 +6,7 @@ trafficPortSelector:
   - "8080"
 endpointMatcher:
   metadataLabelMatcher:
-    metadataLabelMatchCriteria: "MATCH_ANY"
-    metadataLabels: []
+    metadataLabelMatchCriteria: "MATCH_ALL"
+    metadataLabels:
+      - labelName: "version"
+        labelValue: "production"

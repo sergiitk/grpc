@@ -53,19 +53,20 @@ class TrafficDirectorManager:
     def network_url(self):
         return f'global/networks/{self.network}'
 
-    def setup_for_grpc(self, service_host, service_port):
+    def setup_for_grpc(
+        self,
+        service_host,
+        service_port,
+        *,
+        backend_protocol=BackendServiceProtocol.GRPC
+    ):
         self.create_health_check()
-        self.create_backend_service()
+        self.create_backend_service(protocol=backend_protocol)
         self.create_url_map(service_host, service_port)
-        self.create_target_grpc_proxy()
-        self.create_forwarding_rule(service_port)
-
-    def setup_for_grpc_security(self, service_host, service_port):
-        # todo(sergiitk): merge with setup_for_grpc
-        self.create_health_check()
-        self.create_backend_service(protocol=BackendServiceProtocol.HTTP2)
-        self.create_url_map(service_host, service_port)
-        self.create_target_grpc_proxy()
+        if backend_protocol is BackendServiceProtocol.GRPC:
+            self.create_target_grpc_proxy()
+        else:
+            self.create_target_http_proxy()
         self.create_forwarding_rule(service_port)
 
     def cleanup(self, *, force=False):

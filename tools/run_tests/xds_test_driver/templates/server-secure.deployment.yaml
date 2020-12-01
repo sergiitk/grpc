@@ -68,6 +68,24 @@ spec:
           volumeMounts:
             - mountPath: /tmp/bootstrap/
               name: grpc-td-conf
+        - name: bootstrap-hack
+          image: alpine:latest
+          imagePullPolicy: Always
+          command:
+            - "sed"
+            - "-i"
+            - 's/default-vpc"/default-vpc",\n      "version": "production"/'
+            - "/tmp/grpc-xds/td-grpc-bootstrap.json"
+          resources:
+            limits:
+              cpu: 100m
+              memory: 100Mi
+            requests:
+              cpu: 10m
+              memory: 100Mi
+          volumeMounts:
+            - mountPath: /tmp/grpc-xds/
+              name: grpc-td-conf
       volumes:
         - name: gke-spiffe-certs-volume
           csi:
