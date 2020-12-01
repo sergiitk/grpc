@@ -20,13 +20,16 @@ from typing import Optional
 import mako.template
 import yaml
 
-from infrastructure import k8s
+from framework.infrastructure import k8s
 
 logger = logging.getLogger()
 
 
 class RunnerError(Exception):
     """Error running app"""
+
+
+TEMPLATE_DIR = '../../kubernetes-manifests'
 
 
 class KubernetesBaseRunner:
@@ -76,7 +79,7 @@ class KubernetesBaseRunner:
 
     @staticmethod
     def _template_file_from_name(template_name):
-        templates_path = pathlib.Path(__file__).parent / '../templates'
+        templates_path = pathlib.Path(__file__).parent / TEMPLATE_DIR
         return templates_path.joinpath(template_name).absolute()
 
     def _create_from_template(self, template_name, **kwargs):

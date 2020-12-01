@@ -18,8 +18,8 @@ from absl import flags
 
 from framework import xds_flags
 from framework import xds_k8s_flags
-from infrastructure import gcp
-from infrastructure import traffic_director
+from framework.infrastructure import gcp
+from framework.infrastructure import traffic_director
 
 logger = logging.getLogger(__name__)
 # Flags
@@ -51,7 +51,7 @@ def create_all(td, server_xds_host, server_xds_port, security_mode=None):
 
 def delete_all(td, security_mode):
     if security_mode == 'mtls':
-        td.target_proxy_is_http=True
+        td.target_proxy_is_http = True
     td.cleanup(force=True)
 
 

@@ -16,8 +16,8 @@ import logging
 from typing import Optional
 from typing import Tuple
 
-from infrastructure import k8s
-from xds_test_app import base_runner
+from framework.infrastructure import k8s
+from framework.test_app import base_runner
 
 logger = logging.getLogger()
 

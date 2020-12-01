@@ -14,14 +14,14 @@
 import logging
 from typing import Optional
 
-from infrastructure import gcp
-from infrastructure.gcp import ComputeV1
+from framework.infrastructure import gcp
 
 logger = logging.getLogger(__name__)
 
 # Type aliases
-HealthCheckProtocol = gcp.ComputeV1.HealthCheckProtocol
-BackendServiceProtocol = gcp.ComputeV1.BackendServiceProtocol
+ComputeV1 = gcp.ComputeV1
+HealthCheckProtocol = ComputeV1.HealthCheckProtocol
+BackendServiceProtocol = ComputeV1.BackendServiceProtocol
 
 
 class TrafficDirectorManager:

@@ -18,8 +18,8 @@ from typing import Tuple
 
 import grpc
 
-from xds_test_app import base_runner
-from infrastructure import k8s
+from framework.test_app import base_runner
+from framework.infrastructure import k8s
 from src.proto.grpc.testing import test_pb2_grpc
 from src.proto.grpc.testing import messages_pb2
 

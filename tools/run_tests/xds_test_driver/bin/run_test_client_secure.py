@@ -30,8 +30,8 @@ from absl import flags
 
 from framework import xds_flags
 from framework import xds_k8s_flags
-from infrastructure import k8s
-import xds_test_app.client
+from framework.infrastructure import k8s
+from framework.test_app import client_app
 
 logger = logging.getLogger(__name__)
 # Flags
@@ -52,7 +52,7 @@ def main(argv):
     k8s_api_manager = k8s.KubernetesApiManager(
         xds_k8s_flags.KUBE_CONTEXT_NAME.value)
 
-    client_runner = xds_test_app.client.KubernetesClientRunner(
+    client_runner = client_app.KubernetesClientRunner(
         k8s.KubernetesNamespace(k8s_api_manager, xds_flags.NAMESPACE.value),
         deployment_name=xds_flags.CLIENT_NAME.value,
         image_name=xds_k8s_flags.CLIENT_IMAGE.value,

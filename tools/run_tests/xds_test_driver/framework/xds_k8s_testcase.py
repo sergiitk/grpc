@@ -18,17 +18,17 @@ from absl.testing import absltest
 
 from framework import xds_flags
 from framework import xds_k8s_flags
-from infrastructure import k8s
-from infrastructure import gcp
-from infrastructure import traffic_director
-import xds_test_app.client
-import xds_test_app.server
+from framework.infrastructure import k8s
+from framework.infrastructure import gcp
+from framework.infrastructure import traffic_director
+from framework.test_app import client_app
+from framework.test_app import server_app
 
 logger = logging.getLogger(__name__)
 
 # Type aliases
-XdsTestServer = xds_test_app.server.XdsTestServer
-XdsTestClient = xds_test_app.client.XdsTestClient
+XdsTestServer = server_app.XdsTestServer
+XdsTestClient = client_app.XdsTestClient
 
 
 class XdsKubernetesTestCase(absltest.TestCase):
@@ -83,7 +83,7 @@ class XdsKubernetesTestCase(absltest.TestCase):
             network=self.network)
 
         # Test Server Runner
-        self.server_runner = xds_test_app.server.KubernetesServerRunner(
+        self.server_runner = server_app.KubernetesServerRunner(
             k8s.KubernetesNamespace(self.k8s_api_manager, server_namespace),
             deployment_name=self.server_name,
             image_name=self.server_image,
@@ -92,7 +92,7 @@ class XdsKubernetesTestCase(absltest.TestCase):
             td_bootstrap_image=self.td_bootstrap_image)
 
         # Test Client Runner
-        self.client_runner = xds_test_app.client.KubernetesClientRunner(
+        self.client_runner = client_app.KubernetesClientRunner(
             k8s.KubernetesNamespace(self.k8s_api_manager, client_namespace),
             deployment_name=self.client_name,
             image_name=self.client_image,
