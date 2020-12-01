@@ -32,6 +32,7 @@ class TrafficDirectorManager:
     URL_MAP_PATH_MATCHER_NAME = "path-matcher"
     TARGET_PROXY_NAME = "target-proxy"
     FORWARDING_RULE_NAME = "forwarding-rule"
+    SERVER_TLS_POLICY_NAME = "server-tls-policy"
 
     def __init__(
         self,
@@ -43,6 +44,7 @@ class TrafficDirectorManager:
     ):
         # Api
         self.compute = gcp.ComputeV1(gcp_api_manager, project)
+        self.netsec = gcp.NetworkDiscoveryV1Alpha1(gcp_api_manager, project)
 
         # Settings
         self.project: str = project
@@ -92,6 +94,19 @@ class TrafficDirectorManager:
 
     def _ns_name(self, name):
         return f'{self.resource_prefix}-{name}'
+
+    def create_server_tls_policy(self):
+        name = self._ns_name(self.SERVER_TLS_POLICY_NAME)
+        logger.info('Creating Server TLS Policy %s', name)
+
+        target_uri = {"targetUri": "unix:/var/cert/node-agent.0"}
+        grpc_endpoint = {"grpcEndpoint": target_uri}
+        mtls_policy = {"clientValidationCa": [grpc_endpoint]}
+        return self.netsec.create_server_tls_policy({
+            "name": name,
+            "mtlsPolicy": mtls_policy,
+            "serverCertificate": grpc_endpoint,
+        })
 
     def create_health_check(self, protocol=HealthCheckProtocol.TCP):
         if self.health_check:

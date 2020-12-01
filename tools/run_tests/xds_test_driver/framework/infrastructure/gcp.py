@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import enum
+import functools
 import logging
+import os
 from typing import Any
 from typing import Dict
 from typing import Optional
@@ -32,19 +34,25 @@ _GCP_API_RETRIES = 5
 
 
 class GcpApiManager:
-    def __init__(self):
-        self._compute_v1: Optional[discovery.Resource] = None
+    @functools.lru_cache(None)
+    def compute(self, version):
+        if version == 'v1':
+            return discovery.build('compute', 'v1', cache_discovery=False)
+        raise NotImplementedError(f'Compute {version} not supported')
 
-    @property
-    def compute_v1(self):
-        if not self._compute_v1:
-            self._compute_v1 = discovery.build(
-                'compute', 'v1', cache_discovery=False)
-        return self._compute_v1
+    @functools.lru_cache(None)
+    def networksecurity(self, version):
+        # todo(sergiitk): move to params
+        dev_key = os.getenv('DEV_KEY')
+        if version == 'v1alpha1':
+            return discovery.build(
+                'networksecurity', 'v1alpha1',
+                cache_discovery=False, developerKey=dev_key)
 
     def close(self):
-        if self._compute_v1:
-            self._compute_v1.close()
+        """todo(sergiitk): contextlib exitstack"""
+        # if self._compute_v1:
+        #     self._compute_v1.close()
 
 
 class GcpResource:
@@ -66,17 +74,10 @@ class ZonalGcpResource(GcpResource):
                f'{self.zone!r})'
 
 
-class ComputeV1:
-    def __init__(self, api_manager: GcpApiManager, project: str):
-        self.api: discovery.Resource = api_manager.compute_v1
+class GcpProjectApiResource(object):
+    def __init__(self, api: discovery.Resource, project: str):
+        self.api: discovery.Resource = api
         self.project: str = project
-
-    class HealthCheckProtocol(enum.Enum):
-        TCP = enum.auto()
-
-    class BackendServiceProtocol(enum.Enum):
-        HTTP2 = enum.auto()
-        GRPC = enum.auto()
 
     def wait_for_global_operation(self,
                                   operation,
@@ -98,6 +99,66 @@ class ComputeV1:
             logger.debug('Waiting for global op failed, response: %r', response)
             raise Exception(f'Operation {operation} did not complete '
                             f'within {timeout_sec}, error={response["error"]}')
+
+    def _execute(self, request):
+        operation = request.execute(num_retries=_GCP_API_RETRIES)
+        self.wait_for_global_operation(operation['name'])
+        return operation
+
+
+class NetworkDiscoveryV1Alpha1(GcpProjectApiResource):
+    class ServerTlsPolicy:
+        def __init__(
+            self,
+            name,
+            server_certificate,
+            mtls_policy,
+            create_time,
+            update_time
+        ):
+            self.mtls_policy = mtls_policy
+            self.name = name
+            self.server_certificate = server_certificate
+            self.update_time = update_time
+            self.create_time = create_time
+
+    def __init__(self, api_manager: GcpApiManager, project: str):
+        super().__init__(api_manager.networksecurity('v1alpha1'), project)
+
+    def create_server_tls_policy(self, body: dict):
+        result = self._create_resource(
+            self.api.projects().locations().serverTlsPolicies(), body)
+
+        return self.ServerTlsPolicy(
+            name=result['name'],
+            server_certificate=result['serverCertificate'],
+            mtls_policy=result['mtlsPolicy'],
+            create_time=result['createTime'],
+            update_time=result['updateTime'])
+
+    @property
+    def parent(self):
+        return f'projects/{self.project}/locations/global'
+
+    def _create_resource(
+        self,
+        collection: discovery.Resource,
+        body: Dict[str, Any]
+    ):
+        logger.debug("Creating %s", body)
+        return self._execute(collection.create(parent=self.parent, body=body))
+
+
+class ComputeV1(GcpProjectApiResource):
+    def __init__(self, api_manager: GcpApiManager, project: str):
+        super().__init__(api_manager.compute('v1'), project)
+
+    class HealthCheckProtocol(enum.Enum):
+        TCP = enum.auto()
+
+    class BackendServiceProtocol(enum.Enum):
+        HTTP2 = enum.auto()
+        GRPC = enum.auto()
 
     def create_health_check_tcp(self, name,
                                 use_serving_port=False) -> GcpResource:
@@ -300,8 +361,11 @@ class ComputeV1:
             project=self.project, backendService=backend_service.name,
             body={"group": backend.url}).execute()
 
-    def _get_resource(self, collection: discovery.Resource,
-                      **kwargs) -> GcpResource:
+    def _get_resource(
+        self,
+        collection: discovery.Resource,
+        **kwargs
+    ) -> GcpResource:
         resp = collection.get(project=self.project, **kwargs).execute()
         logger.debug("Loaded %r", resp)
         return GcpResource(resp['name'], resp['selfLink'])
@@ -329,8 +393,3 @@ class ComputeV1:
             reason = error._get_reason()
             logger.info('Delete failed. Error: %s %s',
                         error.resp.status, reason)
-
-    def _execute(self, request):
-        operation = request.execute(num_retries=_GCP_API_RETRIES)
-        self.wait_for_global_operation(operation['name'])
-        return operation
