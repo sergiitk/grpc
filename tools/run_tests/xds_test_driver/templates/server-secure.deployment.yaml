@@ -18,7 +18,7 @@ spec:
       serviceAccountName: ${service_account_name}
       containers:
       - name: ${deployment_name}
-        image: gcr.io/grpc-testing/xds-gke-interop-server-java-sergii-test:latest
+        image: ${image_name}
         imagePullPolicy: Always
         args:
           - "--port=${test_port}"

@@ -1,4 +1,0 @@
-securitySettings:
-  clientTlsPolicy: projects/grpc-testing/locations/global/clientTlsPolicies/client_mtls_policy
-  subjectAltNames:
-    - "spiffe://grpc-testing.svc.id.goog/ns/sergii-psm-test/sa/psm-grpc-server"

@@ -41,21 +41,25 @@ class XdsKubernetesTestCase(absltest.TestCase):
         cls.project: str = xds_flags.PROJECT.value
         cls.network: str = xds_flags.NETWORK.value
         cls.gcp_service_account: str = xds_k8s_flags.GCP_SERVICE_ACCOUNT.value
+        cls.td_bootstrap_image = xds_k8s_flags.TD_BOOTSTRAP_IMAGE.value
 
         # Base namespace
         # todo(sergiitk): generate for each test
         cls.namespace: str = xds_flags.NAMESPACE.value
 
-        # todo(sergiitk): move to args
-        # Test app
+        # Test server
+        cls.server_image = xds_k8s_flags.SERVER_IMAGE.value
         cls.server_name = xds_flags.SERVER_NAME.value
         cls.server_port = xds_flags.SERVER_PORT.value
         cls.server_xds_host = xds_flags.SERVER_NAME.value
         cls.server_xds_port = xds_flags.SERVER_XDS_PORT.value
+
+        # Test client
+        cls.client_image = xds_k8s_flags.CLIENT_IMAGE.value
         cls.client_name = xds_flags.CLIENT_NAME.value
         cls.client_port_forwarding = xds_k8s_flags.CLIENT_PORT_FORWARDING.value
 
-        # Shared services
+        # Resource managers
         cls.k8s_api_manager = k8s.KubernetesApiManager(
             xds_k8s_flags.KUBE_CONTEXT_NAME.value)
         cls.gcp_api_manager = gcp.GcpApiManager()
@@ -81,16 +85,20 @@ class XdsKubernetesTestCase(absltest.TestCase):
         # Test Server Runner
         self.server_runner = xds_test_app.server.KubernetesServerRunner(
             k8s.KubernetesNamespace(self.k8s_api_manager, server_namespace),
-            gcp_service_account=self.gcp_service_account,
             deployment_name=self.server_name,
-            network=self.network)
+            image_name=self.server_image,
+            gcp_service_account=self.gcp_service_account,
+            network=self.network,
+            td_bootstrap_image=self.td_bootstrap_image)
 
         # Test Client Runner
         self.client_runner = xds_test_app.client.KubernetesClientRunner(
             k8s.KubernetesNamespace(self.k8s_api_manager, client_namespace),
-            self.client_name,
+            deployment_name=self.client_name,
+            image_name=self.client_image,
             gcp_service_account=self.gcp_service_account,
             network=self.network,
+            td_bootstrap_image=self.td_bootstrap_image,
             debug_use_port_forwarding=self.client_port_forwarding,
             reuse_namespace=True)
 

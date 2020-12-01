@@ -62,9 +62,10 @@ class ServerRunError(Exception):
 class KubernetesServerRunner(base_runner.KubernetesBaseRunner):
     def __init__(self,
                  k8s_namespace,
-                 deployment_name,
-                 gcp_service_account,
                  *,
+                 deployment_name,
+                 image_name,
+                 gcp_service_account,
                  service_account_name=None,
                  service_name=None,
                  neg_name=None,
@@ -80,6 +81,7 @@ class KubernetesServerRunner(base_runner.KubernetesBaseRunner):
 
         # Settings
         self.deployment_name = deployment_name
+        self.image_name = image_name
         self.gcp_service_account = gcp_service_account
         self.service_account_name = service_account_name or deployment_name
         self.service_name = service_name or deployment_name
@@ -117,14 +119,15 @@ class KubernetesServerRunner(base_runner.KubernetesBaseRunner):
         self.deployment = self._create_deployment(
             self.deployment_template,
             deployment_name=self.deployment_name,
+            image_name=self.image_name,
             namespace_name=self.k8s_namespace.name,
             service_account_name=self.service_account_name,
+            td_bootstrap_image=self.td_bootstrap_image,
+            network_name=self.network,
             replica_count=replica_count,
             test_port=test_port,
             maintenance_port=maintenance_port,
             server_id=server_id,
-            network_name=self.network,
-            td_bootstrap_image=self.td_bootstrap_image,
             secure_mode=secure_mode)
 
         self._wait_deployment_with_available_replicas(

@@ -23,7 +23,13 @@ TD_BOOTSTRAP_IMAGE = flags.DEFINE_string(
     "td_bootstrap_image", default=None,
     help="Traffic Director gRPC Bootstrap Docker image")
 
-# Test client
+# Test app
+SERVER_IMAGE = flags.DEFINE_string(
+    "server_image", default=None,
+    help="Server Docker image name")
+CLIENT_IMAGE = flags.DEFINE_string(
+    "client_image", default=None,
+    help="Client Docker image name")
 CLIENT_PORT_FORWARDING = flags.DEFINE_bool(
     "client_debug_use_port_forwarding", default=False,
     help="Development only: use kubectl port-forward to connect to test client")
@@ -32,4 +38,6 @@ flags.mark_flags_as_required([
     "gcp_service_account",
     "kube_context_name",
     "td_bootstrap_image",
+    "server_image",
+    "client_image",
 ])

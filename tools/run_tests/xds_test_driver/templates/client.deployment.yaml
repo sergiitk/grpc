@@ -18,7 +18,7 @@ spec:
       serviceAccountName: ${service_account_name}
       containers:
       - name: ${deployment_name}
-        image: gcr.io/grpc-testing/xds-gke-interop-client-java-sergii-test:latest
+        image: ${image_name}
         imagePullPolicy: Always
         args:
           - "--server=${server_address}"
@@ -34,6 +34,7 @@ spec:
         volumeMounts:
           - mountPath: /tmp/grpc-xds/
             name: grpc-td-conf
+            readOnly: true
         resources:
           limits:
             cpu: 800m
