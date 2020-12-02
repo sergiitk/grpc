@@ -28,6 +28,7 @@ BackendServiceProtocol = ComputeV1.BackendServiceProtocol
 # Network Security
 NetworkSecurityV1Alpha1 = gcp.NetworkSecurityV1Alpha1
 ServerTlsPolicy = NetworkSecurityV1Alpha1.ServerTlsPolicy
+ClientTlsPolicy = NetworkSecurityV1Alpha1.ClientTlsPolicy
 # Network Services
 NetworkServicesV1Alpha1 = gcp.NetworkServicesV1Alpha1
 EndpointConfigSelector = NetworkServicesV1Alpha1.EndpointConfigSelector
@@ -267,7 +268,9 @@ class TrafficDirectorManager:
 class TrafficDirectorSecureManager(TrafficDirectorManager):
     netsec: Optional[NetworkSecurityV1Alpha1]
     SERVER_TLS_POLICY_NAME = "server-tls-policy"
+    CLIENT_TLS_POLICY_NAME = "client-tls-policy"
     ENDPOINT_CONFIG_SELECTOR_NAME = "endpoint-config-selector"
+    GRPC_ENDPOINT_TARGET_URI = "unix:/var/cert/node-agent.0"
 
     def __init__(
         self,
@@ -287,6 +290,7 @@ class TrafficDirectorSecureManager(TrafficDirectorManager):
         # Managed resources
         self.server_tls_policy: Optional[ServerTlsPolicy] = None
         self.ecs: Optional[EndpointConfigSelector] = None
+        self.client_tls_policy: Optional[ClientTlsPolicy] = None
 
     def setup_for_grpc(
         self,
@@ -295,22 +299,30 @@ class TrafficDirectorSecureManager(TrafficDirectorManager):
         *,
         backend_protocol=BackendServiceProtocol.HTTP2
     ):
-        # super().setup_for_grpc(service_host, service_port,
-        #                        backend_protocol=backend_protocol)
+        super().setup_for_grpc(service_host, service_port,
+                               backend_protocol=backend_protocol)
+
+    def setup_server_security(self, server_port):
         self.create_server_tls_policy()
-        self.create_endpoint_config_selector()
+        self.create_endpoint_config_selector(server_port)
+
+    def setup_client_security(self, server_namespace, server_name):
+        self.create_client_tls_policy()
+        self.backend_service_apply_client_mtls_policy(
+            server_namespace, server_name)
 
     def cleanup(self, *, force=False):
         # Cleanup in the reverse order of creation
+        super().cleanup(force=force)
         self.delete_endpoint_config_selector(force=force)
         self.delete_server_tls_policy(force=force)
-        # super().cleanup(force=force)
+        self.delete_client_tls_policy(force=force)
 
     def create_server_tls_policy(self):
         name = self._ns_name(self.SERVER_TLS_POLICY_NAME)
         logger.info('Creating Server TLS Policy %s', name)
 
-        target_uri = {"targetUri": "unix:/var/cert/node-agent.0"}
+        target_uri = {"targetUri": self.GRPC_ENDPOINT_TARGET_URI}
         grpc_endpoint = {"grpcEndpoint": target_uri}
         mtls_policy = {"clientValidationCa": [grpc_endpoint]}
         self.netsec.create_server_tls_policy(name, {
@@ -318,7 +330,7 @@ class TrafficDirectorSecureManager(TrafficDirectorManager):
             "serverCertificate": grpc_endpoint,
         })
         self.server_tls_policy = self.netsec.get_server_tls_policy(name)
-        logger.debug('Policy loaded: %r', self.server_tls_policy)
+        logger.debug('Server TLS Policy loaded: %r', self.server_tls_policy)
 
     def delete_server_tls_policy(self, force=False):
         if force:
@@ -331,16 +343,16 @@ class TrafficDirectorSecureManager(TrafficDirectorManager):
         self.netsec.delete_server_tls_policy(name)
         self.server_tls_policy = None
 
-    def create_endpoint_config_selector(self):
+    def create_endpoint_config_selector(self, server_port):
         name = self._ns_name(self.ENDPOINT_CONFIG_SELECTOR_NAME)
         logger.info('Creating Endpoint Config Selector %s', name)
 
         # todo(sergiitk): user server config value
-        port_selector = {"ports": ["8080"]}
         endpoint_matcher_labels = [{
             "labelName": "version",
             "labelValue": "production"
         }]
+        port_selector = {"ports": [str(server_port)]}
 
         label_matcher_all = {
             "metadataLabelMatchCriteria": "MATCH_ALL",
@@ -367,18 +379,45 @@ class TrafficDirectorSecureManager(TrafficDirectorManager):
         self.netsvc.delete_endpoint_config_selector(name)
         self.ecs = None
 
+    def create_client_tls_policy(self):
+        name = self._ns_name(self.CLIENT_TLS_POLICY_NAME)
+        logger.info('Creating Client TLS Policy %s', name)
+
+        target_uri = {"targetUri": self.GRPC_ENDPOINT_TARGET_URI}
+        grpc_endpoint = {"grpcEndpoint": target_uri}
+
+        self.netsec.create_client_tls_policy(name, {
+            "serverValidationCa": [grpc_endpoint],
+            "clientCertificate": grpc_endpoint,
+        })
+        self.client_tls_policy = self.netsec.get_client_tls_policy(name)
+        logger.debug('Client TLS Policy loaded: %r', self.client_tls_policy)
+
+    def delete_client_tls_policy(self, force=False):
+        if force:
+            name = self._ns_name(self.CLIENT_TLS_POLICY_NAME)
+        elif self.client_tls_policy:
+            name = self.client_tls_policy.name
+        else:
+            return
+        logger.info('Deleting Client TLS Policy %s', name)
+        self.netsec.delete_client_tls_policy(name)
+        self.client_tls_policy = None
+
     def backend_service_apply_client_mtls_policy(
         self,
-        client_policy_url,
-        server_spiffe
+        server_namespace,
+        server_name,
     ):
-        logging.info('Adding Client mTls Policy to Backend Service %s: %s, '
+        server_spiffe = (f'spiffe://{self.project}.svc.id.goog/'
+                         f'ns/{server_namespace}/sa/{server_name}')
+        logging.info('Adding Client TLS Policy to Backend Service %s: %s, '
                      'server %s',
                      self.backend_service.name,
-                     client_policy_url,
+                     self.client_tls_policy.url,
                      server_spiffe)
         self.compute.patch_backend_service(self.backend_service, {
             'securitySettings': {
-                'clientTlsPolicy': client_policy_url,
+                'clientTlsPolicy': self.client_tls_policy.url,
                 'subjectAltNames': [server_spiffe]
             }})

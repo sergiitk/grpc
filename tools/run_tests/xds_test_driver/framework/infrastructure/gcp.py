@@ -126,13 +126,23 @@ class NetworkSecurityV1Alpha1(GcpProjectApiResource):
     API_VERSION = 'v1alpha1'
     DEFAULT_GLOBAL = 'global'
     SERVER_TLS_POLICIES = 'serverTlsPolicies'
+    CLIENT_TLS_POLICIES = 'clientTlsPolicies'
 
     @dataclass
     class ServerTlsPolicy:
         url: str
         name: str
-        mtls_policy: dict
         server_certificate: dict
+        mtls_policy: dict
+        update_time: str
+        create_time: str
+
+    @dataclass
+    class ClientTlsPolicy:
+        url: str
+        name: str
+        client_certificate: dict
+        server_validation_ca: dict
         update_time: str
         create_time: str
 
@@ -164,6 +174,29 @@ class NetworkSecurityV1Alpha1(GcpProjectApiResource):
             collection=self._api_locations.serverTlsPolicies(),
             full_name=self.resource_full_name(name, self.SERVER_TLS_POLICIES))
 
+    def create_client_tls_policy(self, name, body: dict):
+        return self._create_resource(
+            self._api_locations.clientTlsPolicies(),
+            body, clientTlsPolicyId=name)
+
+    def get_client_tls_policy(self, name: str) -> ClientTlsPolicy:
+        result = self._get_resource(
+            collection=self._api_locations.clientTlsPolicies(),
+            full_name=self.resource_full_name(name, self.CLIENT_TLS_POLICIES))
+
+        return self.ClientTlsPolicy(
+            name=name,
+            url=result['name'],
+            client_certificate=result['clientCertificate'],
+            server_validation_ca=result['serverValidationCa'],
+            create_time=result['createTime'],
+            update_time=result['updateTime'])
+
+    def delete_client_tls_policy(self, name):
+        return self._delete_resource(
+            collection=self._api_locations.clientTlsPolicies(),
+            full_name=self.resource_full_name(name, self.CLIENT_TLS_POLICIES))
+
     def parent(self, location=None):
         if not location:
             location = self.DEFAULT_GLOBAL
@@ -186,7 +219,6 @@ class NetworkSecurityV1Alpha1(GcpProjectApiResource):
         return resource
 
     def _delete_resource(self, collection: discovery.Resource, full_name: str):
-        self._execute(collection.delete(name=full_name))
         logger.debug("Deleting %s", full_name)
         try:
             self._execute(collection.delete(name=full_name))
@@ -198,7 +230,9 @@ class NetworkSecurityV1Alpha1(GcpProjectApiResource):
 
     def _execute(self, request, timeout_sec=_WAIT_FOR_OPERATION_SEC):
         operation = request.execute(num_retries=_GCP_API_RETRIES)
+        self._wait(operation, timeout_sec)
 
+    def _wait(self, operation, timeout_sec=_WAIT_FOR_OPERATION_SEC):
         op_name = operation['name']
         logger.debug('Waiting for %s operation, timeout %s sec: %s',
                      self.API_NAME, timeout_sec, op_name)

@@ -69,12 +69,8 @@ def main(argv):
             elif security_mode == 'mtls':
                 logger.info('Setting up mtls')
                 td.setup_for_grpc(server_xds_host, server_xds_port)
-                # td.create_server_tls_policy()
-                # td.setup_for_grpc(server_xds_host, server_xds_port,
-                #                   backend_protocol=BackendServiceProtocol.HTTP2)
-                # td.backend_service_apply_client_mtls_policy(
-                #     'projects/grpc-testing/locations/global/clientTlsPolicies/client_mtls_policy',
-                #     'spiffe://grpc-testing.svc.id.goog/ns/sergii-psm-test/sa/psm-grpc-server')
+                td.setup_client_security('sergii-psm-test', 'sergii-psm-test')
+                td.setup_server_security(8080)
 
             logger.info('Works!')
     except Exception:
