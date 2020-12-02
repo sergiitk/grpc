@@ -11,147 +11,51 @@
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
+import unittest
+
 from absl.testing import absltest
 
 from framework import xds_k8s_testcase
+from tests import baseline_test
 
-# Type aliases
-XdsTestServer = xds_k8s_testcase.XdsTestServer
-XdsTestClient = xds_k8s_testcase.XdsTestClient
+SKIP_REASON = 'Work in progress'
 
 
-# class SecurityTest(xds_k8s_testcase.XdsKubernetesTestCase):
-#     def test_mtls(self):
-#         test_server: XdsTestServer = self.startSecureTestServer()
-#         # self.setupXdsForServer(test_server)
-#         # test_client: XdsTestClient = self.startTestClientForServer(test_server)
-#         #
-#         # # Run the test
-#         # stats_response = test_client.request_load_balancer_stats(num_rpcs=10)
-#         #
-#         # # Check the results
-#         # self.assertAllBackendsReceivedRpcs(stats_response)
-#         # self.assertFailedRpcsAtMost(stats_response, 0)
-
-class SecurityTest(absltest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        # todo(sergiitk): move to args
-        dotenv.load_dotenv()
-        # GCP
-        cls.project: str = os.environ['PROJECT_ID']
-        cls.network_name: str = os.environ['NETWORK_NAME']
-        cls.network_url: str = f'global/networks/{cls.network_name}'
-        #
-        # Client
-        cls.client_deployment_name = 'psm-grpc-client'
-
-        cls.client_use_port_forwarding = bool(
-            os.getenv('CLIENT_USE_PORT_FORWARDING', False))
-
-        # K8s
-        cls.k8s_context_name = os.environ['KUBE_CONTEXT_NAME']
-        cls.k8s_namespace = os.environ['NAMESPACE']
-        cls.server_name = os.environ['SERVER_NAME']
-        cls.service_name = os.environ['SERVICE_NAME']
-        cls.server_test_port = os.environ['SERVER_TEST_PORT']
-        cls.server_maintenance_port = os.environ['SERVER_MAINTENANCE_PORT']
-        cls.debug_reuse_service = os.environ['DEBUG_REUSE_SERVICE']
-
-        # Traffic director
-        cls.backend_service_name = os.environ['GLOBAL_BACKEND_SERVICE_NAME']
-        # health_check_name: str = os.environ['HEALTH_CHECK_NAME']
-        # global_backend_service_name: str = os.environ[
-        #     'GLOBAL_BACKEND_SERVICE_NAME']
-        # url_map_name: str = os.environ['URL_MAP_NAME']
-        # url_map_path_matcher_name: str = os.environ['URL_MAP_PATH_MATCHER_NAME']
-        # target_proxy_name: str = os.environ['TARGET_PROXY_NAME']
-        # forwarding_rule_name: str = os.environ['FORWARDING_RULE_NAME']
-        cls.xds_service_host: str = 'sergii-psm-test-xds-host'
-        cls.xds_service_port: int = os.environ['XDS_PORT']
-
-        # Shared services
-        cls.k8s_api_manager = k8s.KubernetesApiManager(cls.k8s_context_name)
-        cls.compute = google_api.build('compute', 'v1', cache_discovery=False)
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.k8s_api_manager.close()
-
-    def setUp(self):
-        # todo(sergiitk): generate with run id
-        self.client_runner = xds_test_app.client.KubernetesClientRunner(
-            k8s.KubernetesNamespace(self.k8s_api_manager, self.k8s_namespace),
-            self.client_deployment_name,
-            network=self.network_name,
-            deployment_template='client-secure.deployment.yaml')
-
-        # use_port_forwarding=self.client_use_port_forwarding
-
-        self.server_runner = xds_test_app.server.KubernetesServerRunner(
-            k8s.KubernetesNamespace(self.k8s_api_manager, self.k8s_namespace),
-            deployment_name=self.server_name,
-            service_name=self.service_name,
-            deployment_template='server-secure.deployment.yaml',
-            reuse_service=self.debug_reuse_service)
-
-    def tearDown(self):
+class SecurityTest(xds_k8s_testcase.XdsKubernetesTestCase):
+    @absltest.skip(SKIP_REASON)
+    def test_baseline(self):
         pass
-        # self.client_runner.cleanup()
-        # self.server_runner.cleanup()
 
+    @absltest.skip(SKIP_REASON)
     def test_mtls(self):
-        test_server = self.server_runner.run(
-            test_port=self.server_test_port,
-            maintenance_port=self.server_maintenance_port,
-            secure_mode=True)
+        pass
 
-        # Load Backends
-        neg_name, neg_zones = self.server_runner.k8s_namespace.get_service_neg(
-            self.server_runner.service_name, self.server_test_port)
+    @absltest.skip(SKIP_REASON)
+    def test_tls(self):
+        pass
 
-        time.sleep(20)
+    @absltest.skip(SKIP_REASON)
+    def test_plaintext_fallback(self):
+        pass
 
-        backends = []
-        for neg_zone in neg_zones:
-            backend = gcp.get_network_endpoint_group(
-                self.compute, self.project, neg_zone, neg_name)
-            logging.info("Loaded backend: %s zone %s", backend.name,
-                         backend.zone)
-            backends.append(backend)
+    @absltest.skip(SKIP_REASON)
+    def test_mtls_error(self):
+        pass
 
-        # Global Backend Service (LB)
-        backend_service = gcp.get_backend_service(self.compute, self.project,
-                                                  self.backend_service_name)
-        logging.info('Loaded Global Backend Service %s', backend_service.name)
-        gcp.backend_service_add_backend(self.compute, self.project,
-                                        backend_service, backends)
-        gcp.wait_for_backends_healthy_status(self.compute, self.project,
-                                             backend_service, backends)
-        test_server.xds_address = (self.xds_service_host, self.xds_service_port)
+    @absltest.skip(SKIP_REASON)
+    def test_server_authz_error(self):
+        pass
 
-        # todo(sergiitk): make rpc enum or get it from proto
-        xds_uri = f'xds:///{self.xds_service_host}:{self.xds_service_port}'
-        test_client = self.client_runner.run(server_address=xds_uri,
-                                             rpc='UnaryCall',
-                                             qps=1,
-                                             secure_mode=True)
-        stats_response = test_client.request_load_balancer_stats(num_rpcs=9)
-        self.assertAllBackendsReceivedRpcs(stats_response)
-        self.assertFailedRpcsAtMost(stats_response, 0)
 
-    def assertAllBackendsReceivedRpcs(self, stats_response):
-        # todo(sergiitk): assert backends length
-        logging.info(stats_response.rpcs_by_peer)
-        for backend, rpcs_count in stats_response.rpcs_by_peer.items():
-            with self.subTest(f'Backend {backend} received RPCs'):
-                self.assertGreater(int(rpcs_count), 0,
-                                   msg='Did not receive a single RPC')
-
-    def assertFailedRpcsAtMost(self, stats_response, count):
-        self.assertLessEqual(int(stats_response.num_failures), count,
-                             msg='Unexpected number of RPC failures '
-                                 f'{stats_response.num_failures} > {count}')
+# def load_tests(loader, tests, pattern):
+#     # See load_tests Protocol
+#     # https://docs.python.org/3.6/library/unittest.html#load-tests-protocol
+#     suite = unittest.TestSuite()
+#     # Run ping test no before the rest of the tests in the module.
+#     suite.addTest(baseline_test.BaselineTest('test_ping_pong'))
+#     tests = loader.loadTestsFromTestCase(SecurityTest)
+#     suite.addTests(tests)
+#     return suite
 
 
 if __name__ == '__main__':

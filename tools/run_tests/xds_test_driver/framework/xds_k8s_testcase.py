@@ -103,7 +103,6 @@ class XdsKubernetesTestCase(absltest.TestCase):
             reuse_namespace=True)
 
     def tearDown(self):
-        logger.debug('######## tearDown(): resource cleanup initiated ########')
         self.td.cleanup()
         self.client_runner.cleanup()
         self.server_runner.cleanup()
@@ -143,9 +142,9 @@ class XdsKubernetesTestCase(absltest.TestCase):
         # todo(sergiitk): assert backends length
         logger.info(stats_response.rpcs_by_peer)
         for backend, rpcs_count in stats_response.rpcs_by_peer.items():
-            with self.subTest(f'Backend {backend} received RPCs'):
-                self.assertGreater(int(rpcs_count), 0,
-                                   msg='Did not receive a single RPC')
+            self.assertGreater(
+                int(rpcs_count), 0,
+                msg='Backend {backend} did not receive a single RPC')
 
     def assertFailedRpcsAtMost(self, stats_response, count):
         self.assertLessEqual(int(stats_response.num_failures), count,

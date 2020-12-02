@@ -11,7 +11,7 @@ build:
     - image: gcr.io/grpc-testing/xds-k8s-test-server-java
       docker:
         dockerfile: test-server.Dockerfile
-    - image: gcr.io/grpc-testing/xds-k8s-test-server-java
+    - image: gcr.io/grpc-testing/xds-k8s-test-client-java
       docker:
         dockerfile: test-client.Dockerfile
   local: {}
