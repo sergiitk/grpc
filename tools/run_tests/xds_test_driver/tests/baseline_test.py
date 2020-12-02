@@ -24,7 +24,7 @@ XdsTestServer = xds_k8s_testcase.XdsTestServer
 XdsTestClient = xds_k8s_testcase.XdsTestClient
 
 
-class BaselineTest(xds_k8s_testcase.XdsKubernetesTestCase):
+class BaselineTest(xds_k8s_testcase.RegularXdsKubernetesTestCase):
     def tearDown(self):
         # todo(sergiitk): remove
         logger.debug('######## tearDown(): resource cleanup initiated ########')

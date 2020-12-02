@@ -313,6 +313,8 @@ class TrafficDirectorSecureManager(TrafficDirectorManager):
 
     def cleanup(self, *, force=False):
         # Cleanup in the reverse order of creation
+        # todo(sergiitk): todo: fix
+        self.target_proxy_is_http = True
         super().cleanup(force=force)
         self.delete_endpoint_config_selector(force=force)
         self.delete_server_tls_policy(force=force)
