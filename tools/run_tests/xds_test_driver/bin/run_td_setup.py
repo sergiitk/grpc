@@ -35,21 +35,6 @@ flags.adopt_module_key_flags(xds_k8s_flags)
 BackendServiceProtocol = gcp.ComputeV1.BackendServiceProtocol
 
 
-def create_all(td, server_xds_host, server_xds_port, security_mode=None):
-    if security_mode is None:
-        td.setup_for_grpc(server_xds_host, server_xds_port)
-        return
-    if security_mode == 'mtls':
-        logger.info('Setting up mtls')
-        td.setup_for_grpc(server_xds_host, server_xds_port)
-        # td.create_server_tls_policy()
-        # td.setup_for_grpc(server_xds_host, server_xds_port,
-        #                   backend_protocol=BackendServiceProtocol.HTTP2)
-        # td.backend_service_apply_client_mtls_policy(
-        #     'projects/grpc-testing/locations/global/clientTlsPolicies/client_mtls_policy',
-        #     'spiffe://grpc-testing.svc.id.goog/ns/sergii-psm-test/sa/psm-grpc-server')
-
-
 def main(argv):
     if len(argv) > 1:
         raise app.UsageError('Too many command-line arguments.')
@@ -77,7 +62,20 @@ def main(argv):
     try:
         if command == 'create' or command == 'cycle':
             logger.info('Create-only mode')
-            create_all(td, server_xds_host, server_xds_port, security_mode)
+            if security_mode is None:
+                logger.info('No security')
+                td.setup_for_grpc(server_xds_host, server_xds_port)
+
+            elif security_mode == 'mtls':
+                logger.info('Setting up mtls')
+                td.setup_for_grpc(server_xds_host, server_xds_port)
+                # td.create_server_tls_policy()
+                # td.setup_for_grpc(server_xds_host, server_xds_port,
+                #                   backend_protocol=BackendServiceProtocol.HTTP2)
+                # td.backend_service_apply_client_mtls_policy(
+                #     'projects/grpc-testing/locations/global/clientTlsPolicies/client_mtls_policy',
+                #     'spiffe://grpc-testing.svc.id.goog/ns/sergii-psm-test/sa/psm-grpc-server')
+
             logger.info('Works!')
     except Exception:
         logger.exception('Got error during creation')

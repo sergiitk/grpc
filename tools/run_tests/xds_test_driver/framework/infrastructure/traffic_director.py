@@ -19,13 +19,18 @@ from framework.infrastructure import gcp
 logger = logging.getLogger(__name__)
 
 # Type aliases
-ComputeV1 = gcp.ComputeV1
 GcpResource = gcp.GcpResource
 ZonalGcpResource = gcp.ZonalGcpResource
+# Compute
+ComputeV1 = gcp.ComputeV1
 HealthCheckProtocol = ComputeV1.HealthCheckProtocol
 BackendServiceProtocol = ComputeV1.BackendServiceProtocol
-NetworkDiscoveryV1Alpha1 = gcp.NetworkDiscoveryV1Alpha1
-ServerTlsPolicy = NetworkDiscoveryV1Alpha1.ServerTlsPolicy
+# Network Security
+NetworkSecurityV1Alpha1 = gcp.NetworkSecurityV1Alpha1
+ServerTlsPolicy = NetworkSecurityV1Alpha1.ServerTlsPolicy
+# Network Services
+NetworkServicesV1Alpha1 = gcp.NetworkServicesV1Alpha1
+EndpointConfigSelector = NetworkServicesV1Alpha1.EndpointConfigSelector
 
 
 class TrafficDirectorManager:
@@ -260,8 +265,9 @@ class TrafficDirectorManager:
 
 
 class TrafficDirectorSecureManager(TrafficDirectorManager):
-    netsec: Optional[NetworkDiscoveryV1Alpha1]
+    netsec: Optional[NetworkSecurityV1Alpha1]
     SERVER_TLS_POLICY_NAME = "server-tls-policy"
+    ENDPOINT_CONFIG_SELECTOR_NAME = "endpoint-config-selector"
 
     def __init__(
         self,
@@ -275,10 +281,12 @@ class TrafficDirectorSecureManager(TrafficDirectorManager):
                          resource_prefix=resource_prefix, network=network)
 
         # API
-        self.netsec = gcp.NetworkDiscoveryV1Alpha1(gcp_api_manager, project)
+        self.netsec = gcp.NetworkSecurityV1Alpha1(gcp_api_manager, project)
+        self.netsvc = gcp.NetworkServicesV1Alpha1(gcp_api_manager, project)
 
         # Managed resources
         self.server_tls_policy: Optional[ServerTlsPolicy] = None
+        self.ecs: Optional[EndpointConfigSelector] = None
 
     def setup_for_grpc(
         self,
@@ -290,9 +298,11 @@ class TrafficDirectorSecureManager(TrafficDirectorManager):
         # super().setup_for_grpc(service_host, service_port,
         #                        backend_protocol=backend_protocol)
         self.create_server_tls_policy()
+        self.create_endpoint_config_selector()
 
     def cleanup(self, *, force=False):
         # Cleanup in the reverse order of creation
+        self.delete_endpoint_config_selector(force=force)
         self.delete_server_tls_policy(force=force)
         # super().cleanup(force=force)
 
@@ -314,12 +324,48 @@ class TrafficDirectorSecureManager(TrafficDirectorManager):
         if force:
             name = self._ns_name(self.SERVER_TLS_POLICY_NAME)
         elif self.server_tls_policy:
-            name = self.server_tls_policy.short_name
+            name = self.server_tls_policy.name
         else:
             return
         logger.info('Deleting Server TLS Policy %s', name)
         self.netsec.delete_server_tls_policy(name)
         self.server_tls_policy = None
+
+    def create_endpoint_config_selector(self):
+        name = self._ns_name(self.ENDPOINT_CONFIG_SELECTOR_NAME)
+        logger.info('Creating Endpoint Config Selector %s', name)
+
+        # todo(sergiitk): user server config value
+        port_selector = {"ports": ["8080"]}
+        endpoint_matcher_labels = [{
+            "labelName": "version",
+            "labelValue": "production"
+        }]
+
+        label_matcher_all = {
+            "metadataLabelMatchCriteria": "MATCH_ALL",
+            "metadataLabels": endpoint_matcher_labels
+        }
+        self.netsvc.create_endpoint_config_selector(name, {
+            "type": "SIDECAR_PROXY",
+            "serverTlsPolicy": self.server_tls_policy.name,
+            "httpFilters": {},
+            "trafficPortSelector": port_selector,
+            "endpointMatcher": {"metadataLabelMatcher": label_matcher_all},
+        })
+        self.ecs = self.netsvc.get_endpoint_config_selector(name)
+        logger.debug('Loaded Endpoint Config Selector: %r', self.ecs)
+
+    def delete_endpoint_config_selector(self, force=False):
+        if force:
+            name = self._ns_name(self.ENDPOINT_CONFIG_SELECTOR_NAME)
+        elif self.ecs:
+            name = self.ecs.name
+        else:
+            return
+        logger.info('Deleting Endpoint Config Selector %s', name)
+        self.netsvc.delete_endpoint_config_selector(name)
+        self.ecs = None
 
     def backend_service_apply_client_mtls_policy(
         self,
