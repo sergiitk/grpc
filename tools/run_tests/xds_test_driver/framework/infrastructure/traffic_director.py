@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import logging
-from typing import Optional
+from typing import Optional, Set
 
 from framework.infrastructure import gcp
 
@@ -20,12 +20,17 @@ logger = logging.getLogger(__name__)
 
 # Type aliases
 ComputeV1 = gcp.ComputeV1
+GcpResource = gcp.GcpResource
+ZonalGcpResource = gcp.ZonalGcpResource
 HealthCheckProtocol = ComputeV1.HealthCheckProtocol
 BackendServiceProtocol = ComputeV1.BackendServiceProtocol
+NetworkDiscoveryV1Alpha1 = gcp.NetworkDiscoveryV1Alpha1
+ServerTlsPolicy = NetworkDiscoveryV1Alpha1.ServerTlsPolicy
 
 
 class TrafficDirectorManager:
     compute: ComputeV1
+    netsec: Optional[NetworkDiscoveryV1Alpha1]
     BACKEND_SERVICE_NAME = "backend-service"
     HEALTH_CHECK_NAME = "health-check"
     URL_MAP_NAME = "url-map"
@@ -41,10 +46,12 @@ class TrafficDirectorManager:
         *,
         resource_prefix: str,
         network: str = 'default',
+        with_security: bool = False,
     ):
         # Api
         self.compute = gcp.ComputeV1(gcp_api_manager, project)
-        self.netsec = gcp.NetworkDiscoveryV1Alpha1(gcp_api_manager, project)
+        if with_security:
+            self.netsec = gcp.NetworkDiscoveryV1Alpha1(gcp_api_manager, project)
 
         # Settings
         self.project: str = project
@@ -52,14 +59,17 @@ class TrafficDirectorManager:
         self.resource_prefix: str = resource_prefix
 
         # Mutable state
-        self.health_check: Optional[gcp.GcpResource] = None
-        self.backend_service: Optional[gcp.GcpResource] = None
-        self.url_map: Optional[gcp.GcpResource] = None
-        self.target_proxy: Optional[gcp.GcpResource] = None
+        self.health_check: Optional[GcpResource] = None
+        self.backend_service: Optional[GcpResource] = None
+        self.url_map: Optional[GcpResource] = None
+        self.target_proxy: Optional[GcpResource] = None
         # todo(sergiitk): fix
-        self.target_proxy_is_http = False
-        self.forwarding_rule: Optional[gcp.GcpResource] = None
-        self.backends = set()
+        self.target_proxy_is_http: bool = False
+        self.forwarding_rule: Optional[GcpResource] = None
+        self.backends: Set[ZonalGcpResource] = set()
+
+        # Security
+        self.server_tls_policy: Optional[ServerTlsPolicy] = None
 
     @property
     def network_url(self):
@@ -102,11 +112,12 @@ class TrafficDirectorManager:
         target_uri = {"targetUri": "unix:/var/cert/node-agent.0"}
         grpc_endpoint = {"grpcEndpoint": target_uri}
         mtls_policy = {"clientValidationCa": [grpc_endpoint]}
-        return self.netsec.create_server_tls_policy({
-            "name": name,
+        self.netsec.create_server_tls_policy(name, {
             "mtlsPolicy": mtls_policy,
             "serverCertificate": grpc_endpoint,
         })
+        self.server_tls_policy = self.netsec.get_server_tls_policy(name)
+        logger.debug('Policy loaded: %r', self.server_tls_policy)
 
     def create_health_check(self, protocol=HealthCheckProtocol.TCP):
         if self.health_check:
@@ -199,7 +210,7 @@ class TrafficDirectorManager:
         self,
         src_host: str,
         src_port: int,
-    ) -> gcp.GcpResource:
+    ) -> GcpResource:
         src_address = f'{src_host}:{src_port}'
         name = self._ns_name(self.URL_MAP_NAME)
         matcher_name = self._ns_name(self.URL_MAP_PATH_MATCHER_NAME)

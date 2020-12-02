@@ -34,20 +34,32 @@ _GCP_API_RETRIES = 5
 
 
 class GcpApiManager:
+    def __init__(self, alpha_api_key=None):
+        self.alpha_api_key = alpha_api_key or os.getenv('ALPHA_API_KEY')
+
     @functools.lru_cache(None)
     def compute(self, version):
+        api_name = 'compute'
         if version == 'v1':
-            return discovery.build('compute', 'v1', cache_discovery=False)
+            return discovery.build(api_name, version, cache_discovery=False)
         raise NotImplementedError(f'Compute {version} not supported')
 
     @functools.lru_cache(None)
     def networksecurity(self, version):
-        # todo(sergiitk): move to params
-        dev_key = os.getenv('DEV_KEY')
+        api_name = 'networksecurity'
+
         if version == 'v1alpha1':
             return discovery.build(
-                'networksecurity', 'v1alpha1',
-                cache_discovery=False, developerKey=dev_key)
+                api_name, version,
+                discoveryServiceUrl=f'{discovery.V2_DISCOVERY_URI}'
+                                    f'{self._key_param(self.alpha_api_key)}',
+                cache_discovery=False)
+
+        raise NotImplementedError(f'Network Security {version} not supported')
+
+    @staticmethod
+    def _key_param(key):
+        return f'&key={key}' if key else ''
 
     def close(self):
         """todo(sergiitk): contextlib exitstack"""
@@ -79,34 +91,28 @@ class GcpProjectApiResource(object):
         self.api: discovery.Resource = api
         self.project: str = project
 
-    def wait_for_global_operation(self,
-                                  operation,
-                                  timeout_sec=_WAIT_FOR_OPERATION_SEC,
-                                  wait_sec=_WAIT_FIXES_SEC):
+    @staticmethod
+    def wait_for_operation(operation_request,
+                           test_success_fn,
+                           timeout_sec=_WAIT_FOR_OPERATION_SEC,
+                           wait_sec=_WAIT_FIXES_SEC):
         @retrying.retry(
-            retry_on_result=lambda result: result['status'] != 'DONE',
+            retry_on_result=lambda result: not test_success_fn(result),
             stop_max_delay=timeout_sec * 1000,
             wait_fixed=wait_sec * 1000)
         def _retry_until_status_done():
-            # todo(sergiitk) try using wait() here
-            # https://googleapis.github.io/google-api-python-client/docs/dyn/compute_v1.globalOperations.html#wait
-            return self.api.globalOperations().get(
-                project=self.project, operation=operation).execute()
+            logger.debug('Waiting for operation...')
+            return operation_request.execute()
 
-        # logger.debug('Waiting for global operation %s', operation)
-        response = _retry_until_status_done()
-        if 'error' in response:
-            logger.debug('Waiting for global op failed, response: %r', response)
-            raise Exception(f'Operation {operation} did not complete '
-                            f'within {timeout_sec}, error={response["error"]}')
-
-    def _execute(self, request):
-        operation = request.execute(num_retries=_GCP_API_RETRIES)
-        self.wait_for_global_operation(operation['name'])
-        return operation
+        return _retry_until_status_done()
 
 
 class NetworkDiscoveryV1Alpha1(GcpProjectApiResource):
+    API_NAME = 'networksecurity'
+    API_VERSION = 'v1alpha1'
+    DEFAULT_GLOBAL = 'global'
+    SERVER_TLS_POLICIES = 'serverTlsPolicies'
+
     class ServerTlsPolicy:
         def __init__(
             self,
@@ -123,11 +129,19 @@ class NetworkDiscoveryV1Alpha1(GcpProjectApiResource):
             self.create_time = create_time
 
     def __init__(self, api_manager: GcpApiManager, project: str):
-        super().__init__(api_manager.networksecurity('v1alpha1'), project)
+        super().__init__(api_manager.networksecurity(self.API_VERSION), project)
+        # Shortcut
+        self._api_locations = self.api.projects().locations()
 
-    def create_server_tls_policy(self, body: dict):
-        result = self._create_resource(
-            self.api.projects().locations().serverTlsPolicies(), body)
+    def create_server_tls_policy(self, name, body: dict) -> bool:
+        return self._create_resource(
+            self.api.projects().locations().serverTlsPolicies(),
+            body, serverTlsPolicyId=name)
+
+    def get_server_tls_policy(self, name: str) -> ServerTlsPolicy:
+        result = self._get_resource(
+            collection=self._api_locations.serverTlsPolicies(),
+            full_name=self.resource_full_name(name, self.SERVER_TLS_POLICIES))
 
         return self.ServerTlsPolicy(
             name=result['name'],
@@ -136,17 +150,45 @@ class NetworkDiscoveryV1Alpha1(GcpProjectApiResource):
             create_time=result['createTime'],
             update_time=result['updateTime'])
 
-    @property
-    def parent(self):
-        return f'projects/{self.project}/locations/global'
+    def parent(self, location=None):
+        if not location:
+            location = self.DEFAULT_GLOBAL
+        return f'projects/{self.project}/locations/{location}'
 
-    def _create_resource(
-        self,
-        collection: discovery.Resource,
-        body: Dict[str, Any]
-    ):
+    def resource_full_name(self, name, collection_name):
+        return f'{self.parent()}/{collection_name}/{name}'
+
+    def _create_resource(self, collection: discovery.Resource, body: dict,
+                         **kwargs):
         logger.debug("Creating %s", body)
-        return self._execute(collection.create(parent=self.parent, body=body))
+        create_req = collection.create(parent=self.parent(),
+                                       body=body, **kwargs)
+        self._execute(create_req)
+
+    @staticmethod
+    def _get_resource(collection: discovery.Resource, full_name):
+        resource = collection.get(name=full_name).execute()
+        logger.debug("Loaded %r", resource)
+        return resource
+
+    def _execute(self, request, timeout_sec=_WAIT_FOR_OPERATION_SEC):
+        operation = request.execute(num_retries=_GCP_API_RETRIES)
+
+        op_name = operation['name']
+        logger.debug('Waiting for %s operation, timeout %s sec: %s',
+                     self.API_NAME, timeout_sec, op_name)
+
+        op_request = self._api_locations.operations().get(name=op_name)
+        op_completed = self.wait_for_operation(
+            operation_request=op_request,
+            test_success_fn=lambda result: result['done'],
+            timeout_sec=timeout_sec)
+
+        logger.debug('Completed operation: %s', op_completed)
+        if 'error' in op_completed:
+            # todo(sergiitk): custom exception
+            raise Exception(f'Waiting for {self.API_NAME} operation {op_name} '
+                            f'failed. Error: {op_completed["error"]}')
 
 
 class ComputeV1(GcpProjectApiResource):
@@ -361,11 +403,8 @@ class ComputeV1(GcpProjectApiResource):
             project=self.project, backendService=backend_service.name,
             body={"group": backend.url}).execute()
 
-    def _get_resource(
-        self,
-        collection: discovery.Resource,
-        **kwargs
-    ) -> GcpResource:
+    def _get_resource(self, collection: discovery.Resource,
+                      **kwargs) -> GcpResource:
         resp = collection.get(project=self.project, **kwargs).execute()
         logger.debug("Loaded %r", resp)
         return GcpResource(resp['name'], resp['selfLink'])
@@ -393,3 +432,26 @@ class ComputeV1(GcpProjectApiResource):
             reason = error._get_reason()
             logger.info('Delete failed. Error: %s %s',
                         error.resp.status, reason)
+
+    def _execute(self, request, timeout_sec=_WAIT_FOR_OPERATION_SEC):
+        operation = request.execute(num_retries=_GCP_API_RETRIES)
+        logger.debug('Response %s', operation)
+
+        # todo(sergiitk) try using wait() here
+        # https://googleapis.github.io/google-api-python-client/docs/dyn/compute_v1.globalOperations.html#wait
+        operation_request = self.api.globalOperations().get(
+            project=self.project, operation=operation['name'])
+
+        logger.debug('Waiting for global operation %s, timeout %s sec',
+                     operation['name'], timeout_sec)
+        response = self.wait_for_operation(
+            operation_request=operation_request,
+            test_success_fn=lambda _result: _result['status'] == 'DONE',
+            timeout_sec=timeout_sec)
+
+        if 'error' in response:
+            logger.debug('Waiting for global operation failed, response: %r',
+                         response)
+            raise Exception(f'Operation {operation["name"]} did not complete '
+                            f'within {timeout_sec}, error={response["error"]}')
+        return response

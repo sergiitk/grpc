@@ -157,7 +157,7 @@ class KubernetesNamespace:
         _wait_for_deleted_service_account_with_retry()
 
     def wait_for_namespace_deleted(self,
-                                   timeout_sec=120, wait_sec=2):
+                                   timeout_sec=240, wait_sec=2):
         @retrying.retry(retry_on_result=lambda r: r is not None,
                         stop_max_delay=timeout_sec * 1000,
                         wait_fixed=wait_sec * 1000)
