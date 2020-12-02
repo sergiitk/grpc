@@ -72,7 +72,7 @@ def main(argv):
         )
     elif _CMD.value == 'cleanup':
         logger.info('Cleanup server')
-        server_runner.cleanup(force=True, force_namespace=False)
+        server_runner.cleanup(force=True, force_namespace=True)
 
 
 if __name__ == '__main__':
