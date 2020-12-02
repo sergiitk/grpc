@@ -30,14 +30,12 @@ ServerTlsPolicy = NetworkDiscoveryV1Alpha1.ServerTlsPolicy
 
 class TrafficDirectorManager:
     compute: ComputeV1
-    netsec: Optional[NetworkDiscoveryV1Alpha1]
     BACKEND_SERVICE_NAME = "backend-service"
     HEALTH_CHECK_NAME = "health-check"
     URL_MAP_NAME = "url-map"
     URL_MAP_PATH_MATCHER_NAME = "path-matcher"
     TARGET_PROXY_NAME = "target-proxy"
     FORWARDING_RULE_NAME = "forwarding-rule"
-    SERVER_TLS_POLICY_NAME = "server-tls-policy"
 
     def __init__(
         self,
@@ -46,19 +44,16 @@ class TrafficDirectorManager:
         *,
         resource_prefix: str,
         network: str = 'default',
-        with_security: bool = False,
     ):
-        # Api
+        # API
         self.compute = gcp.ComputeV1(gcp_api_manager, project)
-        if with_security:
-            self.netsec = gcp.NetworkDiscoveryV1Alpha1(gcp_api_manager, project)
 
         # Settings
         self.project: str = project
         self.network: str = network
         self.resource_prefix: str = resource_prefix
 
-        # Mutable state
+        # Managed resources
         self.health_check: Optional[GcpResource] = None
         self.backend_service: Optional[GcpResource] = None
         self.url_map: Optional[GcpResource] = None
@@ -67,9 +62,6 @@ class TrafficDirectorManager:
         self.target_proxy_is_http: bool = False
         self.forwarding_rule: Optional[GcpResource] = None
         self.backends: Set[ZonalGcpResource] = set()
-
-        # Security
-        self.server_tls_policy: Optional[ServerTlsPolicy] = None
 
     @property
     def network_url(self):
@@ -104,20 +96,6 @@ class TrafficDirectorManager:
 
     def _ns_name(self, name):
         return f'{self.resource_prefix}-{name}'
-
-    def create_server_tls_policy(self):
-        name = self._ns_name(self.SERVER_TLS_POLICY_NAME)
-        logger.info('Creating Server TLS Policy %s', name)
-
-        target_uri = {"targetUri": "unix:/var/cert/node-agent.0"}
-        grpc_endpoint = {"grpcEndpoint": target_uri}
-        mtls_policy = {"clientValidationCa": [grpc_endpoint]}
-        self.netsec.create_server_tls_policy(name, {
-            "mtlsPolicy": mtls_policy,
-            "serverCertificate": grpc_endpoint,
-        })
-        self.server_tls_policy = self.netsec.get_server_tls_policy(name)
-        logger.debug('Policy loaded: %r', self.server_tls_policy)
 
     def create_health_check(self, protocol=HealthCheckProtocol.TCP):
         if self.health_check:
@@ -182,22 +160,6 @@ class TrafficDirectorManager:
                      self.backend_service.name, self.backends)
         self.compute.backend_service_add_backends(
             self.backend_service, self.backends)
-
-    def backend_service_apply_client_mtls_policy(
-        self,
-        client_policy_url,
-        server_spiffe
-    ):
-        logging.info('Adding Client mTls Policy to Backend Service %s: %s, '
-                     'server %s',
-                     self.backend_service.name,
-                     client_policy_url,
-                     server_spiffe)
-        self.compute.patch_backend_service(self.backend_service, {
-            'securitySettings': {
-                'clientTlsPolicy': client_policy_url,
-                'subjectAltNames': [server_spiffe]
-            }})
 
     def wait_for_backends_healthy_status(self):
         logger.debug(
@@ -295,3 +257,82 @@ class TrafficDirectorManager:
         logger.info('Deleting Forwarding rule %s', name)
         self.compute.delete_forwarding_rule(name)
         self.forwarding_rule = None
+
+
+class TrafficDirectorSecureManager(TrafficDirectorManager):
+    netsec: Optional[NetworkDiscoveryV1Alpha1]
+    SERVER_TLS_POLICY_NAME = "server-tls-policy"
+
+    def __init__(
+        self,
+        gcp_api_manager: gcp.GcpApiManager,
+        project: str,
+        *,
+        resource_prefix: str,
+        network: str = 'default',
+    ):
+        super().__init__(gcp_api_manager, project,
+                         resource_prefix=resource_prefix, network=network)
+
+        # API
+        self.netsec = gcp.NetworkDiscoveryV1Alpha1(gcp_api_manager, project)
+
+        # Managed resources
+        self.server_tls_policy: Optional[ServerTlsPolicy] = None
+
+    def setup_for_grpc(
+        self,
+        service_host,
+        service_port,
+        *,
+        backend_protocol=BackendServiceProtocol.HTTP2
+    ):
+        # super().setup_for_grpc(service_host, service_port,
+        #                        backend_protocol=backend_protocol)
+        self.create_server_tls_policy()
+
+    def cleanup(self, *, force=False):
+        # Cleanup in the reverse order of creation
+        self.delete_server_tls_policy(force=force)
+        # super().cleanup(force=force)
+
+    def create_server_tls_policy(self):
+        name = self._ns_name(self.SERVER_TLS_POLICY_NAME)
+        logger.info('Creating Server TLS Policy %s', name)
+
+        target_uri = {"targetUri": "unix:/var/cert/node-agent.0"}
+        grpc_endpoint = {"grpcEndpoint": target_uri}
+        mtls_policy = {"clientValidationCa": [grpc_endpoint]}
+        self.netsec.create_server_tls_policy(name, {
+            "mtlsPolicy": mtls_policy,
+            "serverCertificate": grpc_endpoint,
+        })
+        self.server_tls_policy = self.netsec.get_server_tls_policy(name)
+        logger.debug('Policy loaded: %r', self.server_tls_policy)
+
+    def delete_server_tls_policy(self, force=False):
+        if force:
+            name = self._ns_name(self.SERVER_TLS_POLICY_NAME)
+        elif self.server_tls_policy:
+            name = self.server_tls_policy.short_name
+        else:
+            return
+        logger.info('Deleting Server TLS Policy %s', name)
+        self.netsec.delete_server_tls_policy(name)
+        self.server_tls_policy = None
+
+    def backend_service_apply_client_mtls_policy(
+        self,
+        client_policy_url,
+        server_spiffe
+    ):
+        logging.info('Adding Client mTls Policy to Backend Service %s: %s, '
+                     'server %s',
+                     self.backend_service.name,
+                     client_policy_url,
+                     server_spiffe)
+        self.compute.patch_backend_service(self.backend_service, {
+            'securitySettings': {
+                'clientTlsPolicy': client_policy_url,
+                'subjectAltNames': [server_spiffe]
+            }})

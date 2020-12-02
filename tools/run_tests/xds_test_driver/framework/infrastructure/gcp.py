@@ -19,6 +19,7 @@ from typing import Any
 from typing import Dict
 from typing import Optional
 
+from dataclasses import dataclass
 import retrying
 from googleapiclient import discovery
 from googleapiclient import errors
@@ -113,29 +114,23 @@ class NetworkDiscoveryV1Alpha1(GcpProjectApiResource):
     DEFAULT_GLOBAL = 'global'
     SERVER_TLS_POLICIES = 'serverTlsPolicies'
 
+    @dataclass
     class ServerTlsPolicy:
-        def __init__(
-            self,
-            name,
-            server_certificate,
-            mtls_policy,
-            create_time,
-            update_time
-        ):
-            self.mtls_policy = mtls_policy
-            self.name = name
-            self.server_certificate = server_certificate
-            self.update_time = update_time
-            self.create_time = create_time
+        name: str
+        url: str
+        mtls_policy: dict
+        server_certificate: dict
+        update_time: str
+        create_time: str
 
     def __init__(self, api_manager: GcpApiManager, project: str):
         super().__init__(api_manager.networksecurity(self.API_VERSION), project)
         # Shortcut
         self._api_locations = self.api.projects().locations()
 
-    def create_server_tls_policy(self, name, body: dict) -> bool:
+    def create_server_tls_policy(self, name, body: dict):
         return self._create_resource(
-            self.api.projects().locations().serverTlsPolicies(),
+            self._api_locations.serverTlsPolicies(),
             body, serverTlsPolicyId=name)
 
     def get_server_tls_policy(self, name: str) -> ServerTlsPolicy:
@@ -144,11 +139,17 @@ class NetworkDiscoveryV1Alpha1(GcpProjectApiResource):
             full_name=self.resource_full_name(name, self.SERVER_TLS_POLICIES))
 
         return self.ServerTlsPolicy(
-            name=result['name'],
+            name=name,
+            url=result['name'],
             server_certificate=result['serverCertificate'],
             mtls_policy=result['mtlsPolicy'],
             create_time=result['createTime'],
             update_time=result['updateTime'])
+
+    def delete_server_tls_policy(self, name):
+        return self._delete_resource(
+            collection=self._api_locations.serverTlsPolicies(),
+            full_name=self.resource_full_name(name, self.SERVER_TLS_POLICIES))
 
     def parent(self, location=None):
         if not location:
@@ -170,6 +171,10 @@ class NetworkDiscoveryV1Alpha1(GcpProjectApiResource):
         resource = collection.get(name=full_name).execute()
         logger.debug("Loaded %r", resource)
         return resource
+
+    def _delete_resource(self, collection: discovery.Resource, full_name: str):
+        logger.debug("Deleting %s", full_name)
+        self._execute(collection.delete(name=full_name))
 
     def _execute(self, request, timeout_sec=_WAIT_FOR_OPERATION_SEC):
         operation = request.execute(num_retries=_GCP_API_RETRIES)

@@ -24,7 +24,7 @@ from framework.infrastructure import traffic_director
 logger = logging.getLogger(__name__)
 # Flags
 _CMD = flags.DEFINE_enum(
-    'cmd', default='create', enum_values=['test', 'create', 'cleanup'],
+    'cmd', default='create', enum_values=['cycle', 'create', 'cleanup'],
     help='Command')
 _SECURITY_MODE = flags.DEFINE_enum(
     'security_mode', default=None, enum_values=['mtls'],
@@ -41,7 +41,8 @@ def create_all(td, server_xds_host, server_xds_port, security_mode=None):
         return
     if security_mode == 'mtls':
         logger.info('Setting up mtls')
-        td.create_server_tls_policy()
+        td.setup_for_grpc(server_xds_host, server_xds_port)
+        # td.create_server_tls_policy()
         # td.setup_for_grpc(server_xds_host, server_xds_port,
         #                   backend_protocol=BackendServiceProtocol.HTTP2)
         # td.backend_service_apply_client_mtls_policy(
@@ -49,38 +50,41 @@ def create_all(td, server_xds_host, server_xds_port, security_mode=None):
         #     'spiffe://grpc-testing.svc.id.goog/ns/sergii-psm-test/sa/psm-grpc-server')
 
 
-def delete_all(td, security_mode):
-    if security_mode == 'mtls':
-        td.target_proxy_is_http = True
-    td.cleanup(force=True)
-
-
 def main(argv):
     if len(argv) > 1:
         raise app.UsageError('Too many command-line arguments.')
 
     gcp_api_manager = gcp.GcpApiManager()
-    td = traffic_director.TrafficDirectorManager(
-        gcp_api_manager,
-        project=xds_flags.PROJECT.value,
-        resource_prefix=xds_flags.NAMESPACE.value,
-        network=xds_flags.NETWORK.value)
+    command = _CMD.value
+    security_mode = _SECURITY_MODE.value
     server_xds_host = xds_flags.SERVER_XDS_HOST.value
     server_xds_port = xds_flags.SERVER_XDS_PORT.value
-    security_mode = _SECURITY_MODE.value
 
-    if _CMD.value == 'create':
-        logger.info('Create-only mode')
-        create_all(td, server_xds_host, server_xds_port, security_mode)
-    elif _CMD.value == 'cleanup':
-        logger.info('Cleanup mode')
-        delete_all(td, security_mode)
+    if security_mode is None:
+        td = traffic_director.TrafficDirectorManager(
+            gcp_api_manager,
+            project=xds_flags.PROJECT.value,
+            resource_prefix=xds_flags.NAMESPACE.value,
+            network=xds_flags.NETWORK.value)
     else:
-        try:
-            create_all(td, server_xds_host, server_xds_port)
+        td = traffic_director.TrafficDirectorSecureManager(
+            gcp_api_manager,
+            project=xds_flags.PROJECT.value,
+            resource_prefix=xds_flags.NAMESPACE.value,
+            network=xds_flags.NETWORK.value)
+
+    # noinspection PyBroadException
+    try:
+        if command == 'create' or command == 'cycle':
+            logger.info('Create-only mode')
+            create_all(td, server_xds_host, server_xds_port, security_mode)
             logger.info('Works!')
-        finally:
-            delete_all(td, security_mode)
+    except Exception:
+        logger.exception('Got error during creation')
+
+    if command == 'cleanup' or command == 'cycle':
+        logger.info('Cleaning up')
+        td.cleanup(force=True)
 
 
 if __name__ == '__main__':
