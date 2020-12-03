@@ -66,16 +66,5 @@ class SecurityTest(xds_k8s_testcase.SecurityXdsKubernetesTestCase):
         pass
 
 
-def load_tests(loader, tests, pattern):
-    # See load_tests Protocol
-    # https://docs.python.org/3.6/library/unittest.html#load-tests-protocol
-    suite = unittest.TestSuite()
-    # Run regular ping test before the rest of the tests in the module.
-    suite.addTest(baseline_test.BaselineTest('test_ping_pong'))
-    tests = loader.loadTestsFromTestCase(SecurityTest)
-    suite.addTests(tests)
-    return suite
-
-
 if __name__ == '__main__':
     absltest.main()
