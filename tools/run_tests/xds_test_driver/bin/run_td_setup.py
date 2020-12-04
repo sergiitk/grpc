@@ -18,13 +18,14 @@ from absl import flags
 
 from framework import xds_flags
 from framework import xds_k8s_flags
-from framework.infrastructure import gcp
+from framework.infrastructure import gcp, k8s
 from framework.infrastructure import traffic_director
 
 logger = logging.getLogger(__name__)
 # Flags
 _CMD = flags.DEFINE_enum(
-    'cmd', default='create', enum_values=['cycle', 'create', 'cleanup'],
+    'cmd', default='create',
+    enum_values=['cycle', 'create', 'cleanup', 'backends'],
     help='Command')
 _SECURITY_MODE = flags.DEFINE_enum(
     'security_mode', default=None, enum_values=['mtls'],
@@ -39,24 +40,33 @@ def main(argv):
     if len(argv) > 1:
         raise app.UsageError('Too many command-line arguments.')
 
-    gcp_api_manager = gcp.GcpApiManager()
     command = _CMD.value
     security_mode = _SECURITY_MODE.value
+
+    project: str = xds_flags.PROJECT.value
+    network: str = xds_flags.NETWORK.value
+    namespace = xds_flags.NAMESPACE.value
+
+    # Test server
+    server_name = xds_flags.SERVER_NAME.value
+    server_port = xds_flags.SERVER_PORT.value
     server_xds_host = xds_flags.SERVER_XDS_HOST.value
     server_xds_port = xds_flags.SERVER_XDS_PORT.value
+
+    gcp_api_manager = gcp.GcpApiManager()
 
     if security_mode is None:
         td = traffic_director.TrafficDirectorManager(
             gcp_api_manager,
-            project=xds_flags.PROJECT.value,
-            resource_prefix=xds_flags.NAMESPACE.value,
-            network=xds_flags.NETWORK.value)
+            project=project,
+            resource_prefix=namespace,
+            network=network)
     else:
         td = traffic_director.TrafficDirectorSecureManager(
             gcp_api_manager,
-            project=xds_flags.PROJECT.value,
-            resource_prefix=xds_flags.NAMESPACE.value,
-            network=xds_flags.NETWORK.value)
+            project=project,
+            resource_prefix=namespace,
+            network=network)
 
     # noinspection PyBroadException
     try:
@@ -69,8 +79,8 @@ def main(argv):
             elif security_mode == 'mtls':
                 logger.info('Setting up mtls')
                 td.setup_for_grpc(server_xds_host, server_xds_port)
-                td.setup_client_security('sergii-psm-test', 'sergii-psm-test')
-                td.setup_server_security(8080)
+                td.setup_client_security(namespace, server_name)
+                td.setup_server_security(server_port)
 
             logger.info('Works!')
     except Exception:
@@ -79,6 +89,22 @@ def main(argv):
     if command == 'cleanup' or command == 'cycle':
         logger.info('Cleaning up')
         td.cleanup(force=True)
+
+    if command == 'backends':
+        logger.info('Adding backends')
+
+        k8s_api_manager = k8s.KubernetesApiManager(
+            xds_k8s_flags.KUBE_CONTEXT_NAME.value)
+        k8s_namespace = k8s.KubernetesNamespace(k8s_api_manager, namespace)
+
+        neg_name, neg_zones = k8s_namespace.get_service_neg(
+            server_name, server_port)
+
+        # todo(sergiitk): figure out how to confirm NEG is ready to be added
+        # time.sleep(30)
+        td.load_backend_service()
+        td.backend_service_add_neg_backends(neg_name, neg_zones)
+        # todo(sergiitk): wait until client reports rpc health
 
 
 if __name__ == '__main__':

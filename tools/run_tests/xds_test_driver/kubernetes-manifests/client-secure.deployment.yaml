@@ -5,6 +5,7 @@ metadata:
   namespace: ${namespace_name}
   labels:
     app: ${deployment_name}
+    owner: xds-k8s-interop-test
 spec:
   replicas: 1
   selector:
@@ -14,6 +15,7 @@ spec:
     metadata:
       labels:
         app: ${deployment_name}
+        owner: xds-k8s-interop-test
     spec:
       serviceAccountName: ${service_account_name}
       containers:
@@ -26,7 +28,7 @@ spec:
           - "--secure_mode=${secure_mode}"
           - "--qps=${qps}"
           - "--rpc=${rpc}"
-          - "--print_response=true"
+          - "--print_response=${print_response}"
         ports:
           - containerPort: ${stats_port}
         env:
@@ -37,8 +39,8 @@ spec:
           - name: GRPC_XDS_CERT_INSTANCE_OVERRIDE
             value: "true"
           # Enable verbose logging
-          # - name: JAVA_OPTS
-          #   value: "-Djava.util.logging.config.file=./logging-debug.properties"
+          - name: JAVA_OPTS
+            value: "-Djava.util.logging.config.file=./logging-debug.properties"
         volumeMounts:
           - mountPath: /tmp/grpc-xds/
             name: grpc-td-conf
@@ -70,24 +72,6 @@ spec:
               memory: 100Mi
           volumeMounts:
             - mountPath: /tmp/bootstrap/
-              name: grpc-td-conf
-        - name: bootstrap-hack
-          image: alpine:latest
-          imagePullPolicy: Always
-          command:
-            - "sed"
-            - "-i"
-            - 's/${network_name}"/${network_name}",\n      "version": "production"/'
-            - "/tmp/grpc-xds/td-grpc-bootstrap.json"
-          resources:
-            limits:
-              cpu: 100m
-              memory: 100Mi
-            requests:
-              cpu: 10m
-              memory: 100Mi
-          volumeMounts:
-            - mountPath: /tmp/grpc-xds/
               name: grpc-td-conf
       volumes:
         - name: grpc-td-conf

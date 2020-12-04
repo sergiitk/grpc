@@ -5,6 +5,7 @@ metadata:
   namespace: ${namespace_name}
   labels:
     app: ${deployment_name}
+    owner: xds-k8s-interop-test
 spec:
   replicas: ${replica_count}
   selector:
@@ -14,6 +15,7 @@ spec:
     metadata:
       labels:
         app: ${deployment_name}
+        owner: xds-k8s-interop-test
     spec:
       serviceAccountName: ${service_account_name}
       containers:
@@ -34,6 +36,9 @@ spec:
             value: "true"
           - name: GRPC_XDS_CERT_INSTANCE_OVERRIDE
             value: "true"
+          # Enable verbose logging
+          - name: JAVA_OPTS
+            value: "-Djava.util.logging.config.file=./logging-debug.properties"
         volumeMounts:
           - mountPath: /tmp/grpc-xds/
             name: grpc-td-conf

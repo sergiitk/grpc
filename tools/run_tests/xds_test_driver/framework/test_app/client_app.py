@@ -98,7 +98,8 @@ class KubernetesClientRunner(base_runner.KubernetesBaseRunner):
     def run(self, *,
             server_address,
             rpc='UnaryCall', qps=25,
-            secure_mode=False) -> XdsTestClient:
+            secure_mode=False,
+            print_response=False) -> XdsTestClient:
         super().run()
         # todo(sergiitk): make rpc UnaryCall enum or get it from proto
 
@@ -122,7 +123,8 @@ class KubernetesClientRunner(base_runner.KubernetesBaseRunner):
             server_address=server_address,
             rpc=rpc,
             qps=qps,
-            secure_mode=secure_mode)
+            secure_mode=secure_mode,
+            print_response=print_response)
 
         self._wait_deployment_with_available_replicas(self.deployment_name)
 

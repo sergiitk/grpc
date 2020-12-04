@@ -3,6 +3,8 @@ kind: Service
 metadata:
   name: ${service_name}
   namespace: ${namespace_name}
+  labels:
+    owner: xds-k8s-interop-test
   annotations:
     cloud.google.com/neg: '{"exposed_ports": {"${test_port}":{"name":"${neg_name}"}}}'
 spec:

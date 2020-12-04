@@ -5,6 +5,7 @@ metadata:
   namespace: ${namespace_name}
   labels:
     app: ${deployment_name}
+    owner: xds-k8s-interop-test
 spec:
   replicas: 1
   selector:
@@ -14,6 +15,7 @@ spec:
     metadata:
       labels:
         app: ${deployment_name}
+        owner: xds-k8s-interop-test
     spec:
       serviceAccountName: ${service_account_name}
       containers:
@@ -25,7 +27,7 @@ spec:
           - "--stats_port=${stats_port}"
           - "--qps=${qps}"
           - "--rpc=${rpc}"
-          - "--print_response=true"
+          - "--print_response=${print_response}"
         ports:
           - containerPort: ${stats_port}
         env:

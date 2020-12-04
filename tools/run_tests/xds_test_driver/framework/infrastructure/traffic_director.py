@@ -137,6 +137,11 @@ class TrafficDirectorManager:
             name, health_check=self.health_check, protocol=protocol)
         self.backend_service = resource
 
+    def load_backend_service(self):
+        name = self._ns_name(self.BACKEND_SERVICE_NAME)
+        resource = self.compute.get_backend_service_traffic_director(name)
+        self.backend_service = resource
+
     def delete_backend_service(self, force=False):
         if force:
             name = self._ns_name(self.BACKEND_SERVICE_NAME)

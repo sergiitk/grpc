@@ -49,28 +49,37 @@ def main(argv):
     if len(argv) > 1:
         raise app.UsageError('Too many command-line arguments.')
 
+    command = _CMD.value
+    security_mode = _SECURITY_MODE.value
+
+    project: str = xds_flags.PROJECT.value
+    network: str = xds_flags.NETWORK.value
+    namespace = xds_flags.NAMESPACE.value
+
+    # Test server
+    server_name = xds_flags.SERVER_NAME.value
+    server_port = xds_flags.SERVER_PORT.value
+
     k8s_api_manager = k8s.KubernetesApiManager(
         xds_k8s_flags.KUBE_CONTEXT_NAME.value)
+
     server_runner = server_app.KubernetesServerRunner(
-        k8s.KubernetesNamespace(k8s_api_manager, xds_flags.NAMESPACE.value),
-        deployment_name=xds_flags.SERVER_NAME.value,
+        k8s.KubernetesNamespace(k8s_api_manager, namespace),
+        deployment_name=server_name,
         image_name=xds_k8s_flags.SERVER_IMAGE.value,
-        network=xds_flags.NETWORK.value,
+        network=network,
         gcp_service_account=xds_k8s_flags.GCP_SERVICE_ACCOUNT.value,
         td_bootstrap_image=xds_k8s_flags.TD_BOOTSTRAP_IMAGE.value,
         deployment_template='server-secure.deployment.yaml',
         reuse_namespace=True)
 
-    server_port = xds_flags.SERVER_PORT.value
-
-    if _CMD.value == 'run':
+    if command == 'run':
         logger.info('Run mtls server')
         server_runner.run(
             test_port=server_port,
             maintenance_port=8081,
-            secure_mode=True,
-        )
-    elif _CMD.value == 'cleanup':
+            secure_mode=True)
+    elif command == 'cleanup':
         logger.info('Cleanup server')
         server_runner.cleanup(force=True, force_namespace=True)
 

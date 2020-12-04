@@ -70,6 +70,8 @@ def main(argv):
         xds_uri = f'xds:///{xds_service_host}:{xds_service_port}'
         client_runner.run(
             server_address=xds_uri,
+            qps=1,
+            print_response=True,
             secure_mode=True)
     elif _CMD.value == 'cleanup':
         logger.info('Cleanup mtls client')

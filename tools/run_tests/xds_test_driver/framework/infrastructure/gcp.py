@@ -393,6 +393,10 @@ class ComputeV1(GcpProjectApiResource):
             'protocol': protocol.name,
         })
 
+    def get_backend_service_traffic_director(self, name: str) -> GcpResource:
+        return self._get_resource(self.api.backendServices(),
+                                  backendService=name)
+
     def patch_backend_service(self, backend_service, body, **kwargs):
         self._patch_resource(
             collection=self.api.backendServices(),

@@ -237,8 +237,8 @@ class KubernetesNamespace:
         def _wait_for_deleted_deployment_with_retry():
             deployment = self.get_deployment(deployment_name)
             if deployment is not None:
-                logger.info('Waiting for deployment %s to be deleted '
-                            'non-terminated replicas: %s',
+                logger.info('Waiting for deployment %s to be deleted. '
+                            'Non-terminated replicas: %s',
                             deployment.metadata.name,
                             deployment.status.replicas)
             return deployment

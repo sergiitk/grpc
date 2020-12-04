@@ -4,3 +4,4 @@ metadata:
   name: ${namespace_name}
   labels:
     name: ${namespace_name}
+    owner: xds-k8s-interop-test
