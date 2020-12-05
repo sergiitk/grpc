@@ -60,6 +60,8 @@ def main(argv):
     server_name = xds_flags.SERVER_NAME.value
     server_port = xds_flags.SERVER_PORT.value
 
+    reuse_namespace = False
+
     k8s_api_manager = k8s.KubernetesApiManager(
         xds_k8s_flags.KUBE_CONTEXT_NAME.value)
 
@@ -67,11 +69,11 @@ def main(argv):
         k8s.KubernetesNamespace(k8s_api_manager, namespace),
         deployment_name=server_name,
         image_name=xds_k8s_flags.SERVER_IMAGE.value,
-        network=network,
         gcp_service_account=xds_k8s_flags.GCP_SERVICE_ACCOUNT.value,
+        network=network,
         td_bootstrap_image=xds_k8s_flags.TD_BOOTSTRAP_IMAGE.value,
         deployment_template='server-secure.deployment.yaml',
-        reuse_namespace=True)
+        reuse_namespace=reuse_namespace)
 
     if command == 'run':
         logger.info('Run mtls server')
@@ -81,7 +83,7 @@ def main(argv):
             secure_mode=True)
     elif command == 'cleanup':
         logger.info('Cleanup server')
-        server_runner.cleanup(force=True, force_namespace=True)
+        server_runner.cleanup(force=True, force_namespace=not reuse_namespace)
 
 
 if __name__ == '__main__':

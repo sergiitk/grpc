@@ -38,7 +38,7 @@ class SecurityTest(xds_k8s_testcase.SecurityXdsKubernetesTestCase):
         self.setupServerBackends()
 
         test_client: XdsTestClient = self.startSecureTestClientForServer(
-            test_server, qps=30, print_response=True)
+            test_server)
 
         # Run the test
         stats_response = test_client.request_load_balancer_stats(num_rpcs=200)

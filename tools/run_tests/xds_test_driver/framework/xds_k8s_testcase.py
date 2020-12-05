@@ -179,8 +179,8 @@ class SecurityXdsKubernetesTestCase(XdsKubernetesTestCase):
             image_name=self.server_image,
             gcp_service_account=self.gcp_service_account,
             network=self.network,
-            deployment_template='server-secure.deployment.yaml',
-            td_bootstrap_image=self.td_bootstrap_image)
+            td_bootstrap_image=self.td_bootstrap_image,
+            deployment_template='server-secure.deployment.yaml')
 
         # Test Client Runner
         self.client_runner = client_app.KubernetesClientRunner(
@@ -198,7 +198,7 @@ class SecurityXdsKubernetesTestCase(XdsKubernetesTestCase):
         test_server = self.server_runner.run(
             replica_count=replica_count,
             test_port=self.server_port,
-            maintenance_port="8081",
+            maintenance_port=8081,
             secure_mode=True,
             **kwargs)
         test_server.xds_address = (self.server_xds_host, self.server_xds_port)
@@ -207,8 +207,8 @@ class SecurityXdsKubernetesTestCase(XdsKubernetesTestCase):
     def setupSecureXds(self):
         # Traffic Director
         self.td.setup_for_grpc(self.server_xds_host, self.server_xds_port)
-        self.td.setup_server_security(self.server_port)
         self.td.setup_client_security(self.namespace, self.server_name)
+        self.td.setup_server_security(self.server_port)
 
     def setupServerBackends(self):
         # Load Backends
@@ -218,7 +218,7 @@ class SecurityXdsKubernetesTestCase(XdsKubernetesTestCase):
         logger.info('Fake waiting before adding backends to avoid error '
                     '400 RESOURCE_NOT_READY')
         # todo(sergiitk): figure out how to confirm NEG is ready to be added
-        time.sleep(30)
+        time.sleep(10)
         self.td.backend_service_add_neg_backends(neg_name, neg_zones)
 
         logger.info('Wait for xDS to stabilize')
@@ -231,7 +231,8 @@ class SecurityXdsKubernetesTestCase(XdsKubernetesTestCase):
         **kwargs
     ) -> XdsTestClient:
         test_client = self.client_runner.run(
-            server_address=test_server.xds_uri, **kwargs)
+            server_address=test_server.xds_uri,
+            secure_mode=True,
+            **kwargs)
         logger.info('Wait for xDS to stabilize after client started')
-        time.sleep(30)
         return test_client
