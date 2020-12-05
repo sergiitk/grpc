@@ -33,6 +33,8 @@ spec:
         env:
           - name: GRPC_XDS_BOOTSTRAP
             value: "/tmp/grpc-xds/td-grpc-bootstrap.json"
+          - name: JAVA_OPTS
+            value: "-Djava.util.logging.config.file=./logging-verbose.properties"
         volumeMounts:
           - mountPath: /tmp/grpc-xds/
             name: grpc-td-conf

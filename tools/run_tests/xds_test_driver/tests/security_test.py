@@ -12,12 +12,10 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 import logging
-import unittest
 
 from absl.testing import absltest
 
 from framework import xds_k8s_testcase
-from tests import baseline_test
 
 logger = logging.getLogger(__name__)
 SKIP_REASON = 'Work in progress'
@@ -40,7 +38,7 @@ class SecurityTest(xds_k8s_testcase.SecurityXdsKubernetesTestCase):
         self.setupServerBackends()
 
         test_client: XdsTestClient = self.startSecureTestClientForServer(
-            test_server, qps=30)
+            test_server, qps=30, print_response=True)
 
         # Run the test
         stats_response = test_client.request_load_balancer_stats(num_rpcs=200)

@@ -38,7 +38,7 @@ spec:
             value: "true"
           # Enable verbose logging
           - name: JAVA_OPTS
-            value: "-Djava.util.logging.config.file=./logging-debug.properties"
+            value: "-Djava.util.logging.config.file=./logging-verbose.properties"
         volumeMounts:
           - mountPath: /tmp/grpc-xds/
             name: grpc-td-conf

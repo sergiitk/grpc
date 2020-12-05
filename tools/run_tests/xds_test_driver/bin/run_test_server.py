@@ -46,6 +46,8 @@ def main(argv):
     if len(argv) > 1:
         raise app.UsageError('Too many command-line arguments.')
 
+    reuse_namespace = False
+
     k8s_api_manager = k8s.KubernetesApiManager(
         xds_k8s_flags.KUBE_CONTEXT_NAME.value)
     server_runner = server_app.KubernetesServerRunner(
@@ -54,14 +56,14 @@ def main(argv):
         deployment_name=xds_flags.SERVER_NAME.value,
         network=xds_flags.NETWORK.value,
         gcp_service_account=xds_k8s_flags.GCP_SERVICE_ACCOUNT.value,
-        reuse_namespace=True)
+        reuse_namespace=reuse_namespace)
 
     if _CMD.value == 'run':
         logger.info('Run server')
         server_runner.run(test_port=xds_flags.SERVER_PORT.value)
     elif _CMD.value == 'cleanup':
         logger.info('Cleanup server')
-        server_runner.cleanup(force=True, force_namespace=True)
+        server_runner.cleanup(force=True, force_namespace=not reuse_namespace)
 
 
 if __name__ == '__main__':

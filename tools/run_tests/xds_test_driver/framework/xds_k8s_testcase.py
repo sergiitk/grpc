@@ -232,4 +232,6 @@ class SecurityXdsKubernetesTestCase(XdsKubernetesTestCase):
     ) -> XdsTestClient:
         test_client = self.client_runner.run(
             server_address=test_server.xds_uri, **kwargs)
+        logger.info('Wait for xDS to stabilize after client started')
+        time.sleep(30)
         return test_client
