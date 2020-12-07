@@ -68,6 +68,10 @@ class XdsKubernetesTestCase(absltest.TestCase):
         cls.gcp_api_manager = gcp.GcpApiManager()
 
     def setUp(self):
+        # todo(sergiitk): generate for each test
+        self.server_namespace = self.namespace
+        self.client_namespace = self.namespace
+
         # Init this in child class
         self.server_runner = None
         self.client_runner = None
@@ -83,6 +87,24 @@ class XdsKubernetesTestCase(absltest.TestCase):
         self.td.cleanup()
         self.client_runner.cleanup()
         self.server_runner.cleanup()
+
+    def setupTrafficDirectorGrpc(self):
+        self.td.setup_for_grpc(self.server_xds_host, self.server_xds_port)
+
+    def setupServerBackends(self):
+        # Load Backends
+        neg_name, neg_zones = self.server_runner.k8s_namespace.get_service_neg(
+            self.server_runner.service_name, self.server_port)
+
+        logger.info('Fake waiting before adding backends to avoid error '
+                    '400 RESOURCE_NOT_READY')
+        # todo(sergiitk): figure out how to confirm NEG is ready to be added
+        time.sleep(10)
+        self.td.backend_service_add_neg_backends(neg_name, neg_zones)
+
+        logger.info('Wait for xDS to stabilize')
+        # todo(sergiitk): wait until client reports rpc health
+        time.sleep(120)
 
     def assertAllBackendsReceivedRpcs(self, stats_response):
         # todo(sergiitk): assert backends length
@@ -100,6 +122,8 @@ class XdsKubernetesTestCase(absltest.TestCase):
 
 class RegularXdsKubernetesTestCase(XdsKubernetesTestCase):
     def setUp(self):
+        super().setUp()
+
         # Traffic Director Configuration
         self.td = traffic_director.TrafficDirectorManager(
             self.gcp_api_manager,
@@ -109,7 +133,8 @@ class RegularXdsKubernetesTestCase(XdsKubernetesTestCase):
 
         # Test Server Runner
         self.server_runner = server_app.KubernetesServerRunner(
-            k8s.KubernetesNamespace(self.k8s_api_manager, self.namespace),
+            k8s.KubernetesNamespace(self.k8s_api_manager,
+                                    self.server_namespace),
             deployment_name=self.server_name,
             image_name=self.server_image,
             gcp_service_account=self.gcp_service_account,
@@ -118,14 +143,15 @@ class RegularXdsKubernetesTestCase(XdsKubernetesTestCase):
 
         # Test Client Runner
         self.client_runner = client_app.KubernetesClientRunner(
-            k8s.KubernetesNamespace(self.k8s_api_manager, self.namespace),
+            k8s.KubernetesNamespace(self.k8s_api_manager,
+                                    self.client_namespace),
             deployment_name=self.client_name,
             image_name=self.client_image,
             gcp_service_account=self.gcp_service_account,
             network=self.network,
             td_bootstrap_image=self.td_bootstrap_image,
             debug_use_port_forwarding=self.client_port_forwarding,
-            reuse_namespace=True)
+            reuse_namespace=self.server_namespace == self.client_namespace)
 
     def startTestServer(self, replica_count=1, **kwargs) -> XdsTestServer:
         test_server = self.server_runner.run(
@@ -134,24 +160,6 @@ class RegularXdsKubernetesTestCase(XdsKubernetesTestCase):
             **kwargs)
         test_server.xds_address = (self.server_xds_host, self.server_xds_port)
         return test_server
-
-    def setupXdsForServer(self, test_server: XdsTestServer):
-        # Traffic Director
-        self.td.setup_for_grpc(test_server.xds_host, test_server.xds_port)
-
-        # Load Backends
-        neg_name, neg_zones = self.server_runner.k8s_namespace.get_service_neg(
-            self.server_runner.service_name, test_server.port)
-
-        logger.info('Fake waiting before adding backends to avoid error '
-                    '400 RESOURCE_NOT_READY')
-        # todo(sergiitk): figure out how to confirm NEG is ready to be added
-        time.sleep(10)
-        self.td.backend_service_add_neg_backends(neg_name, neg_zones)
-
-        logger.info('Wait for xDS to stabilize')
-        # todo(sergiitk): wait until client reports rpc health
-        time.sleep(120)
 
     def startTestClientForServer(
         self,
@@ -165,6 +173,8 @@ class RegularXdsKubernetesTestCase(XdsKubernetesTestCase):
 
 class SecurityXdsKubernetesTestCase(XdsKubernetesTestCase):
     def setUp(self):
+        super().setUp()
+
         # Traffic Director Configuration
         self.td = traffic_director.TrafficDirectorSecureManager(
             self.gcp_api_manager,
@@ -174,7 +184,8 @@ class SecurityXdsKubernetesTestCase(XdsKubernetesTestCase):
 
         # Test Server Runner
         self.server_runner = server_app.KubernetesServerRunner(
-            k8s.KubernetesNamespace(self.k8s_api_manager, self.namespace),
+            k8s.KubernetesNamespace(self.k8s_api_manager,
+                                    self.server_namespace),
             deployment_name=self.server_name,
             image_name=self.server_image,
             gcp_service_account=self.gcp_service_account,
@@ -184,7 +195,8 @@ class SecurityXdsKubernetesTestCase(XdsKubernetesTestCase):
 
         # Test Client Runner
         self.client_runner = client_app.KubernetesClientRunner(
-            k8s.KubernetesNamespace(self.k8s_api_manager, self.namespace),
+            k8s.KubernetesNamespace(self.k8s_api_manager,
+                                    self.client_namespace),
             deployment_name=self.client_name,
             image_name=self.client_image,
             gcp_service_account=self.gcp_service_account,
@@ -192,7 +204,7 @@ class SecurityXdsKubernetesTestCase(XdsKubernetesTestCase):
             td_bootstrap_image=self.td_bootstrap_image,
             debug_use_port_forwarding=self.client_port_forwarding,
             deployment_template='client-secure.deployment.yaml',
-            reuse_namespace=True)
+            reuse_namespace=self.server_namespace == self.client_namespace)
 
     def startSecureTestServer(self, replica_count=1, **kwargs) -> XdsTestServer:
         test_server = self.server_runner.run(
@@ -204,26 +216,13 @@ class SecurityXdsKubernetesTestCase(XdsKubernetesTestCase):
         test_server.xds_address = (self.server_xds_host, self.server_xds_port)
         return test_server
 
-    def setupSecureXds(self):
-        # Traffic Director
-        self.td.setup_for_grpc(self.server_xds_host, self.server_xds_port)
-        self.td.setup_client_security(self.namespace, self.server_name)
-        self.td.setup_server_security(self.server_port)
-
-    def setupServerBackends(self):
-        # Load Backends
-        neg_name, neg_zones = self.server_runner.k8s_namespace.get_service_neg(
-            self.server_runner.service_name, self.server_port)
-
-        logger.info('Fake waiting before adding backends to avoid error '
-                    '400 RESOURCE_NOT_READY')
-        # todo(sergiitk): figure out how to confirm NEG is ready to be added
-        time.sleep(10)
-        self.td.backend_service_add_neg_backends(neg_name, neg_zones)
-
-        logger.info('Wait for xDS to stabilize')
-        # todo(sergiitk): wait until client reports rpc health
-        time.sleep(120)
+    def setupSecurityPolicies(self, *,
+                              server_tls, server_mtls,
+                              client_tls, client_mtls):
+        self.td.setup_client_security(self.server_namespace, self.server_name,
+                                      tls=client_tls, mtls=client_mtls)
+        self.td.setup_server_security(self.server_port,
+                                      tls=server_tls, mtls=server_mtls)
 
     def startSecureTestClientForServer(
         self,

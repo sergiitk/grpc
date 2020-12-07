@@ -307,12 +307,13 @@ class TrafficDirectorSecureManager(TrafficDirectorManager):
         super().setup_for_grpc(service_host, service_port,
                                backend_protocol=backend_protocol)
 
-    def setup_server_security(self, server_port):
-        self.create_server_tls_policy()
+    def setup_server_security(self, server_port, *, tls, mtls):
+        self.create_server_tls_policy(tls=tls, mtls=mtls)
         self.create_endpoint_config_selector(server_port)
 
-    def setup_client_security(self, server_namespace, server_name):
-        self.create_client_tls_policy()
+    def setup_client_security(self, server_namespace, server_name,
+                              *, tls=True, mtls=True):
+        self.create_client_tls_policy(tls=tls, mtls=mtls)
         self.backend_service_apply_client_mtls_policy(
             server_namespace, server_name)
 
@@ -325,17 +326,20 @@ class TrafficDirectorSecureManager(TrafficDirectorManager):
         self.delete_server_tls_policy(force=force)
         self.delete_client_tls_policy(force=force)
 
-    def create_server_tls_policy(self):
+    def create_server_tls_policy(self, *, tls, mtls):
         name = self._ns_name(self.SERVER_TLS_POLICY_NAME)
         logger.info('Creating Server TLS Policy %s', name)
 
-        target_uri = {"targetUri": self.GRPC_ENDPOINT_TARGET_URI}
-        grpc_endpoint = {"grpcEndpoint": target_uri}
-        mtls_policy = {"clientValidationCa": [grpc_endpoint]}
-        self.netsec.create_server_tls_policy(name, {
-            "mtlsPolicy": mtls_policy,
-            "serverCertificate": grpc_endpoint,
-        })
+        grpc_endpoint = {
+            "grpcEndpoint": {"targetUri": self.GRPC_ENDPOINT_TARGET_URI}}
+
+        policy = {}
+        if tls:
+            policy["serverCertificate"] = grpc_endpoint
+        if mtls:
+            policy["mtlsPolicy"] = {"clientValidationCa": [grpc_endpoint]}
+
+        self.netsec.create_server_tls_policy(name, policy)
         self.server_tls_policy = self.netsec.get_server_tls_policy(name)
         logger.debug('Server TLS Policy loaded: %r', self.server_tls_policy)
 
@@ -386,17 +390,20 @@ class TrafficDirectorSecureManager(TrafficDirectorManager):
         self.netsvc.delete_endpoint_config_selector(name)
         self.ecs = None
 
-    def create_client_tls_policy(self):
+    def create_client_tls_policy(self, *, tls, mtls):
         name = self._ns_name(self.CLIENT_TLS_POLICY_NAME)
         logger.info('Creating Client TLS Policy %s', name)
 
-        target_uri = {"targetUri": self.GRPC_ENDPOINT_TARGET_URI}
-        grpc_endpoint = {"grpcEndpoint": target_uri}
+        grpc_endpoint = {
+            "grpcEndpoint": {"targetUri": self.GRPC_ENDPOINT_TARGET_URI}}
 
-        self.netsec.create_client_tls_policy(name, {
-            "serverValidationCa": [grpc_endpoint],
-            "clientCertificate": grpc_endpoint,
-        })
+        policy = {}
+        if tls:
+            policy["serverValidationCa"] = [grpc_endpoint]
+        if mtls:
+            policy["clientCertificate"] = grpc_endpoint
+
+        self.netsec.create_client_tls_policy(name, policy)
         self.client_tls_policy = self.netsec.get_client_tls_policy(name)
         logger.debug('Client TLS Policy loaded: %r', self.client_tls_policy)
 

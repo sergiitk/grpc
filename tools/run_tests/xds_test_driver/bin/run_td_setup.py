@@ -28,7 +28,7 @@ _CMD = flags.DEFINE_enum(
     enum_values=['cycle', 'create', 'cleanup', 'backends'],
     help='Command')
 _SECURITY_MODE = flags.DEFINE_enum(
-    'security_mode', default=None, enum_values=['mtls'],
+    'security_mode', default=None, enum_values=['mtls', 'tls'],
     help='Configure td with security')
 flags.adopt_module_key_flags(xds_flags)
 flags.adopt_module_key_flags(xds_k8s_flags)
@@ -79,8 +79,19 @@ def main(argv):
             elif security_mode == 'mtls':
                 logger.info('Setting up mtls')
                 td.setup_for_grpc(server_xds_host, server_xds_port)
-                td.setup_client_security(namespace, server_name)
-                td.setup_server_security(server_port)
+                td.setup_server_security(server_port,
+                                         tls=True, mtls=True)
+                td.setup_client_security(namespace, server_name,
+                                         tls=True, mtls=True)
+
+            elif security_mode == 'tls':
+                logger.info('Setting up tls')
+                td.setup_for_grpc(server_xds_host, server_xds_port)
+                td.setup_server_security(server_port,
+                                         tls=True, mtls=False)
+                td.setup_client_security(namespace, server_name,
+                                         tls=True, mtls=False)
+
 
             logger.info('Works!')
     except Exception:

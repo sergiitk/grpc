@@ -31,8 +31,11 @@ class BaselineTest(xds_k8s_testcase.RegularXdsKubernetesTestCase):
         super().tearDown()
 
     def test_ping_pong(self):
+        self.setupTrafficDirectorGrpc()
+
         test_server: XdsTestServer = self.startTestServer()
-        self.setupXdsForServer(test_server)
+        self.setupServerBackends()
+
         test_client: XdsTestClient = self.startTestClientForServer(
             test_server, qps=30)
 

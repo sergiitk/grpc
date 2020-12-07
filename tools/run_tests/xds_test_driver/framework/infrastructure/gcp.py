@@ -142,7 +142,7 @@ class NetworkSecurityV1Alpha1(GcpProjectApiResource):
         url: str
         name: str
         client_certificate: dict
-        server_validation_ca: dict
+        server_validation_ca: list
         update_time: str
         create_time: str
 
@@ -164,8 +164,8 @@ class NetworkSecurityV1Alpha1(GcpProjectApiResource):
         return self.ServerTlsPolicy(
             name=name,
             url=result['name'],
-            server_certificate=result['serverCertificate'],
-            mtls_policy=result['mtlsPolicy'],
+            server_certificate=result.get('serverCertificate', {}),
+            mtls_policy=result.get('mtlsPolicy', {}),
             create_time=result['createTime'],
             update_time=result['updateTime'])
 
@@ -187,8 +187,8 @@ class NetworkSecurityV1Alpha1(GcpProjectApiResource):
         return self.ClientTlsPolicy(
             name=name,
             url=result['name'],
-            client_certificate=result['clientCertificate'],
-            server_validation_ca=result['serverValidationCa'],
+            client_certificate=result.get('clientCertificate', {}),
+            server_validation_ca=result.get('serverValidationCa', []),
             create_time=result['createTime'],
             update_time=result['updateTime'])
 
