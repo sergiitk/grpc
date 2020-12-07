@@ -261,7 +261,7 @@ class NetworkServicesV1Alpha1(GcpProjectApiResource):
         url: str
         name: str
         type: str
-        server_tls_policy: str
+        server_tls_policy: Optional[str]
         traffic_port_selector: dict
         endpoint_matcher: dict
         http_filters: dict
@@ -288,7 +288,7 @@ class NetworkServicesV1Alpha1(GcpProjectApiResource):
             name=name,
             url=result['name'],
             type=result['type'],
-            server_tls_policy=result['serverTlsPolicy'],
+            server_tls_policy=result.get('serverTlsPolicy', None),
             traffic_port_selector=result['trafficPortSelector'],
             endpoint_matcher=result['endpointMatcher'],
             http_filters=result['httpFilters'],

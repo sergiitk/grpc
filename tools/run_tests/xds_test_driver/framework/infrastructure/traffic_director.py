@@ -329,6 +329,10 @@ class TrafficDirectorSecureManager(TrafficDirectorManager):
     def create_server_tls_policy(self, *, tls, mtls):
         name = self._ns_name(self.SERVER_TLS_POLICY_NAME)
         logger.info('Creating Server TLS Policy %s', name)
+        if not tls and not mtls:
+            logger.warning('Server TLS Policy %s neither TLS, nor mTLS '
+                           'policy. Skipping creation', name)
+            return
 
         grpc_endpoint = {
             "grpcEndpoint": {"targetUri": self.GRPC_ENDPOINT_TARGET_URI}}
@@ -369,13 +373,19 @@ class TrafficDirectorSecureManager(TrafficDirectorManager):
             "metadataLabelMatchCriteria": "MATCH_ALL",
             "metadataLabels": endpoint_matcher_labels
         }
-        self.netsvc.create_endpoint_config_selector(name, {
+        config = {
             "type": "SIDECAR_PROXY",
-            "serverTlsPolicy": self.server_tls_policy.name,
             "httpFilters": {},
             "trafficPortSelector": port_selector,
             "endpointMatcher": {"metadataLabelMatcher": label_matcher_all},
-        })
+        }
+        if self.server_tls_policy:
+            config["serverTlsPolicy"] = self.server_tls_policy.name
+        else:
+            logger.warning('Creating Endpoint Config Selector %s with '
+                           'no Server TLS policy attached', name)
+
+        self.netsvc.create_endpoint_config_selector(name, config)
         self.ecs = self.netsvc.get_endpoint_config_selector(name)
         logger.debug('Loaded Endpoint Config Selector: %r', self.ecs)
 
@@ -393,6 +403,10 @@ class TrafficDirectorSecureManager(TrafficDirectorManager):
     def create_client_tls_policy(self, *, tls, mtls):
         name = self._ns_name(self.CLIENT_TLS_POLICY_NAME)
         logger.info('Creating Client TLS Policy %s', name)
+        if not tls and not mtls:
+            logger.warning('Client TLS Policy %s neither TLS, nor mTLS '
+                           'policy. Skipping creation', name)
+            return
 
         grpc_endpoint = {
             "grpcEndpoint": {"targetUri": self.GRPC_ENDPOINT_TARGET_URI}}
@@ -423,6 +437,12 @@ class TrafficDirectorSecureManager(TrafficDirectorManager):
         server_namespace,
         server_name,
     ):
+        if not self.client_tls_policy:
+            logger.warning('Client TLS policy not created, '
+                           'skipping attaching to Backend Service %s',
+                           self.backend_service.name)
+            return
+
         server_spiffe = (f'spiffe://{self.project}.svc.id.goog/'
                          f'ns/{server_namespace}/sa/{server_name}')
         logging.info('Adding Client TLS Policy to Backend Service %s: %s, '
@@ -430,6 +450,7 @@ class TrafficDirectorSecureManager(TrafficDirectorManager):
                      self.backend_service.name,
                      self.client_tls_policy.url,
                      server_spiffe)
+
         self.compute.patch_backend_service(self.backend_service, {
             'securitySettings': {
                 'clientTlsPolicy': self.client_tls_policy.url,

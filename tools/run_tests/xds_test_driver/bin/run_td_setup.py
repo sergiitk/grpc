@@ -28,7 +28,7 @@ _CMD = flags.DEFINE_enum(
     enum_values=['cycle', 'create', 'cleanup', 'backends'],
     help='Command')
 _SECURITY_MODE = flags.DEFINE_enum(
-    'security_mode', default=None, enum_values=['mtls', 'tls'],
+    'security_mode', default=None, enum_values=['mtls', 'tls', 'plaintext'],
     help='Configure td with security')
 flags.adopt_module_key_flags(xds_flags)
 flags.adopt_module_key_flags(xds_k8s_flags)
@@ -92,6 +92,13 @@ def main(argv):
                 td.setup_client_security(namespace, server_name,
                                          tls=True, mtls=False)
 
+            elif security_mode == 'plaintext':
+                logger.info('Setting up plaintext')
+                td.setup_for_grpc(server_xds_host, server_xds_port)
+                td.setup_server_security(server_port,
+                                         tls=False, mtls=False)
+                td.setup_client_security(namespace, server_name,
+                                         tls=False, mtls=False)
 
             logger.info('Works!')
     except Exception:
