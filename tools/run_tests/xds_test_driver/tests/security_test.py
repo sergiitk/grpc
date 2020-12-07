@@ -39,15 +39,8 @@ class SecurityTest(xds_k8s_testcase.SecurityXdsKubernetesTestCase):
         test_server: XdsTestServer = self.startSecureTestServer()
         self.setupServerBackends()
 
-        test_client: XdsTestClient = self.startSecureTestClientForServer(
-            test_server)
-
-        # Run the test
-        stats_response = test_client.request_load_balancer_stats(num_rpcs=200)
-
-        # Check the results
-        self.assertAllBackendsReceivedRpcs(stats_response)
-        self.assertFailedRpcsAtMost(stats_response, 199)
+        test_client: XdsTestClient = self.startSecureTestClient(test_server)
+        self.assertTestClientCanSendRpcs(test_client)
 
     def test_tls(self):
         self.setupTrafficDirectorGrpc()
@@ -57,15 +50,8 @@ class SecurityTest(xds_k8s_testcase.SecurityXdsKubernetesTestCase):
         test_server: XdsTestServer = self.startSecureTestServer()
         self.setupServerBackends()
 
-        test_client: XdsTestClient = self.startSecureTestClientForServer(
-            test_server)
-
-        # Run the test
-        stats_response = test_client.request_load_balancer_stats(num_rpcs=200)
-
-        # Check the results
-        self.assertAllBackendsReceivedRpcs(stats_response)
-        self.assertFailedRpcsAtMost(stats_response, 199)
+        test_client: XdsTestClient = self.startSecureTestClient(test_server)
+        self.assertTestClientCanSendRpcs(test_client)
 
     @absltest.skip(SKIP_REASON)
     def test_plaintext_fallback(self):

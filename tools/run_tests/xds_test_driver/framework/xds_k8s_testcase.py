@@ -106,6 +106,16 @@ class XdsKubernetesTestCase(absltest.TestCase):
         # todo(sergiitk): wait until client reports rpc health
         time.sleep(120)
 
+    def assertTestClientCanSendRpcs(self, test_client: XdsTestClient,
+                                    num_rpcs=200):
+        # Run the test
+        stats_response = test_client.request_load_balancer_stats(num_rpcs)
+
+        # Check the results
+        self.assertAllBackendsReceivedRpcs(stats_response)
+        self.assertFailedRpcsAtMost(stats_response, 199)
+
+
     def assertAllBackendsReceivedRpcs(self, stats_response):
         # todo(sergiitk): assert backends length
         logger.info(stats_response.rpcs_by_peer)
@@ -161,14 +171,10 @@ class RegularXdsKubernetesTestCase(XdsKubernetesTestCase):
         test_server.xds_address = (self.server_xds_host, self.server_xds_port)
         return test_server
 
-    def startTestClientForServer(
-        self,
-        test_server: XdsTestServer,
-        **kwargs
-    ) -> XdsTestClient:
-        test_client = self.client_runner.run(
-            server_address=test_server.xds_uri, **kwargs)
-        return test_client
+    def startTestClient(self, test_server: XdsTestServer,
+                        **kwargs) -> XdsTestClient:
+        return self.client_runner.run(server_address=test_server.xds_uri,
+                                      **kwargs)
 
 
 class SecurityXdsKubernetesTestCase(XdsKubernetesTestCase):
@@ -224,7 +230,7 @@ class SecurityXdsKubernetesTestCase(XdsKubernetesTestCase):
         self.td.setup_server_security(self.server_port,
                                       tls=server_tls, mtls=server_mtls)
 
-    def startSecureTestClientForServer(
+    def startSecureTestClient(
         self,
         test_server: XdsTestServer,
         **kwargs
