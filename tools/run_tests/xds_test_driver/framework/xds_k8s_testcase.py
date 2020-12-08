@@ -239,5 +239,4 @@ class SecurityXdsKubernetesTestCase(XdsKubernetesTestCase):
             server_address=test_server.xds_uri,
             secure_mode=True,
             **kwargs)
-        logger.info('Wait for xDS to stabilize after client started')
         return test_client
