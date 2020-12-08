@@ -1,3 +1,4 @@
+# Copy to local-dev.cfg
 --flagfile=config/grpc-testing.cfg
 --logger_levels=__main__:DEBUG,framework:DEBUG
 --verbosity=0
