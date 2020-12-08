@@ -96,10 +96,7 @@ class XdsKubernetesTestCase(absltest.TestCase):
         neg_name, neg_zones = self.server_runner.k8s_namespace.get_service_neg(
             self.server_runner.service_name, self.server_port)
 
-        logger.info('Fake waiting before adding backends to avoid error '
-                    '400 RESOURCE_NOT_READY')
-        # todo(sergiitk): figure out how to confirm NEG is ready to be added
-        time.sleep(10)
+        # Add backends to the Backend Service
         self.td.backend_service_add_neg_backends(neg_name, neg_zones)
 
         logger.info('Wait for xDS to stabilize')
@@ -114,7 +111,6 @@ class XdsKubernetesTestCase(absltest.TestCase):
         # Check the results
         self.assertAllBackendsReceivedRpcs(stats_response)
         self.assertFailedRpcsAtMost(stats_response, 199)
-
 
     def assertAllBackendsReceivedRpcs(self, stats_response):
         # todo(sergiitk): assert backends length

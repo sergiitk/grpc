@@ -157,12 +157,9 @@ class TrafficDirectorManager:
         logger.info('Loading NEGs')
         for zone in zones:
             backend = self.compute.wait_for_network_endpoint_group(name, zone)
+            logger.info('Loaded NEG %s in zone %s', backend.name, backend.zone)
             self.backends.add(backend)
 
-        # logger.info('Fake waiting before adding backends to avoid error '
-        #             '400 RESOURCE_NOT_READY')
-        # todo(sergiitk): figure out how to confirm NEG is ready to be added
-        # time.sleep(10)
         self.backend_service_add_backends()
         self.wait_for_backends_healthy_status()
 

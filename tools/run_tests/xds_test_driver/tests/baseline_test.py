@@ -35,6 +35,7 @@ class BaselineTest(xds_k8s_testcase.RegularXdsKubernetesTestCase):
 
         test_server: XdsTestServer = self.startTestServer()
         self.setupServerBackends()
+        self.assertTrue(True)
 
         test_client: XdsTestClient = self.startTestClient(test_server)
         self.assertTestClientCanSendRpcs(test_client)

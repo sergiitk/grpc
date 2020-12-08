@@ -21,8 +21,8 @@ from typing import Optional
 
 from dataclasses import dataclass
 import retrying
+import googleapiclient.errors
 from googleapiclient import discovery
-from googleapiclient import errors
 
 logger = logging.getLogger(__name__)
 
@@ -222,7 +222,7 @@ class NetworkSecurityV1Alpha1(GcpProjectApiResource):
         logger.debug("Deleting %s", full_name)
         try:
             self._execute(collection.delete(name=full_name))
-        except errors.HttpError as error:
+        except googleapiclient.errors.HttpError as error:
             # noinspection PyProtectedMember
             reason = error._get_reason()
             logger.info('Delete failed. Error: %s %s',
@@ -326,7 +326,7 @@ class NetworkServicesV1Alpha1(GcpProjectApiResource):
         logger.debug("Deleting %s", full_name)
         try:
             self._execute(collection.delete(name=full_name))
-        except errors.HttpError as error:
+        except googleapiclient.errors.HttpError as error:
             # noinspection PyProtectedMember
             reason = error._get_reason()
             logger.info('Delete failed. Error: %s %s',
@@ -355,6 +355,7 @@ class NetworkServicesV1Alpha1(GcpProjectApiResource):
 class ComputeV1(GcpProjectApiResource):
     def __init__(self, api_manager: GcpApiManager, project: str):
         super().__init__(api_manager.compute('v1'), project)
+        self._operation_is_done = None
 
     class HealthCheckProtocol(enum.Enum):
         TCP = enum.auto()
@@ -494,39 +495,48 @@ class ComputeV1(GcpProjectApiResource):
         self._delete_resource(self.api.globalForwardingRules(),
                               forwardingRule=name)
 
+    @staticmethod
+    def _network_endpoint_group_not_ready(neg):
+        return not neg or neg.get('size', 0) == 0
+
     def wait_for_network_endpoint_group(self, name, zone):
-        @retrying.retry(retry_on_result=lambda r: not r,
+        @retrying.retry(retry_on_result=self._network_endpoint_group_not_ready,
                         stop_max_delay=60 * 1000,
-                        wait_fixed=1 * 1000)
-        def _wait_for_network_endpoint_group():
+                        wait_fixed=2 * 1000)
+        def _wait_for_network_endpoint_group_ready():
             try:
                 neg = self.get_network_endpoint_group(name, zone)
-            except errors.HttpError as error:
+                logger.debug('Waiting for endpoints: NEG %s in zone %s, '
+                             'current count %s',
+                             neg['name'], zone, neg.get('size'))
+            except googleapiclient.errors.HttpError as error:
                 # noinspection PyProtectedMember
                 reason = error._get_reason()
                 logger.debug('Retrying NEG load, got %s, details %s',
                              error.resp.status, reason)
                 raise
-            if not neg:
-                logger.error('Unexpected state: no error, but NEG not loaded')
-                raise RuntimeError('Unexpected state loading NEG')
-            logger.info('Loaded NEG %s, zone %s', neg.name, neg.zone)
             return neg
 
-        return _wait_for_network_endpoint_group()
+        network_endpoint_group = _wait_for_network_endpoint_group_ready()
+        # @todo(sergiitk): dataclass
+        return ZonalGcpResource(
+            network_endpoint_group['name'],
+            network_endpoint_group['selfLink'],
+            zone)
 
     def get_network_endpoint_group(self, name, zone):
-        resource = self._get_resource(self.api.networkEndpointGroups(),
-                                      networkEndpointGroup=name, zone=zone)
-        # @todo(sergiitk): fix
-        return ZonalGcpResource(resource.name, resource.url, zone)
+        neg = self.api.networkEndpointGroups().get(project=self.project,
+                                                   networkEndpointGroup=name,
+                                                   zone=zone).execute()
+        # @todo(sergiitk): dataclass
+        return neg
 
     def wait_for_backends_healthy_status(
         self,
         backend_service,
         backends,
         timeout_sec=_WAIT_FOR_OPERATION_SEC,
-        wait_sec=_WAIT_FIXES_SEC,
+        wait_sec=4,
     ):
         pending = set(backends)
 
@@ -592,13 +602,19 @@ class ComputeV1(GcpProjectApiResource):
         try:
             self._execute(collection.delete(project=self.project, **kwargs))
             return True
-        except errors.HttpError as error:
+        except googleapiclient.errors.HttpError as error:
             # noinspection PyProtectedMember
             reason = error._get_reason()
             logger.info('Delete failed. Error: %s %s',
                         error.resp.status, reason)
 
-    def _execute(self, request, timeout_sec=_WAIT_FOR_OPERATION_SEC):
+    @staticmethod
+    def _operation_status_done(operation):
+        return 'status' in operation and operation['status'] == 'DONE'
+
+    def _execute(self, request, *,
+                 test_success_fn=None,
+                 timeout_sec=_WAIT_FOR_OPERATION_SEC):
         operation = request.execute(num_retries=_GCP_API_RETRIES)
         logger.debug('Response %s', operation)
 
@@ -607,16 +623,19 @@ class ComputeV1(GcpProjectApiResource):
         operation_request = self.api.globalOperations().get(
             project=self.project, operation=operation['name'])
 
+        if test_success_fn is None:
+            test_success_fn = self._operation_status_done
+
         logger.debug('Waiting for global operation %s, timeout %s sec',
                      operation['name'], timeout_sec)
         response = self.wait_for_operation(
             operation_request=operation_request,
-            test_success_fn=lambda _result: _result['status'] == 'DONE',
+            test_success_fn=test_success_fn,
             timeout_sec=timeout_sec)
 
         if 'error' in response:
             logger.debug('Waiting for global operation failed, response: %r',
                          response)
             raise Exception(f'Operation {operation["name"]} did not complete '
-                            f'within {timeout_sec}, error={response["error"]}')
+                            f'within {timeout_sec}s, error={response["error"]}')
         return response
