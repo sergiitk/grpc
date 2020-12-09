@@ -97,8 +97,9 @@ class XdsTestClient:
     def wait_for_healthy_server_channel(self):
         retryer = tenacity.Retrying(
             retry=tenacity.retry_if_result(lambda r: r is None),
-            wait=tenacity.wait_fixed(2),
+            wait=tenacity.wait_exponential(max=10),
             before=tenacity.before_log(logger, logging.DEBUG),
+            before_sleep=tenacity.before_sleep_log(logger, logging.DEBUG, True),
             reraise=True)
         retryer(self.get_healthy_server_channel)
 

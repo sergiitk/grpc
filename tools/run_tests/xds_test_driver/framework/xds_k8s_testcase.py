@@ -169,7 +169,8 @@ class RegularXdsKubernetesTestCase(XdsKubernetesTestCase):
                         **kwargs) -> XdsTestClient:
         test_client = self.client_runner.run(server_target=test_server.xds_uri,
                                              **kwargs)
-        logger.info('Waiting for xDS to stabilize')
+        logger.info('Waiting fot the client to establish healthy channel with '
+                    'the server')
         test_client.wait_for_healthy_server_channel()
         return test_client
 
@@ -237,4 +238,7 @@ class SecurityXdsKubernetesTestCase(XdsKubernetesTestCase):
             server_target=test_server.xds_uri,
             secure_mode=True,
             **kwargs)
+        logger.info('Waiting fot the client to establish healthy channel with '
+                    'the server')
+        test_client.wait_for_healthy_server_channel()
         return test_client
