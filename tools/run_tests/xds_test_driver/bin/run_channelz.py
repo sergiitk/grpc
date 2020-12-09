@@ -73,13 +73,15 @@ def main(argv):
 
     test_client: XdsTestClient = XdsTestClient(
         ip=client_pod_ip,
-        port=client_port,
-        server_address=test_server.xds_uri,
+        port_load_balancer_stats=client_port,
+        port_channelz=client_port,
+        server_target=test_server.xds_uri,
         rpc_host=_CLIENT_RPC_HOST.value)
 
     with test_client:
-        test_client.get_server_channel()
-        stats_response = test_client.request_load_balancer_stats(num_rpcs=10)
+        channel = test_client.get_healthy_server_channel()
+        print(channel)
+        stats_response = test_client.get_load_balancer_stats(num_rpcs=10)
         print(stats_response)
 
 

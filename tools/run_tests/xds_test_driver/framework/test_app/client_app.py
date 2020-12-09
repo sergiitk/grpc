@@ -13,55 +13,65 @@
 # limitations under the License.
 
 import logging
-from typing import Optional
-from typing import Tuple
+from typing import Optional, Dict, Iterator
 
 import grpc
-from grpc_channelz.v1 import channelz_pb2
-from grpc_channelz.v1 import channelz_pb2_grpc
 
+from framework.rpc import grpc_channelz
+from framework.rpc import grpc_testing
 from framework.test_app import base_runner
-from framework.test_app import grpc_helper
-from framework.test_app import channelz_helper
 from framework.infrastructure import k8s
-from src.proto.grpc.testing import test_pb2_grpc
-from src.proto.grpc.testing import messages_pb2
+
 
 logger = logging.getLogger(__name__)
 
 # Type aliases
-LoadBalancerStatsRequest = messages_pb2.LoadBalancerStatsRequest
-LoadBalancerStatsResponse = messages_pb2.LoadBalancerStatsResponse
+ChannelzServiceClient = grpc_channelz.ChannelzServiceClient
+ChannelConnectivityState = grpc_channelz.ChannelConnectivityState
+LoadBalancerStatsServiceClient = grpc_testing.LoadBalancerStatsServiceClient
 
 
 class XdsTestClient:
-    DEFAULT_STATS_REQUEST_TIMEOUT_SEC = 1200
+    channels: Dict[int, grpc.Channel]
+    _load_balancer_stats_service: Optional[LoadBalancerStatsServiceClient]
+    _channelz_service: Optional[ChannelzServiceClient]
 
     def __init__(self, *,
                  ip: str,
-                 port: Tuple[int, str],
-                 server_address: str,
+                 port_load_balancer_stats: int,
+                 port_channelz: int,
+                 server_target: str,
                  rpc_host: Optional[str] = None):
-        self.host = ip
-        self.server_address = server_address
-        self.rpc_port = int(port)
+        self.ip = ip
         self.rpc_host = rpc_host or ip
-        self._channel: Optional[grpc.Channel] = None
+        self.port_load_balancer_stats = port_load_balancer_stats
+        self.port_channelz = port_channelz
+        self.server_target = server_target
+        # Cache gRPC channels per port
+        self.channels = dict()
+        self._load_balancer_stats_service = None
+        self._channelz_service = None
 
     @property
-    def rpc_address(self) -> str:
-        return f'{self.rpc_host}:{self.rpc_port}'
+    def load_balancer_stats_service(self) -> LoadBalancerStatsServiceClient:
+        if not self._load_balancer_stats_service:
+            self._load_balancer_stats_service = LoadBalancerStatsServiceClient(
+                self._channel_get_or_create(self.port_load_balancer_stats))
+        return self._load_balancer_stats_service
 
-    def connect(self):
-        if not self._channel:
-            self._channel = grpc.insecure_channel(self.rpc_address)
+    @property
+    def channelz_service(self) -> ChannelzServiceClient:
+        if not self._channelz_service:
+            self._channelz_service = ChannelzServiceClient(
+                self._channel_get_or_create(self.port_channelz))
+        return self._channelz_service
 
     def close(self):
-        if self._channel:
-            self._channel.close()
+        # Close all channels
+        for channel in self.channels.values():
+            channel.close()
 
     def __enter__(self):
-        self.connect()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -71,45 +81,36 @@ class XdsTestClient:
     def __del__(self):
         self.close()
 
-    def request_load_balancer_stats(
+    def get_load_balancer_stats(
         self, *,
-        num_rpcs,
-        partial_results_timeout_sec: Optional[int] = None
-    ) -> LoadBalancerStatsResponse:
-        stub = test_pb2_grpc.LoadBalancerStatsServiceStub(self._channel)
-        if partial_results_timeout_sec is None:
-            partial_results_timeout_sec = self.DEFAULT_STATS_REQUEST_TIMEOUT_SEC
+        num_rpcs: int,
+        timeout_sec: Optional[int] = None,
+    ) -> grpc_testing.LoadBalancerStatsResponse:
+        """
+        Shortcut to LoadBalancerStatsServiceClient.get_client_stats()
+        """
+        return self.load_balancer_stats_service.get_client_stats(
+            num_rpcs=num_rpcs, timeout_sec=timeout_sec)
 
-        logger.info('Invoking GetClientStats RPC on %s', self.rpc_address)
-        stats_request = LoadBalancerStatsRequest(
-            num_rpcs=num_rpcs, timeout_sec=partial_results_timeout_sec)
+    def get_healthy_server_channel(self):
+        for channel in self.get_server_channels():
+            state: ChannelConnectivityState = channel.data.state
+            logger.debug('Found server channel: %s, %s',
+                         channel.ref.name, state)
+            if state.state in ChannelzServiceClient.CHANNEL_CONNECTED_STATES:
+                return channel
 
-        total_timeout_sec = grpc_helper.GRPC_DEFAULT_TIMEOUT_SEC + partial_results_timeout_sec
-        response = grpc_helper.call_unary_when_ready(
-            method=stub.GetClientStats,
-            request=stats_request,
-            timeout_sec=total_timeout_sec
-        )
+        return None
 
+    def get_server_channels(self) -> Iterator[grpc_channelz.Channel]:
+        return self.channelz_service.find_channels_for_target(
+            self.server_target)
 
-        with grpc.insecure_channel(self.rpc_address) as channel:
-
-
-
-
-            response = stub.GetClientStats(stats_request,
-                                           wait_for_ready=True,
-                                           timeout=request_timeout)
-
-            logger.debug('Invoked GetClientStats RPC to %s: %s',
-                         self.rpc_address, response)
-            return response
-
-    def get_server_channel(self):
-        return channelz_helper.get_channel_with_target(self._channel,
-                                                       self.server_address)
-
-
+    def _channel_get_or_create(self, port):
+        if port not in self.channels:
+            target = f'{self.rpc_host}:{port}'
+            self.channels[port] = grpc.insecure_channel(target)
+        return self.channels[port]
 
 
 class KubernetesClientRunner(base_runner.KubernetesBaseRunner):
@@ -196,8 +197,9 @@ class KubernetesClientRunner(base_runner.KubernetesBaseRunner):
             rpc_host = self.k8s_namespace.PORT_FORWARD_LOCAL_ADDRESS
 
         return XdsTestClient(ip=pod_ip,
-                             port=self.stats_port,
-                             server_address=server_address,
+                             port_load_balancer_stats=self.stats_port,
+                             port_channelz=self.stats_port,
+                             server_target=server_address,
                              rpc_host=rpc_host)
 
     def cleanup(self, *, force=False, force_namespace=False):
