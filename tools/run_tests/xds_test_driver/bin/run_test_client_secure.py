@@ -75,7 +75,7 @@ def main(argv):
         logger.info('Run mtls client')
         xds_uri = f'xds:///{server_xds_host}:{server_xds_port}'
         client_runner.run(
-            server_address=xds_uri,
+            server_target=xds_uri,
             qps=1,
             print_response=True,
             secure_mode=True)

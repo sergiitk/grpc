@@ -12,7 +12,6 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 import logging
-import time
 
 from absl.testing import absltest
 
@@ -100,14 +99,10 @@ class XdsKubernetesTestCase(absltest.TestCase):
         # Add backends to the Backend Service
         self.td.backend_service_add_neg_backends(neg_name, neg_zones)
 
-        logger.info('Wait for xDS to stabilize')
-        # todo(sergiitk): wait until client reports rpc health
-        time.sleep(120)
-
     def assertTestClientCanSendRpcs(self, test_client: XdsTestClient,
                                     num_rpcs=200):
         # Run the test
-        stats_response = test_client.request_load_balancer_stats(num_rpcs)
+        stats_response = test_client.get_load_balancer_stats(num_rpcs=num_rpcs)
 
         # Check the results
         self.assertAllBackendsReceivedRpcs(stats_response)
@@ -166,13 +161,17 @@ class RegularXdsKubernetesTestCase(XdsKubernetesTestCase):
             replica_count=replica_count,
             test_port=self.server_port,
             **kwargs)
-        test_server.xds_address = (self.server_xds_host, self.server_xds_port)
+        test_server.set_xds_address(self.server_xds_host, self.server_xds_port)
         return test_server
 
-    def startTestClient(self, test_server: XdsTestServer,
+    def startTestClient(self,
+                        test_server: XdsTestServer,
                         **kwargs) -> XdsTestClient:
-        return self.client_runner.run(server_address=test_server.xds_uri,
-                                      **kwargs)
+        test_client = self.client_runner.run(server_target=test_server.xds_uri,
+                                             **kwargs)
+        logger.info('Waiting for xDS to stabilize')
+        test_client.wait_for_healthy_server_channel()
+        return test_client
 
 
 class SecurityXdsKubernetesTestCase(XdsKubernetesTestCase):
@@ -218,7 +217,7 @@ class SecurityXdsKubernetesTestCase(XdsKubernetesTestCase):
             maintenance_port=8081,
             secure_mode=True,
             **kwargs)
-        test_server.xds_address = (self.server_xds_host, self.server_xds_port)
+        test_server.set_xds_address(self.server_xds_host, self.server_xds_port)
         return test_server
 
     def setupSecurityPolicies(self, *,
@@ -235,7 +234,7 @@ class SecurityXdsKubernetesTestCase(XdsKubernetesTestCase):
         **kwargs
     ) -> XdsTestClient:
         test_client = self.client_runner.run(
-            server_address=test_server.xds_uri,
+            server_target=test_server.xds_uri,
             secure_mode=True,
             **kwargs)
         return test_client

@@ -23,7 +23,7 @@ spec:
         image: ${image_name}
         imagePullPolicy: Always
         args:
-          - "--server=${server_address}"
+          - "--server=${server_target}"
           - "--stats_port=${stats_port}"
           - "--qps=${qps}"
           - "--rpc=${rpc}"

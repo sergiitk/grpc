@@ -60,7 +60,7 @@ def main(argv):
     server_pod_ip = get_deployment_pod_ips(server_k8s_ns, server_name)[0]
     test_server: XdsTestServer = XdsTestServer(
         ip=server_pod_ip,
-        port=server_port,
+        rpc_port=server_port,
         xds_host=xds_flags.SERVER_XDS_HOST.value,
         xds_port=xds_flags.SERVER_XDS_PORT.value,
         rpc_host=_SERVER_RPC_HOST.value)
@@ -73,12 +73,12 @@ def main(argv):
 
     test_client: XdsTestClient = XdsTestClient(
         ip=client_pod_ip,
-        port_load_balancer_stats=client_port,
-        port_channelz=client_port,
         server_target=test_server.xds_uri,
+        rpc_port=client_port,
         rpc_host=_CLIENT_RPC_HOST.value)
 
     with test_client:
+        test_client.wait_for_healthy_server_channel()
         channel = test_client.get_healthy_server_channel()
         print(channel)
         stats_response = test_client.get_load_balancer_stats(num_rpcs=10)

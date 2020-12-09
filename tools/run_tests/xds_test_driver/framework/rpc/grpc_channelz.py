@@ -31,8 +31,6 @@ GetTopChannelsResponse = channelz_pb2.GetTopChannelsResponse
 
 class ChannelzServiceClient(framework.rpc.GrpcClientHelper):
     stub: channelz_pb2_grpc.ChannelzStub
-    CHANNEL_CONNECTED_STATES = frozenset(
-        [ChannelConnectivityState.READY, ChannelConnectivityState.IDLE])
 
     def __init__(self, channel: grpc.Channel):
         super().__init__(channel, channelz_pb2_grpc.ChannelzStub)

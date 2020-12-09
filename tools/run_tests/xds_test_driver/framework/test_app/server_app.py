@@ -23,30 +23,28 @@ logger = logging.getLogger(__name__)
 
 
 class XdsTestServer:
-    def __init__(
-        self,
-        *,
-        ip: str,
-        port: Tuple[int, str],
-        maintenance_port: Optional[int] = None,
-        xds_host: Optional[str] = None,
-        xds_port: Optional[int] = None,
-        secure_mode: Optional[bool] = False,
-        server_id: Optional[str] = None,
-        rpc_host: Optional[str] = None
-    ):
+    def __init__(self, *,
+                 ip: str,
+                 rpc_port: int,
+                 secure_mode: Optional[bool] = False,
+                 server_id: Optional[str] = None,
+                 xds_host: Optional[str] = None,
+                 xds_port: Optional[int] = None,
+                 rpc_host: Optional[str] = None,
+                 maintenance_port: Optional[int] = None):
         self.ip = ip
-        self.port = port
-        self.maintenance_port = maintenance_port or port
+        self.rpc_port = rpc_port
+        # Optional fields
+        self.rpc_host = rpc_host or ip
+        self.maintenance_port = maintenance_port or rpc_port
         self.xds_host = xds_host
         self.xds_port = xds_port
         self.secure_mode = secure_mode
         self.server_id = server_id
-        self.rpc_host = rpc_host or ip
 
     @property
     def rpc_address(self) -> str:
-        return f'{self.rpc_host}:{self.port}'
+        return f'{self.rpc_host}:{self.rpc_port}'
 
     @property
     def maintenance_rpc_address(self) -> str:
@@ -171,8 +169,12 @@ class KubernetesServerRunner(base_runner.KubernetesBaseRunner):
                 maintenance_port=maintenance_port)
 
         self._wait_service_neg(self.service_name, test_port)
-        return XdsTestServer(test_port, maintenance_port, secure_mode,
-                             server_id)
+        return XdsTestServer(
+            # todo(sergiitk): resolve ip
+            ip=None,
+            rpc_port=test_port,
+            secure_mode=secure_mode,
+            server_id=server_id)
 
     def cleanup(self, *, force=False, force_namespace=False):
         if self.deployment or force:

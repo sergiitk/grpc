@@ -16,6 +16,7 @@ import logging
 from typing import Optional, Dict, Iterator
 
 import grpc
+import tenacity
 
 from framework.rpc import grpc_channelz
 from framework.rpc import grpc_testing
@@ -38,15 +39,16 @@ class XdsTestClient:
 
     def __init__(self, *,
                  ip: str,
-                 port_load_balancer_stats: int,
-                 port_channelz: int,
+                 rpc_port: int,
                  server_target: str,
-                 rpc_host: Optional[str] = None):
+                 rpc_host: Optional[str] = None,
+                 maintenance_port: Optional[int] = None):
         self.ip = ip
-        self.rpc_host = rpc_host or ip
-        self.port_load_balancer_stats = port_load_balancer_stats
-        self.port_channelz = port_channelz
         self.server_target = server_target
+        self.rpc_port = rpc_port
+        # Optional fields
+        self.rpc_host = rpc_host or ip
+        self.maintenance_port = maintenance_port or rpc_port
         # Cache gRPC channels per port
         self.channels = dict()
         self._load_balancer_stats_service = None
@@ -56,14 +58,14 @@ class XdsTestClient:
     def load_balancer_stats_service(self) -> LoadBalancerStatsServiceClient:
         if not self._load_balancer_stats_service:
             self._load_balancer_stats_service = LoadBalancerStatsServiceClient(
-                self._channel_get_or_create(self.port_load_balancer_stats))
+                self._channel_get_or_create(self.rpc_port))
         return self._load_balancer_stats_service
 
     @property
     def channelz_service(self) -> ChannelzServiceClient:
         if not self._channelz_service:
             self._channelz_service = ChannelzServiceClient(
-                self._channel_get_or_create(self.port_channelz))
+                self._channel_get_or_create(self.maintenance_port))
         return self._channelz_service
 
     def close(self):
@@ -92,12 +94,26 @@ class XdsTestClient:
         return self.load_balancer_stats_service.get_client_stats(
             num_rpcs=num_rpcs, timeout_sec=timeout_sec)
 
+    def wait_for_healthy_server_channel(self):
+        retryer = tenacity.Retrying(
+            retry=tenacity.retry_if_result(lambda r: r is None),
+            wait=tenacity.wait_fixed(2),
+            before=tenacity.before_log(logger, logging.DEBUG),
+            reraise=True)
+        retryer(self.get_healthy_server_channel)
+
     def get_healthy_server_channel(self):
         for channel in self.get_server_channels():
             state: ChannelConnectivityState = channel.data.state
-            logger.debug('Found server channel: %s, %s',
-                         channel.ref.name, state)
-            if state.state in ChannelzServiceClient.CHANNEL_CONNECTED_STATES:
+            state_name = ChannelConnectivityState.State.Name(state.state)
+            logger.debug('Found server channel: %s, state: %s',
+                         channel.ref.name, state_name)
+            if state.state is ChannelConnectivityState.READY:
+                logger.info('Found healthy server channel: %s, '
+                            'channel_id: %s, state: %s',
+                            channel.ref.name, channel.ref.channel_id,
+                            state_name)
+                logger.debug('Server channel info: %r', channel)
                 return channel
 
         return None
@@ -150,7 +166,7 @@ class KubernetesClientRunner(base_runner.KubernetesBaseRunner):
         self.port_forwarder = None
 
     def run(self, *,
-            server_address,
+            server_target,
             rpc='UnaryCall', qps=25,
             secure_mode=False,
             print_response=False) -> XdsTestClient:
@@ -174,7 +190,7 @@ class KubernetesClientRunner(base_runner.KubernetesBaseRunner):
             td_bootstrap_image=self.td_bootstrap_image,
             network_name=self.network,
             stats_port=self.stats_port,
-            server_address=server_address,
+            server_target=server_target,
             rpc=rpc,
             qps=qps,
             secure_mode=secure_mode,
@@ -197,9 +213,8 @@ class KubernetesClientRunner(base_runner.KubernetesBaseRunner):
             rpc_host = self.k8s_namespace.PORT_FORWARD_LOCAL_ADDRESS
 
         return XdsTestClient(ip=pod_ip,
-                             port_load_balancer_stats=self.stats_port,
-                             port_channelz=self.stats_port,
-                             server_target=server_address,
+                             rpc_port=self.stats_port,
+                             server_target=server_target,
                              rpc_host=rpc_host)
 
     def cleanup(self, *, force=False, force_namespace=False):

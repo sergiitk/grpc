@@ -69,7 +69,7 @@ def main(argv):
     if command == 'run':
         logger.info('Run client')
         client_runner.run(
-            server_address=xds_uri, qps=qps, print_response=print_response)
+            server_target=xds_uri, qps=qps, print_response=print_response)
 
     elif command == 'cleanup':
         logger.info('Cleanup client')
