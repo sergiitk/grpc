@@ -17,46 +17,99 @@ from typing import Optional
 from typing import Tuple
 
 import grpc
+from grpc_channelz.v1 import channelz_pb2
+from grpc_channelz.v1 import channelz_pb2_grpc
 
 from framework.test_app import base_runner
+from framework.test_app import grpc_helper
+from framework.test_app import channelz_helper
 from framework.infrastructure import k8s
 from src.proto.grpc.testing import test_pb2_grpc
 from src.proto.grpc.testing import messages_pb2
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
+
+# Type aliases
+LoadBalancerStatsRequest = messages_pb2.LoadBalancerStatsRequest
+LoadBalancerStatsResponse = messages_pb2.LoadBalancerStatsResponse
 
 
 class XdsTestClient:
     DEFAULT_STATS_REQUEST_TIMEOUT_SEC = 1200
-    CONNECTION_TIMEOUT_SEC = 60
 
-    def __init__(self, host: str, stats_port: Tuple[int, str]):
-        self.host = host
-        self.stats_service_port = int(stats_port)
+    def __init__(self, *,
+                 ip: str,
+                 port: Tuple[int, str],
+                 server_address: str,
+                 rpc_host: Optional[str] = None):
+        self.host = ip
+        self.server_address = server_address
+        self.rpc_port = int(port)
+        self.rpc_host = rpc_host or ip
+        self._channel: Optional[grpc.Channel] = None
 
     @property
-    def stats_service_address(self) -> str:
-        return f'{self.host}:{self.stats_service_port}'
+    def rpc_address(self) -> str:
+        return f'{self.rpc_host}:{self.rpc_port}'
 
-    def request_load_balancer_stats(self, num_rpcs, timeout_sec=None):
-        if timeout_sec is None:
-            timeout_sec = self.DEFAULT_STATS_REQUEST_TIMEOUT_SEC
-        request_timeout = timeout_sec + self.CONNECTION_TIMEOUT_SEC
+    def connect(self):
+        if not self._channel:
+            self._channel = grpc.insecure_channel(self.rpc_address)
 
-        with grpc.insecure_channel(self.stats_service_address) as channel:
-            logger.info('Invoking GetClientStats RPC on %s',
-                        self.stats_service_address)
+    def close(self):
+        if self._channel:
+            self._channel.close()
 
-            stub = test_pb2_grpc.LoadBalancerStatsServiceStub(channel)
-            stats_request = messages_pb2.LoadBalancerStatsRequest(
-                num_rpcs=num_rpcs, timeout_sec=timeout_sec)
+    def __enter__(self):
+        self.connect()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+        return False
+
+    def __del__(self):
+        self.close()
+
+    def request_load_balancer_stats(
+        self, *,
+        num_rpcs,
+        partial_results_timeout_sec: Optional[int] = None
+    ) -> LoadBalancerStatsResponse:
+        stub = test_pb2_grpc.LoadBalancerStatsServiceStub(self._channel)
+        if partial_results_timeout_sec is None:
+            partial_results_timeout_sec = self.DEFAULT_STATS_REQUEST_TIMEOUT_SEC
+
+        logger.info('Invoking GetClientStats RPC on %s', self.rpc_address)
+        stats_request = LoadBalancerStatsRequest(
+            num_rpcs=num_rpcs, timeout_sec=partial_results_timeout_sec)
+
+        total_timeout_sec = grpc_helper.GRPC_DEFAULT_TIMEOUT_SEC + partial_results_timeout_sec
+        response = grpc_helper.call_unary_when_ready(
+            method=stub.GetClientStats,
+            request=stats_request,
+            timeout_sec=total_timeout_sec
+        )
+
+
+        with grpc.insecure_channel(self.rpc_address) as channel:
+
+
+
+
             response = stub.GetClientStats(stats_request,
                                            wait_for_ready=True,
                                            timeout=request_timeout)
 
             logger.debug('Invoked GetClientStats RPC to %s: %s',
-                         self.stats_service_address, response)
+                         self.rpc_address, response)
             return response
+
+    def get_server_channel(self):
+        return channelz_helper.get_channel_with_target(self._channel,
+                                                       self.server_address)
+
+
 
 
 class KubernetesClientRunner(base_runner.KubernetesBaseRunner):
@@ -131,18 +184,21 @@ class KubernetesClientRunner(base_runner.KubernetesBaseRunner):
         # Load test client pod. We need only one client at the moment
         pod = self.k8s_namespace.list_deployment_pods(self.deployment)[0]
         self._wait_pod_started(pod.metadata.name)
-        client_host: str = pod.status.pod_ip
+        pod_ip = pod.status.pod_ip
+        rpc_host = None
 
         # Experimental, for local debugging.
         if self.debug_use_port_forwarding:
             logger.info('Enabling port forwarding from %s:%s',
-                        client_host, self.stats_port)
+                        pod_ip, self.stats_port)
             self.port_forwarder = self.k8s_namespace.port_forward_pod(
                 pod, remote_port=self.stats_port)
-            client_host = self.k8s_namespace.PORT_FORWARD_LOCAL_ADDRESS
+            rpc_host = self.k8s_namespace.PORT_FORWARD_LOCAL_ADDRESS
 
-        return XdsTestClient(host=client_host,
-                             stats_port=self.stats_port)
+        return XdsTestClient(ip=pod_ip,
+                             port=self.stats_port,
+                             server_address=server_address,
+                             rpc_host=rpc_host)
 
     def cleanup(self, *, force=False, force_namespace=False):
         if self.port_forwarder:

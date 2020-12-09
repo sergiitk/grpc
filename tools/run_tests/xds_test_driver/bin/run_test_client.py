@@ -26,6 +26,10 @@ logger = logging.getLogger(__name__)
 _CMD = flags.DEFINE_enum(
     'cmd', default='run', enum_values=['run', 'cleanup'],
     help='Command')
+_QPS = flags.DEFINE_integer('qps', default=25, help='Queries per second')
+_PRINT_RESPONSE = flags.DEFINE_bool(
+    "print_response", default=False,
+    help="Client prints responses")
 flags.adopt_module_key_flags(xds_flags)
 flags.adopt_module_key_flags(xds_k8s_flags)
 
@@ -34,26 +38,42 @@ def main(argv):
     if len(argv) > 1:
         raise app.UsageError('Too many command-line arguments.')
 
-    k8s_api_manager = k8s.KubernetesApiManager(
-        xds_k8s_flags.KUBE_CONTEXT_NAME.value)
+    command = _CMD.value
+
+    k8s_api_manager = k8s.KubernetesApiManager(xds_k8s_flags.KUBE_CONTEXT.value)
+
+    # Base namespace
+    namespace = xds_flags.NAMESPACE.value
+    client_namespace = namespace
+
+    # Test client
+    qps = _QPS.value
+    print_response = _PRINT_RESPONSE.value
+    client_port = xds_flags.CLIENT_PORT.value
+
+    # Test server
+    server_xds_host = xds_flags.SERVER_XDS_HOST.value
+    server_xds_port = xds_flags.SERVER_XDS_PORT.value
+    xds_uri = f'xds:///{server_xds_host}:{server_xds_port}'
 
     client_runner = client_app.KubernetesClientRunner(
-        k8s.KubernetesNamespace(k8s_api_manager, xds_flags.NAMESPACE.value),
+        k8s.KubernetesNamespace(k8s_api_manager, client_namespace),
         deployment_name=xds_flags.CLIENT_NAME.value,
-        td_bootstrap_image=xds_k8s_flags.TD_BOOTSTRAP_IMAGE.value,
         image_name=xds_k8s_flags.CLIENT_IMAGE.value,
-        network=xds_flags.NETWORK.value,
         gcp_service_account=xds_k8s_flags.GCP_SERVICE_ACCOUNT.value,
+        network=xds_flags.NETWORK.value,
+        td_bootstrap_image=xds_k8s_flags.TD_BOOTSTRAP_IMAGE.value,
+        stats_port=client_port,
         reuse_namespace=True)
 
-    if _CMD.value == 'run':
+    if command == 'run':
         logger.info('Run client')
-        server_service_address = (f'{xds_flags.SERVER_NAME.value}:'
-                                  f'{xds_flags.SERVER_PORT.value}')
-        client_runner.run(server_address=server_service_address)
-    elif _CMD.value == 'cleanup':
+        client_runner.run(
+            server_address=xds_uri, qps=qps, print_response=print_response)
+
+    elif command == 'cleanup':
         logger.info('Cleanup client')
-        client_runner.cleanup(force=True)
+        client_runner.cleanup(force=True, force_namespace=False)
 
 
 if __name__ == '__main__':

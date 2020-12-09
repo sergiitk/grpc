@@ -417,6 +417,12 @@ class ComputeV1(GcpProjectApiResource):
             body={'backends': backend_list},
             backendService=backend_service.name)
 
+    def backend_service_remove_all_backends(self, backend_service):
+        self._patch_resource(
+            collection=self.api.backendServices(),
+            body={'backends': []},
+            backendService=backend_service.name)
+
     def delete_backend_service(self, name):
         self._delete_resource(self.api.backendServices(), backendService=name)
 

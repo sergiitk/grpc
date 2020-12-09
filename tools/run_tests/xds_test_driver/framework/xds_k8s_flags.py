@@ -14,8 +14,8 @@
 from absl import flags
 
 # GCP
-KUBE_CONTEXT_NAME = flags.DEFINE_string(
-    "kube_context_name", default=None, help="Kubectl context to use")
+KUBE_CONTEXT = flags.DEFINE_string(
+    "kube_context", default=None, help="Kubectl context to use")
 GCP_SERVICE_ACCOUNT = flags.DEFINE_string(
     "gcp_service_account", default=None,
     help="GCP Service account for GKE workloads to impersonate")
@@ -36,7 +36,7 @@ CLIENT_PORT_FORWARDING = flags.DEFINE_bool(
 
 flags.mark_flags_as_required([
     "gcp_service_account",
-    "kube_context_name",
+    "kube_context",
     "td_bootstrap_image",
     "server_image",
     "client_image",

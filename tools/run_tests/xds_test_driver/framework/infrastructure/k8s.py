@@ -40,13 +40,7 @@ def simple_resource_get(func):
             return func(*args, **kwargs)
         except client.ApiException as e:
             if e.status == 404:
-                # noinspection PyBroadException
-                try:
-                    # Try parsing nicer error from the body
-                    data = json.loads(e.body)
-                    logger.debug(data['message'])
-                except Exception:
-                    logger.debug('Resource not found. %s', e.body)
+                # Ignore 404
                 return None
             raise
     return wrap_not_found_return_none

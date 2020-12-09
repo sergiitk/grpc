@@ -22,7 +22,7 @@ import yaml
 
 from framework.infrastructure import k8s
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 class RunnerError(Exception):

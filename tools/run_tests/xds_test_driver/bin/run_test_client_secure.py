@@ -49,11 +49,20 @@ def main(argv):
     if len(argv) > 1:
         raise app.UsageError('Too many command-line arguments.')
 
+    command = _CMD.value
+
+    # Base namespace
+    namespace = xds_flags.NAMESPACE.value
+
+    # Test server
+    server_xds_host = xds_flags.SERVER_XDS_HOST.value
+    server_xds_port = xds_flags.SERVER_XDS_PORT.value
+
     k8s_api_manager = k8s.KubernetesApiManager(
-        xds_k8s_flags.KUBE_CONTEXT_NAME.value)
+        xds_k8s_flags.KUBE_CONTEXT.value)
 
     client_runner = client_app.KubernetesClientRunner(
-        k8s.KubernetesNamespace(k8s_api_manager, xds_flags.NAMESPACE.value),
+        k8s.KubernetesNamespace(k8s_api_manager, namespace),
         deployment_name=xds_flags.CLIENT_NAME.value,
         image_name=xds_k8s_flags.CLIENT_IMAGE.value,
         gcp_service_account=xds_k8s_flags.GCP_SERVICE_ACCOUNT.value,
@@ -62,18 +71,15 @@ def main(argv):
         deployment_template='client-secure.deployment.yaml',
         reuse_namespace=True)
 
-    xds_service_host = xds_flags.SERVER_XDS_HOST.value
-    xds_service_port = xds_flags.SERVER_XDS_PORT.value
-
-    if _CMD.value == 'run':
+    if command == 'run':
         logger.info('Run mtls client')
-        xds_uri = f'xds:///{xds_service_host}:{xds_service_port}'
+        xds_uri = f'xds:///{server_xds_host}:{server_xds_port}'
         client_runner.run(
             server_address=xds_uri,
             qps=1,
             print_response=True,
             secure_mode=True)
-    elif _CMD.value == 'cleanup':
+    elif command == 'cleanup':
         logger.info('Cleanup mtls client')
         client_runner.cleanup(force=True, force_namespace=False)
 

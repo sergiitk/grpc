@@ -169,6 +169,11 @@ class TrafficDirectorManager:
         self.compute.backend_service_add_backends(
             self.backend_service, self.backends)
 
+    def backend_service_remove_all_backends(self):
+        logging.info('Removing backends from Backend Service %s',
+                     self.backend_service.name)
+        self.compute.backend_service_remove_all_backends(self.backend_service)
+
     def wait_for_backends_healthy_status(self):
         logger.debug(
             "Waiting for Backend Service %s to report all backends healthy %r",

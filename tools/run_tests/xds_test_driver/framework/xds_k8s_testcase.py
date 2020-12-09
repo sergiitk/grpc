@@ -60,11 +60,12 @@ class XdsKubernetesTestCase(absltest.TestCase):
         # Test client
         cls.client_image = xds_k8s_flags.CLIENT_IMAGE.value
         cls.client_name = xds_flags.CLIENT_NAME.value
+        cls.client_port = xds_flags.CLIENT_PORT.value
         cls.client_port_forwarding = xds_k8s_flags.CLIENT_PORT_FORWARDING.value
 
         # Resource managers
         cls.k8s_api_manager = k8s.KubernetesApiManager(
-            xds_k8s_flags.KUBE_CONTEXT_NAME.value)
+            xds_k8s_flags.KUBE_CONTEXT.value)
         cls.gcp_api_manager = gcp.GcpApiManager()
 
     def setUp(self):
@@ -157,6 +158,7 @@ class RegularXdsKubernetesTestCase(XdsKubernetesTestCase):
             network=self.network,
             td_bootstrap_image=self.td_bootstrap_image,
             debug_use_port_forwarding=self.client_port_forwarding,
+            stats_port=self.client_port,
             reuse_namespace=self.server_namespace == self.client_namespace)
 
     def startTestServer(self, replica_count=1, **kwargs) -> XdsTestServer:
@@ -206,6 +208,7 @@ class SecurityXdsKubernetesTestCase(XdsKubernetesTestCase):
             td_bootstrap_image=self.td_bootstrap_image,
             debug_use_port_forwarding=self.client_port_forwarding,
             deployment_template='client-secure.deployment.yaml',
+            stats_port=self.client_port,
             reuse_namespace=self.server_namespace == self.client_namespace)
 
     def startSecureTestServer(self, replica_count=1, **kwargs) -> XdsTestServer:

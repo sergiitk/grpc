@@ -1,4 +1,5 @@
 # Build runtime image.
+# todo(sergiitk): 8 or 11
 FROM openjdk:10
 
 ENV APP_DIR=/usr/src/app

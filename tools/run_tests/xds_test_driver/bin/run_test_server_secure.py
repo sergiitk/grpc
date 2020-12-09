@@ -38,9 +38,6 @@ logger = logging.getLogger(__name__)
 _CMD = flags.DEFINE_enum(
     'cmd', default='run', enum_values=['run', 'cleanup'],
     help='Command')
-_SECURITY_MODE = flags.DEFINE_enum(
-    'security_mode', default='mtls', enum_values=['mtls'],
-    help='Security mode')
 flags.adopt_module_key_flags(xds_flags)
 flags.adopt_module_key_flags(xds_k8s_flags)
 
@@ -50,10 +47,8 @@ def main(argv):
         raise app.UsageError('Too many command-line arguments.')
 
     command = _CMD.value
-    security_mode = _SECURITY_MODE.value
 
-    project: str = xds_flags.PROJECT.value
-    network: str = xds_flags.NETWORK.value
+    # Base namespace
     namespace = xds_flags.NAMESPACE.value
 
     # Test server
@@ -63,14 +58,14 @@ def main(argv):
     reuse_namespace = False
 
     k8s_api_manager = k8s.KubernetesApiManager(
-        xds_k8s_flags.KUBE_CONTEXT_NAME.value)
+        xds_k8s_flags.KUBE_CONTEXT.value)
 
     server_runner = server_app.KubernetesServerRunner(
         k8s.KubernetesNamespace(k8s_api_manager, namespace),
         deployment_name=server_name,
         image_name=xds_k8s_flags.SERVER_IMAGE.value,
         gcp_service_account=xds_k8s_flags.GCP_SERVICE_ACCOUNT.value,
-        network=network,
+        network=xds_flags.NETWORK.value,
         td_bootstrap_image=xds_k8s_flags.TD_BOOTSTRAP_IMAGE.value,
         deployment_template='server-secure.deployment.yaml',
         reuse_namespace=reuse_namespace)

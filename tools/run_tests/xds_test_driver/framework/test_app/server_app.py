@@ -19,34 +19,51 @@ from typing import Tuple
 from framework.infrastructure import k8s
 from framework.test_app import base_runner
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 class XdsTestServer:
     def __init__(
         self,
-        port,
-        maintenance_port,
+        *,
+        ip: str,
+        port: Tuple[int, str],
+        maintenance_port: Optional[int] = None,
+        xds_host: Optional[str] = None,
+        xds_port: Optional[int] = None,
         secure_mode: Optional[bool] = False,
-        server_id: Optional[str] = None
+        server_id: Optional[str] = None,
+        rpc_host: Optional[str] = None
     ):
-        self.server_id = server_id
+        self.ip = ip
         self.port = port
-        self.maintenance_port = maintenance_port
+        self.maintenance_port = maintenance_port or port
+        self.xds_host = xds_host
+        self.xds_port = xds_port
         self.secure_mode = secure_mode
-        self.xds_host = None
-        self.xds_port = None
+        self.server_id = server_id
+        self.rpc_host = rpc_host or ip
+
+    @property
+    def rpc_address(self) -> str:
+        return f'{self.rpc_host}:{self.port}'
+
+    @property
+    def maintenance_rpc_address(self) -> str:
+        return f'{self.rpc_host}:{self.maintenance_port}'
+
+    def set_xds_address(self, xds_host, xds_port: Optional[int] = None):
+        self.xds_host = xds_host
+        self.xds_port = xds_port
 
     @property
     def xds_address(self) -> str:
         if not self.xds_host:
             return ''
-        return f'{self.xds_host}:{self.xds_port}'
+        if not self.xds_port:
+            return self.xds_host
 
-    @xds_address.setter
-    def xds_address(self, tuple_address: Tuple[str, int]):
-        self.xds_host = tuple_address[0]
-        self.xds_port = tuple_address[1]
+        return f'{self.xds_host}:{self.xds_port}'
 
     @property
     def xds_uri(self) -> str:

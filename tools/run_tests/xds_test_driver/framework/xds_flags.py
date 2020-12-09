@@ -39,6 +39,10 @@ SERVER_XDS_PORT = flags.DEFINE_integer(
 CLIENT_NAME = flags.DEFINE_string(
     "client_name", default="psm-grpc-client",
     help="Client deployment and service name")
+CLIENT_PORT = flags.DEFINE_integer(
+    "client_port", default=8079,
+    help="Client test port")
+
 
 flags.mark_flags_as_required([
     "project",

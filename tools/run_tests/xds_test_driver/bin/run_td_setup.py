@@ -25,7 +25,8 @@ logger = logging.getLogger(__name__)
 # Flags
 _CMD = flags.DEFINE_enum(
     'cmd', default='create',
-    enum_values=['cycle', 'create', 'cleanup', 'backends'],
+    enum_values=['cycle', 'create', 'cleanup',
+                 'backends-add', 'backends-cleanup'],
     help='Command')
 _SECURITY_MODE = flags.DEFINE_enum(
     'security_mode', default=None, enum_values=['mtls', 'tls', 'plaintext'],
@@ -108,11 +109,10 @@ def main(argv):
         logger.info('Cleaning up')
         td.cleanup(force=True)
 
-    if command == 'backends':
+    if command == 'backends-add':
         logger.info('Adding backends')
-
         k8s_api_manager = k8s.KubernetesApiManager(
-            xds_k8s_flags.KUBE_CONTEXT_NAME.value)
+            xds_k8s_flags.KUBE_CONTEXT.value)
         k8s_namespace = k8s.KubernetesNamespace(k8s_api_manager, namespace)
 
         neg_name, neg_zones = k8s_namespace.get_service_neg(
@@ -123,6 +123,9 @@ def main(argv):
         td.load_backend_service()
         td.backend_service_add_neg_backends(neg_name, neg_zones)
         # todo(sergiitk): wait until client reports rpc health
+    elif command == 'backends-cleanup':
+        td.load_backend_service()
+        td.backend_service_remove_all_backends()
 
 
 if __name__ == '__main__':
