@@ -38,6 +38,9 @@ logger = logging.getLogger(__name__)
 _CMD = flags.DEFINE_enum(
     'cmd', default='run', enum_values=['run', 'cleanup'],
     help='Command')
+_SECURE = flags.DEFINE_bool(
+    "secure", default=False,
+    help="Run server in the secure mode")
 _REUSE_NAMESPACE = flags.DEFINE_bool(
     "reuse_namespace", default=True,
     help="Use existing namespace if exists")
@@ -54,26 +57,34 @@ def main(argv):
 
     # Base namespace
     namespace = xds_flags.NAMESPACE.value
+    server_namespace = namespace
 
-    k8s_api_manager = k8s.KubernetesApiManager(
-        xds_k8s_flags.KUBE_CONTEXT.value)
-
-    server_runner = server_app.KubernetesServerRunner(
-        k8s.KubernetesNamespace(k8s_api_manager, namespace),
+    runner_kwargs = dict(
         deployment_name=xds_flags.SERVER_NAME.value,
         image_name=xds_k8s_flags.SERVER_IMAGE.value,
         gcp_service_account=xds_k8s_flags.GCP_SERVICE_ACCOUNT.value,
         network=xds_flags.NETWORK.value,
         reuse_namespace=_REUSE_NAMESPACE.value)
 
+    if _SECURE.value:
+        runner_kwargs.update(
+            td_bootstrap_image=xds_k8s_flags.TD_BOOTSTRAP_IMAGE.value,
+            deployment_template='server-secure.deployment.yaml')
+
+    k8s_api_manager = k8s.KubernetesApiManager(xds_k8s_flags.KUBE_CONTEXT.value)
+    server_runner = server_app.KubernetesServerRunner(
+        k8s.KubernetesNamespace(k8s_api_manager, xds_flags.NAMESPACE.value),
+        **runner_kwargs)
+
     if _CMD.value == 'run':
-        logger.info('Run server')
-        server_runner.run(test_port=xds_flags.SERVER_PORT.value)
+        logger.info('Run server, secure_mode=%s', _SECURE.value)
+        server_runner.run(test_port=xds_flags.SERVER_PORT.value,
+                          secure_mode=_SECURE.value)
 
     elif _CMD.value == 'cleanup':
         logger.info('Cleanup server')
-        server_runner.cleanup(
-            force=True, force_namespace=_CLEANUP_NAMESPACE.value)
+        server_runner.cleanup(force=True,
+                              force_namespace=_CLEANUP_NAMESPACE.value)
 
 
 if __name__ == '__main__':

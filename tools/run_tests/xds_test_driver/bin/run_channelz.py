@@ -79,8 +79,8 @@ def main(argv):
 
     with test_client:
         test_client.wait_for_healthy_server_channel()
-        channel = test_client.get_healthy_server_channel()
-        print(channel)
+        # channel = test_client.get_healthy_server_channel()
+        # print(channel)
         stats_response = test_client.get_load_balancer_stats(num_rpcs=10)
         print(stats_response)
 

@@ -118,10 +118,19 @@ class KubernetesServerRunner(base_runner.KubernetesBaseRunner):
         self.service: Optional[k8s.V1Service] = None
 
     def run(self, *,
-            test_port=8080, maintenance_port=8080,
+            test_port=8080, maintenance_port=None,
             secure_mode=False, server_id=None,
             replica_count=1) -> XdsTestServer:
         super().run()
+        # Implementation detail: in secure mode, maintenance ("backchannel")
+        # port must be different from the test port so communication with
+        # maintenance services can be reached independently from the security
+        # configuration under test.
+        if maintenance_port is None:
+            maintenance_port = test_port if not secure_mode else test_port + 1
+        if secure_mode and maintenance_port == test_port:
+            raise ValueError('port and maintenance_port must be different '
+                             'when running test server in secure mode')
 
         # Create service account
         self.service_account = self._create_service_account(
