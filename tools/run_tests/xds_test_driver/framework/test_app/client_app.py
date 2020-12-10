@@ -23,7 +23,6 @@ from framework.rpc import grpc_testing
 from framework.test_app import base_runner
 from framework.infrastructure import k8s
 
-
 logger = logging.getLogger(__name__)
 
 # Type aliases
@@ -94,36 +93,54 @@ class XdsTestClient:
         return self.load_balancer_stats_service.get_client_stats(
             num_rpcs=num_rpcs, timeout_sec=timeout_sec)
 
-    def wait_for_healthy_server_channel(self):
+    def get_server_channels(self) -> Iterator[grpc_channelz.Channel]:
+        return self.channelz_service.find_channels_for_target(
+            self.server_target)
+
+    def wait_for_active_server_channel(self):
         retryer = tenacity.Retrying(
             retry=tenacity.retry_if_result(lambda r: r is None),
             wait=tenacity.wait_exponential(max=10),
             before=tenacity.before_log(logger, logging.DEBUG),
             before_sleep=tenacity.before_sleep_log(logger, logging.DEBUG, True),
             reraise=True)
-        retryer(self.get_healthy_server_channel)
+        channel = retryer(self.get_active_server_channel)
+        logger.info(
+            'Active server channel found: channel_id: %s, %s',
+            channel.ref.channel_id, channel.ref.name)
+        logger.debug('Server channel:\n%r', channel)
 
-    def get_healthy_server_channel(self):
+    def get_active_server_channel(self) -> Optional[grpc_channelz.Channel]:
         for channel in self.get_server_channels():
             state: ChannelConnectivityState = channel.data.state
-            state_name = ChannelConnectivityState.State.Name(state.state)
-            logger.debug('Found server channel: %s, state: %s',
-                         channel.ref.name, state_name)
+            logger.debug('Server channel: %s, state: %s',
+                         channel.ref.name,
+                         ChannelConnectivityState.State.Name(state.state))
             if state.state is ChannelConnectivityState.READY:
-                logger.info('Found healthy server channel: %s, '
-                            'channel_id: %s, state: %s',
-                            channel.ref.name, channel.ref.channel_id,
-                            state_name)
-                logger.debug('Server channel info: %r', channel)
                 return channel
-
         return None
 
-    def get_server_channels(self) -> Iterator[grpc_channelz.Channel]:
-        return self.channelz_service.find_channels_for_target(
-            self.server_target)
+    def get_active_server_socket(self) -> grpc_channelz.Socket:
+        channel = self.get_active_server_channel()
+        if not channel:
+            raise Exception('Client has no active channel with the server')
 
-    def _channel_get_or_create(self, port):
+        _channelz = self.channelz_service
+        logger.debug('Retrieving client->server socket: channel %s',
+                     channel.ref.name)
+
+        # Get the first subchannel
+        subchannel_id = channel.subchannel_ref[0].subchannel_id
+        subchannel = _channelz.get_subchannel(subchannel_id)
+        logger.debug('Retrieving client->server socket: subchannel %s',
+                     subchannel.ref.name)
+
+        # Get the first socket
+        socket = _channelz.get_socket(subchannel.socket_ref[0].socket_id)
+        logger.debug('Found client->server socket: %s', socket.ref.name)
+        return socket
+
+    def _channel_get_or_create(self, port) -> grpc.Channel:
         if port not in self.channels:
             target = f'{self.rpc_host}:{port}'
             self.channels[port] = grpc.insecure_channel(target)

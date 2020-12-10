@@ -14,6 +14,7 @@
 import logging
 from typing import Optional, Iterator
 
+from google.protobuf.message import Message
 import grpc
 from grpc_channelz.v1 import channelz_pb2
 from grpc_channelz.v1 import channelz_pb2_grpc
@@ -23,10 +24,21 @@ import framework.rpc
 logger = logging.getLogger(__name__)
 
 # Type aliases
+# Channel
 Channel = channelz_pb2.Channel
 ChannelConnectivityState = channelz_pb2.ChannelConnectivityState
 GetTopChannelsRequest = channelz_pb2.GetTopChannelsRequest
 GetTopChannelsResponse = channelz_pb2.GetTopChannelsResponse
+# Subchannel
+Subchannel = channelz_pb2.Subchannel
+GetSubchannelRequest = channelz_pb2.GetSubchannelRequest
+GetSubchannelResponse = channelz_pb2.GetSubchannelResponse
+# Socket
+Socket = channelz_pb2.Socket
+GetSocketRequest = channelz_pb2.GetSocketRequest
+GetSocketResponse = channelz_pb2.GetSocketResponse
+# channelz_pb2.Address
+# channelz_pb2.Address
 
 
 class ChannelzServiceClient(framework.rpc.GrpcClientHelper):
@@ -56,3 +68,15 @@ class ChannelzServiceClient(framework.rpc.GrpcClientHelper):
             for channel in response.channel:
                 start = max(start, channel.ref.channel_id)
                 yield channel
+
+    def get_subchannel(self, subchannel_id) -> Subchannel:
+        response: GetSubchannelResponse = self.call_unary_when_channel_ready(
+            rpc='GetSubchannel',
+            request=GetSubchannelRequest(subchannel_id=subchannel_id))
+        return response.subchannel
+
+    def get_socket(self, socket_id) -> Socket:
+        response: GetSocketResponse = self.call_unary_when_channel_ready(
+            rpc='GetSocket',
+            request=GetSocketRequest(socket_id=socket_id))
+        return response.socket

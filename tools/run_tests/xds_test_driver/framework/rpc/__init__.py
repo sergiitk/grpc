@@ -33,6 +33,8 @@ class GrpcClientHelper:
     def __init__(self, channel: grpc.Channel, stub_class: ClassVar):
         self.channel = channel
         self.stub = stub_class(channel)
+        # For better logging
+        self.service_name = re.sub('Stub$', '', self.stub.__class__.__name__)
 
     def call_unary_when_channel_ready(
         self, *,
@@ -49,11 +51,12 @@ class GrpcClientHelper:
         timeout_sec = wait_for_ready_sec + connection_timeout_sec
         rpc_callable: grpc.UnaryUnaryMultiCallable = getattr(self.stub, rpc)
 
-        _kwargs = dict(wait_for_ready=True, timeout=timeout_sec)
+        call_kwargs = dict(wait_for_ready=True, timeout=timeout_sec)
+        self._log_debug(rpc, request, call_kwargs)
+        return rpc_callable(request, **call_kwargs)
+
+    def _log_debug(self, rpc, req, call_kwargs):
         logger.debug('RPC %s.%s(request=%s(%r), %s)',
-                     re.sub('Stub$', '', self.stub.__class__.__name__),
-                     rpc,
-                     request.__class__.__name__,
-                     json_format.MessageToDict(request),
-                     ', '.join({f'{k}={v}' for k, v in _kwargs.items()}))
-        return rpc_callable(request, **_kwargs)
+                     self.service_name, rpc,
+                     req.__class__.__name__, json_format.MessageToDict(req),
+                     ', '.join({f'{k}={v}' for k, v in call_kwargs.items()}))

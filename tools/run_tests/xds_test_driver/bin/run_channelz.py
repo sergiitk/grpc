@@ -19,6 +19,7 @@ from absl import flags
 from framework import xds_flags
 from framework import xds_k8s_flags
 from framework.infrastructure import k8s
+from framework.rpc import grpc_channelz
 from framework.test_app import server_app
 from framework.test_app import client_app
 
@@ -32,6 +33,7 @@ flags.adopt_module_key_flags(xds_flags)
 flags.adopt_module_key_flags(xds_k8s_flags)
 
 # Type aliases
+Socket = grpc_channelz.Socket
 XdsTestServer = server_app.XdsTestServer
 XdsTestClient = client_app.XdsTestClient
 
@@ -78,11 +80,19 @@ def main(argv):
         rpc_host=_CLIENT_RPC_HOST.value)
 
     with test_client:
-        test_client.wait_for_healthy_server_channel()
+        # test_client.wait_for_active_server_channel()
+        client_socket: Socket = test_client.get_active_server_socket()
+        # TcpIpAddress
+        # client_socket_local = client_socket.local.tcpip_address
+        # client_socket_local_ip = ipaddress.IPv4Address(client_socket.local.tcpip_address.ip_address)
+        # client_socket_localport =
+        # print(client_socket.local, client_socket.remote)
+        # print(client_socket.security.tls)
+        # client_socket.security.t
         # channel = test_client.get_healthy_server_channel()
         # print(channel)
-        stats_response = test_client.get_load_balancer_stats(num_rpcs=10)
-        print(stats_response)
+        # stats_response = test_client.get_load_balancer_stats(num_rpcs=10)
+        # print(stats_response)
 
 
 if __name__ == '__main__':

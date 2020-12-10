@@ -171,7 +171,7 @@ class RegularXdsKubernetesTestCase(XdsKubernetesTestCase):
                                              **kwargs)
         logger.info('Waiting fot the client to establish healthy channel with '
                     'the server')
-        test_client.wait_for_healthy_server_channel()
+        test_client.wait_for_active_server_channel()
         return test_client
 
 
@@ -240,5 +240,5 @@ class SecurityXdsKubernetesTestCase(XdsKubernetesTestCase):
             **kwargs)
         logger.info('Waiting fot the client to establish healthy channel with '
                     'the server')
-        test_client.wait_for_healthy_server_channel()
+        test_client.wait_for_active_server_channel()
         return test_client
