@@ -79,20 +79,18 @@ def main(argv):
         rpc_port=client_port,
         rpc_host=_CLIENT_RPC_HOST.value)
 
-    with test_client:
-        # test_client.wait_for_active_server_channel()
-        client_socket: Socket = test_client.get_active_server_socket()
-        # TcpIpAddress
-        # client_socket_local = client_socket.local.tcpip_address
-        # client_socket_local_ip = ipaddress.IPv4Address(client_socket.local.tcpip_address.ip_address)
-        # client_socket_localport =
-        # print(client_socket.local, client_socket.remote)
-        # print(client_socket.security.tls)
-        # client_socket.security.t
-        # channel = test_client.get_healthy_server_channel()
-        # print(channel)
-        # stats_response = test_client.get_load_balancer_stats(num_rpcs=10)
-        # print(stats_response)
+    with test_client, test_server:
+        client_socket: Socket = test_client.get_client_socket_with_test_server()
+        server_socket: Socket = test_server.get_server_socket_matching_client(
+            client_socket)
+        client_tls = client_socket.security.tls
+        server_tls = server_socket.security.tls
+        logger.info(
+            'Certs: client local matches server remote: %s',
+            client_tls.local_certificate == server_tls.remote_certificate)
+        logger.info(
+            'Certs: client remote matches server local: %s',
+            client_tls.local_certificate == server_tls.remote_certificate)
 
 
 if __name__ == '__main__':

@@ -13,7 +13,7 @@
 # limitations under the License.
 import logging
 import re
-from typing import Optional, ClassVar
+from typing import Optional, ClassVar, Dict
 
 from google.protobuf import json_format
 import google.protobuf.message
@@ -39,7 +39,7 @@ class GrpcClientHelper:
     def call_unary_when_channel_ready(
         self, *,
         rpc: str,
-        request: Message,
+        req: Message,
         wait_for_ready_sec: Optional[int] = DEFAULT_WAIT_FOR_READY_SEC,
         connection_timeout_sec: Optional[int] = DEFAULT_CONNECTION_TIMEOUT_SEC
     ) -> Message:
@@ -52,11 +52,44 @@ class GrpcClientHelper:
         rpc_callable: grpc.UnaryUnaryMultiCallable = getattr(self.stub, rpc)
 
         call_kwargs = dict(wait_for_ready=True, timeout=timeout_sec)
-        self._log_debug(rpc, request, call_kwargs)
-        return rpc_callable(request, **call_kwargs)
+        self._log_debug(rpc, req, call_kwargs)
+        return rpc_callable(req, **call_kwargs)
 
     def _log_debug(self, rpc, req, call_kwargs):
         logger.debug('RPC %s.%s(request=%s(%r), %s)',
                      self.service_name, rpc,
                      req.__class__.__name__, json_format.MessageToDict(req),
                      ', '.join({f'{k}={v}' for k, v in call_kwargs.items()}))
+
+
+class GrpcApp:
+    channels: Dict[int, grpc.Channel]
+
+    class NotFound(Exception):
+        """Requested resource not found"""
+
+    def __init__(self, rpc_host):
+        self.rpc_host = rpc_host
+        # Cache gRPC channels per port
+        self.channels = dict()
+
+    def _make_channel(self, port) -> grpc.Channel:
+        if port not in self.channels:
+            target = f'{self.rpc_host}:{port}'
+            self.channels[port] = grpc.insecure_channel(target)
+        return self.channels[port]
+
+    def close(self):
+        # Close all channels
+        for channel in self.channels.values():
+            channel.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+        return False
+
+    def __del__(self):
+        self.close()

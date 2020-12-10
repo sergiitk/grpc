@@ -11,17 +11,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import functools
 import logging
-from typing import Optional, Dict, Iterator
+from typing import Optional, Iterator
 
-import grpc
 import tenacity
 
+from framework.infrastructure import k8s
+import framework.rpc
 from framework.rpc import grpc_channelz
 from framework.rpc import grpc_testing
 from framework.test_app import base_runner
-from framework.infrastructure import k8s
 
 logger = logging.getLogger(__name__)
 
@@ -31,56 +31,28 @@ ChannelConnectivityState = grpc_channelz.ChannelConnectivityState
 LoadBalancerStatsServiceClient = grpc_testing.LoadBalancerStatsServiceClient
 
 
-class XdsTestClient:
-    channels: Dict[int, grpc.Channel]
-    _load_balancer_stats_service: Optional[LoadBalancerStatsServiceClient]
-    _channelz_service: Optional[ChannelzServiceClient]
-
+class XdsTestClient(framework.rpc.GrpcApp):
     def __init__(self, *,
                  ip: str,
                  rpc_port: int,
                  server_target: str,
                  rpc_host: Optional[str] = None,
                  maintenance_port: Optional[int] = None):
+        super().__init__(rpc_host=(rpc_host or ip))
         self.ip = ip
-        self.server_target = server_target
         self.rpc_port = rpc_port
-        # Optional fields
-        self.rpc_host = rpc_host or ip
+        self.server_target = server_target
         self.maintenance_port = maintenance_port or rpc_port
-        # Cache gRPC channels per port
-        self.channels = dict()
-        self._load_balancer_stats_service = None
-        self._channelz_service = None
 
     @property
-    def load_balancer_stats_service(self) -> LoadBalancerStatsServiceClient:
-        if not self._load_balancer_stats_service:
-            self._load_balancer_stats_service = LoadBalancerStatsServiceClient(
-                self._channel_get_or_create(self.rpc_port))
-        return self._load_balancer_stats_service
+    @functools.lru_cache(None)
+    def load_balancer_stats(self) -> LoadBalancerStatsServiceClient:
+        return LoadBalancerStatsServiceClient(self._make_channel(self.rpc_port))
 
     @property
-    def channelz_service(self) -> ChannelzServiceClient:
-        if not self._channelz_service:
-            self._channelz_service = ChannelzServiceClient(
-                self._channel_get_or_create(self.maintenance_port))
-        return self._channelz_service
-
-    def close(self):
-        # Close all channels
-        for channel in self.channels.values():
-            channel.close()
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.close()
-        return False
-
-    def __del__(self):
-        self.close()
+    @functools.lru_cache(None)
+    def channelz(self) -> ChannelzServiceClient:
+        return ChannelzServiceClient(self._make_channel(self.maintenance_port))
 
     def get_load_balancer_stats(
         self, *,
@@ -90,12 +62,11 @@ class XdsTestClient:
         """
         Shortcut to LoadBalancerStatsServiceClient.get_client_stats()
         """
-        return self.load_balancer_stats_service.get_client_stats(
+        return self.load_balancer_stats.get_client_stats(
             num_rpcs=num_rpcs, timeout_sec=timeout_sec)
 
     def get_server_channels(self) -> Iterator[grpc_channelz.Channel]:
-        return self.channelz_service.find_channels_for_target(
-            self.server_target)
+        return self.channelz.find_channels_for_target(self.server_target)
 
     def wait_for_active_server_channel(self):
         retryer = tenacity.Retrying(
@@ -118,33 +89,21 @@ class XdsTestClient:
                          ChannelConnectivityState.State.Name(state.state))
             if state.state is ChannelConnectivityState.READY:
                 return channel
-        return None
+        raise self.NotFound('Client has no active channel with the server')
 
-    def get_active_server_socket(self) -> grpc_channelz.Socket:
+    def get_client_socket_with_test_server(self) -> grpc_channelz.Socket:
         channel = self.get_active_server_channel()
-        if not channel:
-            raise Exception('Client has no active channel with the server')
-
-        _channelz = self.channelz_service
         logger.debug('Retrieving client->server socket: channel %s',
                      channel.ref.name)
-
-        # Get the first subchannel
+        # Get the first subchannel of the active server channel
         subchannel_id = channel.subchannel_ref[0].subchannel_id
-        subchannel = _channelz.get_subchannel(subchannel_id)
+        subchannel = self.channelz.get_subchannel(subchannel_id)
         logger.debug('Retrieving client->server socket: subchannel %s',
                      subchannel.ref.name)
-
-        # Get the first socket
-        socket = _channelz.get_socket(subchannel.socket_ref[0].socket_id)
+        # Get the first socket of the subchannel
+        socket = self.channelz.get_socket(subchannel.socket_ref[0].socket_id)
         logger.debug('Found client->server socket: %s', socket.ref.name)
         return socket
-
-    def _channel_get_or_create(self, port) -> grpc.Channel:
-        if port not in self.channels:
-            target = f'{self.rpc_host}:{port}'
-            self.channels[port] = grpc.insecure_channel(target)
-        return self.channels[port]
 
 
 class KubernetesClientRunner(base_runner.KubernetesBaseRunner):

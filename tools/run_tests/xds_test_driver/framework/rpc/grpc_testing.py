@@ -43,5 +43,5 @@ class LoadBalancerStatsServiceClient(framework.rpc.GrpcClientHelper):
         return self.call_unary_when_channel_ready(
             rpc='GetClientStats',
             wait_for_ready_sec=timeout_sec,
-            request=LoadBalancerStatsRequest(num_rpcs=num_rpcs,
-                                             timeout_sec=timeout_sec))
+            req=LoadBalancerStatsRequest(num_rpcs=num_rpcs,
+                                         timeout_sec=timeout_sec))

@@ -11,67 +11,87 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import functools
 import logging
 from typing import Optional
-from typing import Tuple
 
 from framework.infrastructure import k8s
+import framework.rpc
+from framework.rpc import grpc_channelz
 from framework.test_app import base_runner
 
 logger = logging.getLogger(__name__)
 
+# Type aliases
+ChannelzServiceClient = grpc_channelz.ChannelzServiceClient
 
-class XdsTestServer:
+
+class XdsTestServer(framework.rpc.GrpcApp):
     def __init__(self, *,
                  ip: str,
                  rpc_port: int,
+                 maintenance_port: Optional[int] = None,
                  secure_mode: Optional[bool] = False,
                  server_id: Optional[str] = None,
                  xds_host: Optional[str] = None,
                  xds_port: Optional[int] = None,
-                 rpc_host: Optional[str] = None,
-                 maintenance_port: Optional[int] = None):
+                 rpc_host: Optional[str] = None):
+        super().__init__(rpc_host=(rpc_host or ip))
         self.ip = ip
         self.rpc_port = rpc_port
-        # Optional fields
-        self.rpc_host = rpc_host or ip
         self.maintenance_port = maintenance_port or rpc_port
-        self.xds_host = xds_host
-        self.xds_port = xds_port
         self.secure_mode = secure_mode
         self.server_id = server_id
+        self.xds_host, self.xds_port = xds_host, xds_port
 
     @property
-    def rpc_address(self) -> str:
-        return f'{self.rpc_host}:{self.rpc_port}'
-
-    @property
-    def maintenance_rpc_address(self) -> str:
-        return f'{self.rpc_host}:{self.maintenance_port}'
+    @functools.lru_cache(None)
+    def channelz(self) -> ChannelzServiceClient:
+        return ChannelzServiceClient(self._make_channel(self.maintenance_port))
 
     def set_xds_address(self, xds_host, xds_port: Optional[int] = None):
-        self.xds_host = xds_host
-        self.xds_port = xds_port
+        self.xds_host, self.xds_port = xds_host, xds_port
 
     @property
     def xds_address(self) -> str:
-        if not self.xds_host:
-            return ''
-        if not self.xds_port:
-            return self.xds_host
-
+        if not self.xds_host: return ''
+        if not self.xds_port: return self.xds_host
         return f'{self.xds_host}:{self.xds_port}'
 
     @property
     def xds_uri(self) -> str:
-        if not self.xds_host:
-            return ''
+        if not self.xds_host: return ''
         return f'xds:///{self.xds_address}'
 
+    def get_test_server(self):
+        server = self.channelz.find_server_listening_on_port(self.rpc_port)
+        if not server:
+            raise self.NotFound(
+                f'Server listening on port {self.rpc_port} not found')
+        return server
 
-class ServerRunError(Exception):
-    """Error running Test Server"""
+    def get_test_server_sockets(self):
+        server = self.get_test_server()
+        return self.channelz.list_server_sockets(server.ref.server_id)
+
+    def get_server_socket_matching_client(
+        self,
+        client_socket: grpc_channelz.Socket
+    ):
+        client_local = self.channelz.sock_address_to_str(client_socket.local)
+        logger.debug('Looking for a server socket connected to the client %s',
+                     client_local)
+
+        server_socket = self.channelz.find_server_socket_matching_client(
+            self.get_test_server_sockets(), client_socket)
+        if not server_socket:
+            raise self.NotFound(
+                f'Server socket for client {client_local} not found')
+
+        logger.info('Found matching socket pair: server(%s) <-> client(%s)',
+                    self.channelz.sock_addresses_pretty(server_socket),
+                    self.channelz.sock_addresses_pretty(client_socket))
+        return server_socket
 
 
 class KubernetesServerRunner(base_runner.KubernetesBaseRunner):
@@ -131,6 +151,10 @@ class KubernetesServerRunner(base_runner.KubernetesBaseRunner):
         if secure_mode and maintenance_port == test_port:
             raise ValueError('port and maintenance_port must be different '
                              'when running test server in secure mode')
+        # To avoid bugs with comparing wrong types.
+        if not (isinstance(test_port, int) and
+                isinstance(maintenance_port, int)):
+            raise TypeError('Port numbers must be integer')
 
         # Create service account
         self.service_account = self._create_service_account(
@@ -173,9 +197,7 @@ class KubernetesServerRunner(base_runner.KubernetesBaseRunner):
                 namespace_name=self.k8s_namespace.name,
                 deployment_name=self.deployment_name,
                 neg_name=self.neg_name,
-                test_port=test_port,
-                # todo(sergiitk): expose maintenance_port via service
-                maintenance_port=maintenance_port)
+                test_port=test_port)
 
         self._wait_service_neg(self.service_name, test_port)
         return XdsTestServer(
