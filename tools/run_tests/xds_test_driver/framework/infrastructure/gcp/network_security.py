@@ -100,8 +100,9 @@ class NetworkSecurityV1Alpha1(gcp.GcpStandardCloudApiResource):
             full_name=self.resource_full_name(name, self.CLIENT_TLS_POLICIES))
 
     def _execute(self, *args, **kwargs):
+        # Workaround TD bug: throttled operations are reported as internal.
         retryer = tenacity.Retrying(
-            retry=tenacity.retry_if_exception(self._is_throttled_operation),
+            retry=tenacity.retry_if_exception(self._operation_internal_error),
             wait=tenacity.wait_fixed(10),
             stop=tenacity.stop_after_delay(5 * 60),
             before_sleep=tenacity.before_sleep_log(logger, logging.DEBUG),
@@ -109,7 +110,6 @@ class NetworkSecurityV1Alpha1(gcp.GcpStandardCloudApiResource):
         retryer(super()._execute, *args, **kwargs)
 
     @staticmethod
-    def _is_throttled_operation(exception):
-        if not isinstance(exception, gcp.OperationError):
-            return False
-        return exception.error.code == code_pb2.INTERNAL
+    def _operation_internal_error(exception):
+        return (isinstance(exception, gcp.OperationError) and
+                exception.error.code == code_pb2.INTERNAL)

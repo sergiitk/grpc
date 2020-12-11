@@ -17,6 +17,7 @@ import os
 
 from google.longrunning import operations_pb2
 from google.protobuf import json_format
+from google.rpc import code_pb2
 from googleapiclient import discovery
 import googleapiclient.errors
 import tenacity
@@ -41,14 +42,13 @@ class OperationError(Error):
     """
     def __init__(self, api_name, operation_response, message=None):
         self.api_name = api_name
-
         operation = json_format.ParseDict(operation_response, Operation())
-        self.name = operation.name
+        self.name = operation.name or 'unknown'
         self.error = operation.error
-        self.code_name = operation.error.Code.Name(operation.error.code)
+        self.code_name = code_pb2.Code.Name(operation.error.code)
         if message is None:
-            message = (f'{api_name} operation {self.name} failed. Error '
-                       f'code: {self.error.code} {self.code_name}, '
+            message = (f'{api_name} operation "{self.name}" failed. Error '
+                       f'code: {self.error.code} ({self.code_name}), '
                        f'message: {self.error.message}')
         self.message = message
         super().__init__(message)
