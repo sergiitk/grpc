@@ -31,12 +31,12 @@ class ComputeV1(gcp.GcpProjectApiResource):
     _WAIT_FOR_OPERATION_SEC = 1200
     _GCP_API_RETRIES = 5
 
-    @dataclasses.dataclass
+    @dataclasses.dataclass(frozen=True)
     class GcpResource:
         name: str
         url: str
 
-    @dataclasses.dataclass
+    @dataclasses.dataclass(frozen=True)
     class ZonalGcpResource(GcpResource):
         zone: str
 

@@ -103,27 +103,30 @@ class XdsKubernetesTestCase(absltest.TestCase):
         # Add backends to the Backend Service
         self.td.backend_service_add_neg_backends(neg_name, neg_zones)
 
-    def assertTestClientCanSendRpcs(self, test_client: XdsTestClient,
-                                    num_rpcs=200):
+    def assertSuccessfulRpcs(
+        self,
+        test_client: XdsTestClient,
+        num_rpcs: int = 100
+    ):
         # Run the test
-        stats_response = test_client.get_load_balancer_stats(num_rpcs=num_rpcs)
-
+        lb_stats = test_client.get_load_balancer_stats(num_rpcs=num_rpcs)
         # Check the results
-        self.assertAllBackendsReceivedRpcs(stats_response)
-        self.assertFailedRpcsAtMost(stats_response, 199)
+        self.assertAllBackendsReceivedRpcs(lb_stats)
+        self.assertFailedRpcsAtMost(lb_stats, 0)
 
-    def assertAllBackendsReceivedRpcs(self, stats_response):
+    def assertAllBackendsReceivedRpcs(self, lb_stats):
         # todo(sergiitk): assert backends length
-        logger.info(stats_response.rpcs_by_peer)
-        for backend, rpcs_count in stats_response.rpcs_by_peer.items():
+        logger.info(lb_stats.rpcs_by_peer)
+        for backend, rpcs_count in lb_stats.rpcs_by_peer.items():
             self.assertGreater(
                 int(rpcs_count), 0,
                 msg='Backend {backend} did not receive a single RPC')
 
-    def assertFailedRpcsAtMost(self, stats_response, count):
-        self.assertLessEqual(int(stats_response.num_failures), count,
-                             msg='Unexpected number of RPC failures '
-                                 f'{stats_response.num_failures} > {count}')
+    def assertFailedRpcsAtMost(self, lb_stats, limit):
+        failed = int(lb_stats.num_failures)
+        self.assertLessEqual(
+            failed, limit,
+            msg=f'Unexpected number of RPC failures {failed} > {limit}')
 
 
 class RegularXdsKubernetesTestCase(XdsKubernetesTestCase):

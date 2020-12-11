@@ -42,7 +42,7 @@ class SecurityTest(xds_k8s_testcase.SecurityXdsKubernetesTestCase):
         test_client: XdsTestClient = self.startSecureTestClient(test_server)
 
         self.assertTestAppSecurity(SecurityMode.MTLS, test_client, test_server)
-        self.assertTestClientCanSendRpcs(test_client)
+        self.assertSuccessfulRpcs(test_client)
 
     def test_tls(self):
         self.setupTrafficDirectorGrpc()
@@ -54,7 +54,7 @@ class SecurityTest(xds_k8s_testcase.SecurityXdsKubernetesTestCase):
         test_client: XdsTestClient = self.startSecureTestClient(test_server)
 
         self.assertTestAppSecurity(SecurityMode.TLS, test_client, test_server)
-        self.assertTestClientCanSendRpcs(test_client)
+        self.assertSuccessfulRpcs(test_client)
 
     def test_plaintext_fallback(self):
         self.setupTrafficDirectorGrpc()
@@ -66,7 +66,7 @@ class SecurityTest(xds_k8s_testcase.SecurityXdsKubernetesTestCase):
         test_client: XdsTestClient = self.startSecureTestClient(test_server)
 
         self.assertTestAppSecurity(SecurityMode.PLAINTEXT, test_client, test_server)
-        self.assertTestClientCanSendRpcs(test_client)
+        self.assertSuccessfulRpcs(test_client)
 
     @absltest.skip(SKIP_REASON)
     def test_mtls_error(self):

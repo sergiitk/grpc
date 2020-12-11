@@ -33,7 +33,7 @@ class BaselineTest(xds_k8s_testcase.RegularXdsKubernetesTestCase):
         self.assertTrue(True)
 
         test_client: XdsTestClient = self.startTestClient(test_server)
-        self.assertTestClientCanSendRpcs(test_client)
+        self.assertSuccessfulRpcs(test_client)
 
 
 if __name__ == '__main__':

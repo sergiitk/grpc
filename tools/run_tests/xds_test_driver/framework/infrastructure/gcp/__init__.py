@@ -15,10 +15,43 @@ import functools
 import logging
 import os
 
+from google.longrunning import operations_pb2
+from google.protobuf import json_format
 from googleapiclient import discovery
-import retrying
+import googleapiclient.errors
+import tenacity
 
 logger = logging.getLogger(__name__)
+
+# Type aliases
+Operation = operations_pb2.Operation
+
+
+class Error(Exception):
+    """Base error class for GCP API errors"""
+
+
+class OperationError(Error):
+    """
+    Operation was not successful.
+
+    Assuming Operation based on Google API Style Guide:
+    https://cloud.google.com/apis/design/design_patterns#long_running_operations
+    https://github.com/googleapis/googleapis/blob/master/google/longrunning/operations.proto
+    """
+    def __init__(self, api_name, operation_response, message=None):
+        self.api_name = api_name
+
+        operation = json_format.ParseDict(operation_response, Operation())
+        self.name = operation.name
+        self.error = operation.error
+        self.code_name = operation.error.Code.Name(operation.error.code)
+        if message is None:
+            message = (f'{api_name} operation {self.name} failed. Error '
+                       f'code: {self.error.code} {self.code_name}, '
+                       f'message: {self.error.message}')
+        self.message = message
+        super().__init__(message)
 
 
 class GcpApiManager:
@@ -70,8 +103,9 @@ class GcpApiManager:
 
 class GcpProjectApiResource:
     # todo(sergiitk): move someplace better
-    _WAIT_FOR_OPERATION_SEC = 1200
+    _WAIT_FOR_OPERATION_SEC = 60 * 5
     _WAIT_FIXES_SEC = 2
+    _GCP_API_RETRIES = 5
 
     def __init__(self, api: discovery.Resource, project: str):
         self.api: discovery.Resource = api
@@ -82,12 +116,68 @@ class GcpProjectApiResource:
                            test_success_fn,
                            timeout_sec=_WAIT_FOR_OPERATION_SEC,
                            wait_sec=_WAIT_FIXES_SEC):
-        @retrying.retry(
-            retry_on_result=lambda result: not test_success_fn(result),
-            stop_max_delay=timeout_sec * 1000,
-            wait_fixed=wait_sec * 1000)
-        def _retry_until_status_done():
-            logger.debug('Waiting for operation...')
-            return operation_request.execute()
+        retryer = tenacity.Retrying(
+            retry=(tenacity.retry_if_not_result(test_success_fn) |
+                   tenacity.retry_if_exception_type()),
+            wait=tenacity.wait_fixed(wait_sec),
+            stop=tenacity.stop_after_delay(timeout_sec),
+            after=tenacity.after_log(logger, logging.DEBUG),
+            reraise=True)
+        return retryer(operation_request.execute)
 
-        return _retry_until_status_done()
+
+class GcpStandardCloudApiResource(GcpProjectApiResource):
+    DEFAULT_GLOBAL = 'global'
+
+    def parent(self, location=None):
+        if not location:
+            location = self.DEFAULT_GLOBAL
+        return f'projects/{self.project}/locations/{location}'
+
+    def resource_full_name(self, name, collection_name):
+        return f'{self.parent()}/{collection_name}/{name}'
+
+    def _create_resource(self, collection: discovery.Resource, body: dict,
+                         **kwargs):
+        logger.debug("Creating %s", body)
+        create_req = collection.create(parent=self.parent(),
+                                       body=body, **kwargs)
+        self._execute(create_req)
+
+    @staticmethod
+    def _get_resource(collection: discovery.Resource, full_name):
+        resource = collection.get(name=full_name).execute()
+        logger.debug("Loaded %r", resource)
+        return resource
+
+    def _delete_resource(self, collection: discovery.Resource, full_name: str):
+        logger.debug("Deleting %s", full_name)
+        try:
+            self._execute(collection.delete(name=full_name))
+        except googleapiclient.errors.HttpError as error:
+            # noinspection PyProtectedMember
+            reason = error._get_reason()
+            logger.info('Delete failed. Error: %s %s',
+                        error.resp.status, reason)
+
+    def _execute(self, request,
+                 timeout_sec=GcpProjectApiResource._WAIT_FOR_OPERATION_SEC):
+        operation = request.execute(num_retries=self._GCP_API_RETRIES)
+        self._wait(operation, timeout_sec)
+
+    def _wait(self, operation,
+              timeout_sec=GcpProjectApiResource._WAIT_FOR_OPERATION_SEC):
+        op_name = operation['name']
+        logger.debug('Waiting for %s operation, timeout %s sec: %s',
+                     self.__class__.__name__, timeout_sec, op_name)
+
+        op_request = self.api.projects().locations().operations().get(
+            name=op_name)
+        operation = self.wait_for_operation(
+            operation_request=op_request,
+            test_success_fn=lambda result: result['done'],
+            timeout_sec=timeout_sec)
+
+        logger.debug('Completed operation: %s', operation)
+        if 'error' in operation:
+            raise OperationError(self.__class__.__name__, operation)

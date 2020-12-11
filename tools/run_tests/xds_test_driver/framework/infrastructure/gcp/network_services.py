@@ -15,25 +15,23 @@ import logging
 from typing import Optional
 
 import dataclasses
+from google.rpc import code_pb2
 import googleapiclient.errors
 from googleapiclient import discovery
+import tenacity
 
 from framework.infrastructure import gcp
 
 logger = logging.getLogger(__name__)
 
 
-class NetworkServicesV1Alpha1(gcp.GcpProjectApiResource):
+class NetworkServicesV1Alpha1(gcp.GcpStandardCloudApiResource):
     API_NAME = 'networkservices'
     API_VERSION = 'v1alpha1'
     DEFAULT_GLOBAL = 'global'
     ENDPOINT_CONFIG_SELECTORS = 'endpointConfigSelectors'
 
-    # todo(sergiitk): move someplace better
-    _WAIT_FOR_OPERATION_SEC = 1200
-    _GCP_API_RETRIES = 5
-
-    @dataclasses.dataclass
+    @dataclasses.dataclass(frozen=True)
     class EndpointConfigSelector:
         url: str
         name: str
@@ -60,7 +58,6 @@ class NetworkServicesV1Alpha1(gcp.GcpProjectApiResource):
             collection=self._api_locations.endpointConfigSelectors(),
             full_name=self.resource_full_name(name,
                                               self.ENDPOINT_CONFIG_SELECTORS))
-
         return self.EndpointConfigSelector(
             name=name,
             url=result['name'],
@@ -78,52 +75,17 @@ class NetworkServicesV1Alpha1(gcp.GcpProjectApiResource):
             full_name=self.resource_full_name(name,
                                               self.ENDPOINT_CONFIG_SELECTORS))
 
-    def parent(self, location=None):
-        if not location:
-            location = self.DEFAULT_GLOBAL
-        return f'projects/{self.project}/locations/{location}'
-
-    def resource_full_name(self, name, collection_name):
-        return f'{self.parent()}/{collection_name}/{name}'
-
-    def _create_resource(self, collection: discovery.Resource, body: dict,
-                         **kwargs):
-        logger.debug("Creating %s", body)
-        create_req = collection.create(parent=self.parent(),
-                                       body=body, **kwargs)
-        self._execute(create_req)
+    def _execute(self, *args, **kwargs):
+        retryer = tenacity.Retrying(
+            retry=tenacity.retry_if_exception(self._is_throttled_operation),
+            wait=tenacity.wait_fixed(10),
+            stop=tenacity.stop_after_delay(5 * 60),
+            before_sleep=tenacity.before_sleep_log(logger, logging.DEBUG),
+            reraise=True)
+        retryer(super()._execute, *args, **kwargs)
 
     @staticmethod
-    def _get_resource(collection: discovery.Resource, full_name):
-        resource = collection.get(name=full_name).execute()
-        logger.debug("Loaded %r", resource)
-        return resource
-
-    def _delete_resource(self, collection: discovery.Resource, full_name: str):
-        logger.debug("Deleting %s", full_name)
-        try:
-            self._execute(collection.delete(name=full_name))
-        except googleapiclient.errors.HttpError as error:
-            # noinspection PyProtectedMember
-            reason = error._get_reason()
-            logger.info('Delete failed. Error: %s %s',
-                        error.resp.status, reason)
-
-    def _execute(self, request, timeout_sec=_WAIT_FOR_OPERATION_SEC):
-        operation = request.execute(num_retries=self._GCP_API_RETRIES)
-
-        op_name = operation['name']
-        logger.debug('Waiting for %s operation, timeout %s sec: %s',
-                     self.API_NAME, timeout_sec, op_name)
-
-        op_request = self._api_locations.operations().get(name=op_name)
-        op_completed = self.wait_for_operation(
-            operation_request=op_request,
-            test_success_fn=lambda result: result['done'],
-            timeout_sec=timeout_sec)
-
-        logger.debug('Completed operation: %s', op_completed)
-        if 'error' in op_completed:
-            # todo(sergiitk): custom exception
-            raise Exception(f'Waiting for {self.API_NAME} operation {op_name} '
-                            f'failed. Error: {op_completed["error"]}')
+    def _is_throttled_operation(exception):
+        if not isinstance(exception, gcp.OperationError):
+            return False
+        return exception.error.code == code_pb2.INTERNAL
