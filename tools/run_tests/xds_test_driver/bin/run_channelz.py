@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import hashlib
 import logging
 
 from absl import app
@@ -36,6 +37,18 @@ flags.adopt_module_key_flags(xds_k8s_flags)
 Socket = grpc_channelz.Socket
 XdsTestServer = server_app.XdsTestServer
 XdsTestClient = client_app.XdsTestClient
+
+
+def debug_cert(cert):
+    if not cert:
+        return '<missing>'
+    sha1 = hashlib.sha1(cert)
+    return f'sha1={sha1.hexdigest()}, len={len(cert)}'
+
+
+def debug_sock_tls(tls):
+    return (f'local:  {debug_cert(tls.local_certificate)}\n'
+            f'remote: {debug_cert(tls.remote_certificate)}')
 
 
 def get_deployment_pod_ips(k8s_ns, deployment_name):
@@ -83,14 +96,25 @@ def main(argv):
         client_socket: Socket = test_client.get_client_socket_with_test_server()
         server_socket: Socket = test_server.get_server_socket_matching_client(
             client_socket)
-        client_tls = client_socket.security.tls
+
         server_tls = server_socket.security.tls
-        logger.info(
-            'Certs: client local matches server remote: %s',
-            client_tls.local_certificate == server_tls.remote_certificate)
-        logger.info(
-            'Certs: client remote matches server local: %s',
-            client_tls.local_certificate == server_tls.remote_certificate)
+        client_tls = client_socket.security.tls
+
+        print(f'\nServer certs:\n{debug_sock_tls(server_tls)}')
+        print(f'\nClient certs:\n{debug_sock_tls(client_tls)}')
+        print()
+
+        if server_tls.local_certificate:
+            eq = server_tls.local_certificate == client_tls.remote_certificate
+            print(f'(TLS)  Server local matches client remote: {eq}')
+        else:
+            print('(TLS)  Not detected')
+
+        if server_tls.remote_certificate:
+            eq = server_tls.remote_certificate == client_tls.local_certificate
+            print(f'(mTLS) Server remote matches client local: {eq}')
+        else:
+            print('(mTLS) Not detected')
 
 
 if __name__ == '__main__':
