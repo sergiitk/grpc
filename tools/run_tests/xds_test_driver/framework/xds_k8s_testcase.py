@@ -88,6 +88,7 @@ class XdsKubernetesTestCase(absltest.TestCase):
         cls.gcp_api_manager.close()
 
     def tearDown(self):
+        logger.debug('######## tearDown(): resource cleanup initiated ########')
         self.td.cleanup()
         self.client_runner.cleanup()
         self.server_runner.cleanup()

@@ -27,11 +27,6 @@ SecurityMode = xds_k8s_testcase.SecurityXdsKubernetesTestCase.SecurityMode
 
 
 class SecurityTest(xds_k8s_testcase.SecurityXdsKubernetesTestCase):
-    def tearDown(self):
-        # todo(sergiitk): remove
-        logger.debug('######## tearDown(): resource cleanup initiated ########')
-        super().tearDown()
-
     def test_mtls(self):
         self.setupTrafficDirectorGrpc()
         self.setupSecurityPolicies(server_tls=True, server_mtls=True,
@@ -65,7 +60,8 @@ class SecurityTest(xds_k8s_testcase.SecurityXdsKubernetesTestCase):
         self.setupServerBackends()
         test_client: XdsTestClient = self.startSecureTestClient(test_server)
 
-        self.assertTestAppSecurity(SecurityMode.PLAINTEXT, test_client, test_server)
+        self.assertTestAppSecurity(
+            SecurityMode.PLAINTEXT, test_client, test_server)
         self.assertSuccessfulRpcs(test_client)
 
     @absltest.skip(SKIP_REASON)
