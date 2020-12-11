@@ -43,6 +43,7 @@ SocketRef = channelz_pb2.SocketRef
 GetSocketRequest = channelz_pb2.GetSocketRequest
 GetSocketResponse = channelz_pb2.GetSocketResponse
 Address = channelz_pb2.Address
+Security = channelz_pb2.Security
 # Server Sockets
 GetServerSocketsRequest = channelz_pb2.GetServerSocketsRequest
 GetServerSocketsResponse = channelz_pb2.GetServerSocketsResponse

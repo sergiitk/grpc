@@ -11,7 +11,10 @@
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
+import enum
+import hashlib
 import logging
+from typing import Tuple
 
 from absl.testing import absltest
 
@@ -20,6 +23,7 @@ from framework import xds_k8s_flags
 from framework.infrastructure import k8s
 from framework.infrastructure import gcp
 from framework.infrastructure import traffic_director
+from framework.rpc import grpc_channelz
 from framework.test_app import client_app
 from framework.test_app import server_app
 
@@ -169,13 +173,18 @@ class RegularXdsKubernetesTestCase(XdsKubernetesTestCase):
                         **kwargs) -> XdsTestClient:
         test_client = self.client_runner.run(server_target=test_server.xds_uri,
                                              **kwargs)
-        logger.info('Waiting fot the client to establish healthy channel with '
-                    'the server')
+        logger.debug('Waiting fot the client to establish healthy channel with '
+                     'the server')
         test_client.wait_for_active_server_channel()
         return test_client
 
 
 class SecurityXdsKubernetesTestCase(XdsKubernetesTestCase):
+    class SecurityMode(enum.Enum):
+        MTLS = enum.auto()
+        TLS = enum.auto()
+        PLAINTEXT = enum.auto()
+
     def setUp(self):
         super().setUp()
 
@@ -239,7 +248,141 @@ class SecurityXdsKubernetesTestCase(XdsKubernetesTestCase):
             server_target=test_server.xds_uri,
             secure_mode=True,
             **kwargs)
-        logger.info('Waiting fot the client to establish healthy channel with '
-                    'the server')
+        logger.debug('Waiting fot the client to establish healthy channel with '
+                     'the server')
         test_client.wait_for_active_server_channel()
         return test_client
+
+    def assertTestAppSecurity(self,
+                              mode: SecurityMode,
+                              test_client: XdsTestClient,
+                              test_server: XdsTestServer):
+        client_socket, server_socket = self.getConnectedSockets(test_client,
+                                                                test_server)
+        server_security: grpc_channelz.Security = server_socket.security
+        client_security: grpc_channelz.Security = client_socket.security
+        logger.info('Server certs: %s', self.debug_sock_certs(server_security))
+        logger.info('Client certs: %s', self.debug_sock_certs(client_security))
+
+        if mode is self.SecurityMode.MTLS:
+            self.assertSecurityMtls(client_security, server_security)
+        elif mode is self.SecurityMode.TLS:
+            self.assertSecurityTls(client_security, server_security)
+        elif mode is self.SecurityMode.PLAINTEXT:
+            self.assertSecurityPlaintext(client_security, server_security)
+        else:
+            raise TypeError(f'Incorrect security mode')
+
+    def assertSecurityMtls(self,
+                           client_security: grpc_channelz.Security,
+                           server_security: grpc_channelz.Security):
+        self.assertEqual(client_security.WhichOneof('model'), 'tls',
+                         msg='(mTLS) Client socket security model must be TLS')
+        self.assertEqual(server_security.WhichOneof('model'), 'tls',
+                         msg='(mTLS) Server socket security model must be TLS')
+        server_tls, client_tls = server_security.tls, client_security.tls
+
+        # Confirm regular TLS: server local cert == client remote cert
+        self.assertNotEmpty(
+            server_tls.local_certificate,
+            msg="(mTLS) Server local certificate is missing")
+        self.assertNotEmpty(
+            client_tls.remote_certificate,
+            msg="(mTLS) Client remote certificate is missing")
+        self.assertEqual(
+            server_tls.local_certificate, client_tls.remote_certificate,
+            msg="(mTLS) Server local certificate must match client's "
+                "remote certificate")
+
+        # mTLS: server remote cert == client local cert
+        self.assertNotEmpty(
+            server_tls.remote_certificate,
+            msg="(mTLS) Server remote certificate is missing")
+        self.assertNotEmpty(
+            client_tls.local_certificate,
+            msg="(mTLS) Client local certificate is missing")
+        self.assertEqual(
+            server_tls.remote_certificate, client_tls.local_certificate,
+            msg="(mTLS) Server remote certificate must match client's "
+                "local certificate")
+
+        # Success
+        logger.info('mTLS security mode  confirmed!')
+
+    def assertSecurityTls(self,
+                          client_security: grpc_channelz.Security,
+                          server_security: grpc_channelz.Security):
+        self.assertEqual(client_security.WhichOneof('model'), 'tls',
+                         msg='(TLS) Client socket security model must be TLS')
+        self.assertEqual(server_security.WhichOneof('model'), 'tls',
+                         msg='(TLS) Server socket security model must be TLS')
+        server_tls, client_tls = server_security.tls, client_security.tls
+
+        # Regular TLS: server local cert == client remote cert
+        self.assertNotEmpty(
+            server_tls.local_certificate,
+            msg="(TLS) Server local certificate is missing")
+        self.assertNotEmpty(
+            client_tls.remote_certificate,
+            msg="(TLS) Client remote certificate is missing")
+        self.assertEqual(
+            server_tls.local_certificate, client_tls.remote_certificate,
+            msg="(TLS) Server local certificate must match client "
+                "remote certificate")
+
+        # mTLS must not be used
+        self.assertEmpty(
+            server_tls.remote_certificate,
+            msg="(TLS) Server remote certificate must be empty in TLS mode. "
+                "Is server security incorrectly configured for mTLS?")
+        self.assertEmpty(
+            client_tls.local_certificate,
+            msg="(TLS) Client local certificate must be empty in TLS mode. "
+                "Is client security incorrectly configured for mTLS?")
+
+        # Success
+        logger.info('TLS security mode confirmed!')
+
+    def assertSecurityPlaintext(self, client_security, server_security):
+        server_tls, client_tls = server_security.tls, client_security.tls
+        # Not TLS
+        self.assertEmpty(
+            server_tls.local_certificate,
+            msg="(Plaintext) Server local certificate must be empty.")
+        self.assertEmpty(
+            client_tls.local_certificate,
+            msg="(Plaintext) Client local certificate must be empty.")
+
+        # Not mTLS
+        self.assertEmpty(
+            server_tls.remote_certificate,
+            msg="(Plaintext) Server remote certificate must be empty.")
+        self.assertEmpty(
+            client_tls.local_certificate,
+            msg="(Plaintext) Client local certificate must be empty.")
+
+        # Success
+        logger.info('Plaintext security mode confirmed!')
+
+    @staticmethod
+    def getConnectedSockets(
+        test_client: XdsTestClient,
+        test_server: XdsTestServer
+    ) -> Tuple[grpc_channelz.Socket, grpc_channelz.Socket]:
+        client_sock = test_client.get_client_socket_with_test_server()
+        server_sock = test_server.get_server_socket_matching_client(client_sock)
+        return client_sock, server_sock
+
+    @classmethod
+    def debug_sock_certs(cls, security: grpc_channelz.Security):
+        if security.WhichOneof('model') == 'other':
+            return f'other: <{security.other.name}={security.other.value}>'
+
+        return (f'local: <{cls.debug_cert(security.tls.local_certificate)}>, '
+                f'remote: <{cls.debug_cert(security.tls.remote_certificate)}>')
+
+    @staticmethod
+    def debug_cert(cert):
+        if not cert: return 'missing'
+        sha1 = hashlib.sha1(cert)
+        return f'sha1={sha1.hexdigest()}, len={len(cert)}'

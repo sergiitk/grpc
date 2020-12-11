@@ -23,6 +23,7 @@ SKIP_REASON = 'Work in progress'
 # Type aliases
 XdsTestServer = xds_k8s_testcase.XdsTestServer
 XdsTestClient = xds_k8s_testcase.XdsTestClient
+SecurityMode = xds_k8s_testcase.SecurityXdsKubernetesTestCase.SecurityMode
 
 
 class SecurityTest(xds_k8s_testcase.SecurityXdsKubernetesTestCase):
@@ -38,8 +39,9 @@ class SecurityTest(xds_k8s_testcase.SecurityXdsKubernetesTestCase):
 
         test_server: XdsTestServer = self.startSecureTestServer()
         self.setupServerBackends()
-
         test_client: XdsTestClient = self.startSecureTestClient(test_server)
+
+        self.assertTestAppSecurity(SecurityMode.MTLS, test_client, test_server)
         self.assertTestClientCanSendRpcs(test_client)
 
     def test_tls(self):
@@ -49,8 +51,9 @@ class SecurityTest(xds_k8s_testcase.SecurityXdsKubernetesTestCase):
 
         test_server: XdsTestServer = self.startSecureTestServer()
         self.setupServerBackends()
-
         test_client: XdsTestClient = self.startSecureTestClient(test_server)
+
+        self.assertTestAppSecurity(SecurityMode.TLS, test_client, test_server)
         self.assertTestClientCanSendRpcs(test_client)
 
     def test_plaintext_fallback(self):
@@ -60,8 +63,9 @@ class SecurityTest(xds_k8s_testcase.SecurityXdsKubernetesTestCase):
 
         test_server: XdsTestServer = self.startSecureTestServer()
         self.setupServerBackends()
-
         test_client: XdsTestClient = self.startSecureTestClient(test_server)
+
+        self.assertTestAppSecurity(SecurityMode.PLAINTEXT, test_client, test_server)
         self.assertTestClientCanSendRpcs(test_client)
 
     @absltest.skip(SKIP_REASON)
