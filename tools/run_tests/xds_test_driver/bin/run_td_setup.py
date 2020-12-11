@@ -28,13 +28,11 @@ _CMD = flags.DEFINE_enum(
     enum_values=['cycle', 'create', 'cleanup',
                  'backends-add', 'backends-cleanup'],
     help='Command')
-_SECURITY_MODE = flags.DEFINE_enum(
-    'security_mode', default=None, enum_values=['mtls', 'tls', 'plaintext'],
+_SECURITY = flags.DEFINE_enum(
+    'security', default=None, enum_values=['mtls', 'tls', 'plaintext'],
     help='Configure td with security')
 flags.adopt_module_key_flags(xds_flags)
 flags.adopt_module_key_flags(xds_k8s_flags)
-
-BackendServiceProtocol = gcp.ComputeV1.BackendServiceProtocol
 
 
 def main(argv):
@@ -42,7 +40,7 @@ def main(argv):
         raise app.UsageError('Too many command-line arguments.')
 
     command = _CMD.value
-    security_mode = _SECURITY_MODE.value
+    security_mode = _SECURITY.value
 
     project: str = xds_flags.PROJECT.value
     network: str = xds_flags.NETWORK.value
