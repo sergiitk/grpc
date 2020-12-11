@@ -15,22 +15,27 @@ import logging
 from typing import Optional, Set
 
 from framework.infrastructure import gcp
+from framework.infrastructure.gcp import compute
+from framework.infrastructure.gcp import network_security
+from framework.infrastructure.gcp import network_services
 
 logger = logging.getLogger(__name__)
 
 # Type aliases
-GcpResource = gcp.GcpResource
-ZonalGcpResource = gcp.ZonalGcpResource
 # Compute
-ComputeV1 = gcp.ComputeV1
+ComputeV1 = compute.ComputeV1
 HealthCheckProtocol = ComputeV1.HealthCheckProtocol
 BackendServiceProtocol = ComputeV1.BackendServiceProtocol
+GcpResource = ComputeV1.GcpResource
+ZonalGcpResource = ComputeV1.ZonalGcpResource
+
 # Network Security
-NetworkSecurityV1Alpha1 = gcp.NetworkSecurityV1Alpha1
+NetworkSecurityV1Alpha1 = network_security.NetworkSecurityV1Alpha1
 ServerTlsPolicy = NetworkSecurityV1Alpha1.ServerTlsPolicy
 ClientTlsPolicy = NetworkSecurityV1Alpha1.ClientTlsPolicy
+
 # Network Services
-NetworkServicesV1Alpha1 = gcp.NetworkServicesV1Alpha1
+NetworkServicesV1Alpha1 = network_services.NetworkServicesV1Alpha1
 EndpointConfigSelector = NetworkServicesV1Alpha1.EndpointConfigSelector
 
 
@@ -52,7 +57,7 @@ class TrafficDirectorManager:
         network: str = 'default',
     ):
         # API
-        self.compute = gcp.ComputeV1(gcp_api_manager, project)
+        self.compute = ComputeV1(gcp_api_manager, project)
 
         # Settings
         self.project: str = project
@@ -291,8 +296,8 @@ class TrafficDirectorSecureManager(TrafficDirectorManager):
                          resource_prefix=resource_prefix, network=network)
 
         # API
-        self.netsec = gcp.NetworkSecurityV1Alpha1(gcp_api_manager, project)
-        self.netsvc = gcp.NetworkServicesV1Alpha1(gcp_api_manager, project)
+        self.netsec = NetworkSecurityV1Alpha1(gcp_api_manager, project)
+        self.netsvc = NetworkServicesV1Alpha1(gcp_api_manager, project)
 
         # Managed resources
         self.server_tls_policy: Optional[ServerTlsPolicy] = None

@@ -18,8 +18,10 @@ from absl import flags
 
 from framework import xds_flags
 from framework import xds_k8s_flags
-from framework.infrastructure import gcp, k8s
+from framework.infrastructure import gcp
+from framework.infrastructure import k8s
 from framework.infrastructure import traffic_director
+
 
 logger = logging.getLogger(__name__)
 # Flags
