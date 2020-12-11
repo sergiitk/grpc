@@ -74,7 +74,7 @@ class XdsTestClient(framework.rpc.GrpcApp):
                    tenacity.retry_if_exception_type()),
             wait=tenacity.wait_exponential(max=10),
             before=tenacity.before_log(logger, logging.DEBUG),
-            before_sleep=tenacity.before_sleep_log(logger, logging.DEBUG, True),
+            before_sleep=tenacity.before_sleep_log(logger, logging.DEBUG),
             reraise=True)
         channel = retryer(self.get_active_server_channel)
         logger.info(

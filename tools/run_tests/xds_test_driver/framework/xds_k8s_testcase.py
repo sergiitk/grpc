@@ -195,7 +195,8 @@ class SecurityXdsKubernetesTestCase(XdsKubernetesTestCase):
             gcp_service_account=self.gcp_service_account,
             network=self.network,
             td_bootstrap_image=self.td_bootstrap_image,
-            deployment_template='server-secure.deployment.yaml')
+            deployment_template='server-secure.deployment.yaml',
+            debug_use_port_forwarding=self.client_port_forwarding)
 
         # Test Client Runner
         self.client_runner = client_app.KubernetesClientRunner(
@@ -206,10 +207,10 @@ class SecurityXdsKubernetesTestCase(XdsKubernetesTestCase):
             gcp_service_account=self.gcp_service_account,
             network=self.network,
             td_bootstrap_image=self.td_bootstrap_image,
-            debug_use_port_forwarding=self.client_port_forwarding,
             deployment_template='client-secure.deployment.yaml',
             stats_port=self.client_port,
-            reuse_namespace=self.server_namespace == self.client_namespace)
+            reuse_namespace=self.server_namespace == self.client_namespace,
+            debug_use_port_forwarding=self.client_port_forwarding)
 
     def startSecureTestServer(self, replica_count=1, **kwargs) -> XdsTestServer:
         test_server = self.server_runner.run(

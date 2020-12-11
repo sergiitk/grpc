@@ -111,7 +111,8 @@ class KubernetesServerRunner(base_runner.KubernetesBaseRunner):
                  service_template='server.service.yaml',
                  reuse_service=False,
                  reuse_namespace=False,
-                 namespace_template=None):
+                 namespace_template=None,
+                 debug_use_port_forwarding=False):
         super().__init__(k8s_namespace, namespace_template, reuse_namespace)
 
         # Settings
@@ -131,17 +132,22 @@ class KubernetesServerRunner(base_runner.KubernetesBaseRunner):
         self.service_account_template = service_account_template
         self.service_template = service_template
         self.reuse_service = reuse_service
+        self.debug_use_port_forwarding = debug_use_port_forwarding
 
         # Mutable state
         self.deployment: Optional[k8s.V1Deployment] = None
         self.service_account: Optional[k8s.V1ServiceAccount] = None
         self.service: Optional[k8s.V1Service] = None
+        self.port_forwarder = None
 
     def run(self, *,
             test_port=8080, maintenance_port=None,
             secure_mode=False, server_id=None,
             replica_count=1) -> XdsTestServer:
-        super().run()
+        # todo(sergiitk): multiple replicas
+        if replica_count != 1:
+            raise NotImplementedError("Multiple replicas not yet supported")
+
         # Implementation detail: in secure mode, maintenance ("backchannel")
         # port must be different from the test port so communication with
         # maintenance services can be reached independently from the security
@@ -155,6 +161,23 @@ class KubernetesServerRunner(base_runner.KubernetesBaseRunner):
         if not (isinstance(test_port, int) and
                 isinstance(maintenance_port, int)):
             raise TypeError('Port numbers must be integer')
+
+        # Create namespace.
+        super().run()
+
+        # Reuse existing if requested, create a new deployment when missing.
+        # Useful for debugging to avoid NEG loosing relation to deleted service.
+        if self.reuse_service:
+            self.service = self._reuse_service(self.service_name)
+        if not self.service:
+            self.service = self._create_service(
+                self.service_template,
+                service_name=self.service_name,
+                namespace_name=self.k8s_namespace.name,
+                deployment_name=self.deployment_name,
+                neg_name=self.neg_name,
+                test_port=test_port)
+        self._wait_service_neg(self.service_name, test_port)
 
         # Create service account
         self.service_account = self._create_service_account(
@@ -186,28 +209,30 @@ class KubernetesServerRunner(base_runner.KubernetesBaseRunner):
         for pod in pods:
             self._wait_pod_started(pod.metadata.name)
 
-        # Reuse existing if requested, create a new deployment when missing.
-        # Useful for debugging to avoid NEG loosing relation to deleted service.
-        if self.reuse_service:
-            self.service = self._reuse_service(self.service_name)
-        if not self.service:
-            self.service = self._create_service(
-                self.service_template,
-                service_name=self.service_name,
-                namespace_name=self.k8s_namespace.name,
-                deployment_name=self.deployment_name,
-                neg_name=self.neg_name,
-                test_port=test_port)
+        # todo(sergiitk): This is why multiple replicas not yet supported
+        pod = pods[0]
+        pod_ip = pod.status.pod_ip
+        rpc_host = None
+        # Experimental, for local debugging.
+        if self.debug_use_port_forwarding:
+            logger.info('Enabling port forwarding from %s:%s',
+                        pod_ip, maintenance_port)
+            self.port_forwarder = self.k8s_namespace.port_forward_pod(
+                pod, remote_port=maintenance_port)
+            rpc_host = self.k8s_namespace.PORT_FORWARD_LOCAL_ADDRESS
 
-        self._wait_service_neg(self.service_name, test_port)
         return XdsTestServer(
-            # todo(sergiitk): resolve ip
-            ip=None,
+            ip=pod_ip,
             rpc_port=test_port,
+            maintenance_port=maintenance_port,
             secure_mode=secure_mode,
-            server_id=server_id)
+            server_id=server_id,
+            rpc_host=rpc_host)
 
     def cleanup(self, *, force=False, force_namespace=False):
+        if self.port_forwarder:
+            self.k8s_namespace.port_forward_stop(self.port_forwarder)
+            self.port_forwarder = None
         if self.deployment or force:
             self._delete_deployment(self.deployment_name)
             self.deployment = None
