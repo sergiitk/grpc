@@ -42,7 +42,6 @@ class ComputeV1(gcp.api.GcpProjectApiResource):
 
     def __init__(self, api_manager: gcp.api.GcpApiManager, project: str):
         super().__init__(api_manager.compute('v1'), project)
-        self._operation_is_done = None
 
     class HealthCheckProtocol(enum.Enum):
         TCP = enum.auto()

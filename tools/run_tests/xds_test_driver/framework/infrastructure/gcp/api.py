@@ -31,6 +31,9 @@ V1_DISCOVERY_URI = flags.DEFINE_string(
 V2_DISCOVERY_URI = flags.DEFINE_string(
     "v2_discovery_uri", default=discovery.V2_DISCOVERY_URI,
     help="Override v2 Discovery URI")
+COMPUTE_V1_DISCOVERY_FILE = flags.DEFINE_string(
+    "compute_v1_discovery_file", default=None,
+    help="Load compute v1 from discovery file")
 
 # Type aliases
 Operation = operations_pb2.Operation
@@ -40,17 +43,26 @@ class GcpApiManager:
     def __init__(self, *,
                  v1_discovery_uri=None,
                  v2_discovery_uri=None,
+                 compute_v1_discovery_file=None,
                  private_api_key=None):
         self.v1_discovery_uri = v1_discovery_uri or V1_DISCOVERY_URI.value
         self.v2_discovery_uri = v2_discovery_uri or V2_DISCOVERY_URI.value
+        self.compute_v1_discovery_file = (compute_v1_discovery_file or
+                                          COMPUTE_V1_DISCOVERY_FILE.value)
         self.private_api_key = private_api_key or os.getenv('PRIVATE_API_KEY')
         self._exit_stack = contextlib.ExitStack()
+
+    def close(self):
+        self._exit_stack.close()
 
     @functools.lru_cache(None)
     def compute(self, version):
         api_name = 'compute'
         if version == 'v1':
-            return self._build_from_discovery_v1(api_name, version)
+            if self.compute_v1_discovery_file:
+                return self._build_from_file(self.compute_v1_discovery_file)
+            else:
+                return self._build_from_discovery_v1(api_name, version)
 
         raise NotImplementedError(f'Compute {version} not supported')
 
@@ -87,8 +99,11 @@ class GcpApiManager:
         self._exit_stack.enter_context(api)
         return api
 
-    def close(self):
-        self._exit_stack.close()
+    def _build_from_file(self, discovery_file):
+        with open(discovery_file, 'r') as f:
+            api = discovery.build_from_document(f.read())
+        self._exit_stack.enter_context(api)
+        return api
 
 
 class Error(Exception):
