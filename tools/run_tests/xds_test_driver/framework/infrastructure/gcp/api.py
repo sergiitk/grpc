@@ -16,6 +16,9 @@ import functools
 import logging
 import os
 
+# For some reason without `import grpc`, google.protobuf.json_format produces
+# "Segmentation fault"
+import grpc
 from absl import flags
 from google.longrunning import operations_pb2
 from google.protobuf import json_format

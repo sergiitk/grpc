@@ -15,9 +15,9 @@ import logging
 import re
 from typing import Optional, ClassVar, Dict
 
+import grpc
 from google.protobuf import json_format
 import google.protobuf.message
-import grpc
 
 logger = logging.getLogger(__name__)
 
