@@ -12,6 +12,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 from absl import flags
+import googleapiclient.discovery
 
 # GCP
 PROJECT = flags.DEFINE_string(

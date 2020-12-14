@@ -13,11 +13,13 @@
 #  limitations under the License.
 import logging
 
+from absl import flags
 from absl.testing import absltest
 
 from framework import xds_k8s_testcase
 
 logger = logging.getLogger(__name__)
+flags.adopt_module_key_flags(xds_k8s_testcase)
 SKIP_REASON = 'Work in progress'
 
 # Type aliases

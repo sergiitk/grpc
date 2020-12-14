@@ -11,10 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import contextlib
 import functools
 import logging
 import os
 
+from absl import flags
 from google.longrunning import operations_pb2
 from google.protobuf import json_format
 from google.rpc import code_pb2
@@ -23,9 +25,70 @@ import googleapiclient.errors
 import tenacity
 
 logger = logging.getLogger(__name__)
+V1_DISCOVERY_URI = flags.DEFINE_string(
+    "v1_discovery_uri", default=discovery.V1_DISCOVERY_URI,
+    help="Override v1 Discovery URI")
+V2_DISCOVERY_URI = flags.DEFINE_string(
+    "v2_discovery_uri", default=discovery.V2_DISCOVERY_URI,
+    help="Override v2 Discovery URI")
 
 # Type aliases
 Operation = operations_pb2.Operation
+
+
+class GcpApiManager:
+    def __init__(self, *,
+                 v1_discovery_uri=None,
+                 v2_discovery_uri=None,
+                 private_api_key=None):
+        self.v1_discovery_uri = v1_discovery_uri or V1_DISCOVERY_URI.value
+        self.v2_discovery_uri = v2_discovery_uri or V2_DISCOVERY_URI.value
+        self.private_api_key = private_api_key or os.getenv('PRIVATE_API_KEY')
+        self._exit_stack = contextlib.ExitStack()
+
+    @functools.lru_cache(None)
+    def compute(self, version):
+        api_name = 'compute'
+        if version == 'v1':
+            return self._build_from_discovery_v1(api_name, version)
+
+        raise NotImplementedError(f'Compute {version} not supported')
+
+    @functools.lru_cache(None)
+    def networksecurity(self, version):
+        api_name = 'networksecurity'
+        if version == 'v1alpha1':
+            return self._build_from_discovery_v2(
+                api_name, version, api_key=self.private_api_key)
+
+        raise NotImplementedError(f'Network Security {version} not supported')
+
+    @functools.lru_cache(None)
+    def networkservices(self, version):
+        api_name = 'networkservices'
+        if version == 'v1alpha1':
+            return self._build_from_discovery_v2(
+                api_name, version, api_key=self.private_api_key)
+
+        raise NotImplementedError(f'Network Services {version} not supported')
+
+    def _build_from_discovery_v1(self, api_name, version):
+        api = discovery.build(
+            api_name, version, cache_discovery=False,
+            discoveryServiceUrl=self.v1_discovery_uri)
+        self._exit_stack.enter_context(api)
+        return api
+
+    def _build_from_discovery_v2(self, api_name, version, *, api_key=None):
+        key_arg = f'&key={api_key}' if api_key else ''
+        api = discovery.build(
+            api_name, version, cache_discovery=False,
+            discoveryServiceUrl=f'{self.v2_discovery_uri}{key_arg}')
+        self._exit_stack.enter_context(api)
+        return api
+
+    def close(self):
+        self._exit_stack.close()
 
 
 class Error(Exception):
@@ -52,53 +115,6 @@ class OperationError(Error):
                        f'message: {self.error.message}')
         self.message = message
         super().__init__(message)
-
-
-class GcpApiManager:
-    def __init__(self, alpha_api_key=None):
-        self.alpha_api_key = alpha_api_key or os.getenv('ALPHA_API_KEY')
-
-    @functools.lru_cache(None)
-    def compute(self, version):
-        api_name = 'compute'
-        if version == 'v1':
-            return discovery.build(api_name, version, cache_discovery=False)
-        raise NotImplementedError(f'Compute {version} not supported')
-
-    @functools.lru_cache(None)
-    def networksecurity(self, version):
-        api_name = 'networksecurity'
-
-        if version == 'v1alpha1':
-            return discovery.build(
-                api_name, version,
-                discoveryServiceUrl=f'{discovery.V2_DISCOVERY_URI}'
-                                    f'{self._key_param(self.alpha_api_key)}',
-                cache_discovery=False)
-
-        raise NotImplementedError(f'Network Security {version} not supported')
-
-    @functools.lru_cache(None)
-    def networkservices(self, version):
-        api_name = 'networkservices'
-
-        if version == 'v1alpha1':
-            return discovery.build(
-                api_name, version,
-                discoveryServiceUrl=f'{discovery.V2_DISCOVERY_URI}'
-                                    f'{self._key_param(self.alpha_api_key)}',
-                cache_discovery=False)
-
-        raise NotImplementedError(f'Network Services {version} not supported')
-
-    @staticmethod
-    def _key_param(key):
-        return f'&key={key}' if key else ''
-
-    def close(self):
-        """todo(sergiitk): contextlib exitstack"""
-        # if self._compute_v1:
-        #     self._compute_v1.close()
 
 
 class GcpProjectApiResource:

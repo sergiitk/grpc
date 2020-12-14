@@ -16,6 +16,7 @@ import hashlib
 import logging
 from typing import Tuple
 
+from absl import flags
 from absl.testing import absltest
 
 from framework import xds_flags
@@ -28,6 +29,8 @@ from framework.test_app import client_app
 from framework.test_app import server_app
 
 logger = logging.getLogger(__name__)
+flags.adopt_module_key_flags(xds_flags)
+flags.adopt_module_key_flags(xds_k8s_flags)
 
 # Type aliases
 XdsTestServer = server_app.XdsTestServer
