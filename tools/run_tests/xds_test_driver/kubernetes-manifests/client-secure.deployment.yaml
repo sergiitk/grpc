@@ -38,9 +38,6 @@ spec:
             value: "true"
           - name: GRPC_XDS_CERT_INSTANCE_OVERRIDE
             value: "true"
-          # Enable verbose logging
-          - name: JAVA_OPTS
-            value: "-Djava.util.logging.config.file=./logging-json.properties"
         volumeMounts:
           - mountPath: /tmp/grpc-xds/
             name: grpc-td-conf

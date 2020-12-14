@@ -25,9 +25,6 @@ spec:
           - "--port=${test_port}"
         ports:
           - containerPort: ${test_port}
-        env:
-          - name: JAVA_OPTS
-            value: "-Djava.util.logging.config.file=./logging-json.properties"
         resources:
           limits:
             cpu: 800m
