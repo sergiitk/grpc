@@ -59,7 +59,7 @@ spec:
           args:
             - "--output=/tmp/bootstrap/td-grpc-bootstrap.json"
             - "--vpc-network-name=${network_name}"
-            - "--include-psm-security"
+            - "--include-psm-security-experimental"
           resources:
             limits:
               cpu: 100m
