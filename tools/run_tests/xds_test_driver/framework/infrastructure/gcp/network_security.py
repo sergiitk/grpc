@@ -15,8 +15,6 @@ import logging
 
 import dataclasses
 from google.rpc import code_pb2
-import googleapiclient.errors
-from googleapiclient import discovery
 import tenacity
 
 from framework.infrastructure import gcp
@@ -24,7 +22,7 @@ from framework.infrastructure import gcp
 logger = logging.getLogger(__name__)
 
 
-class NetworkSecurityV1Alpha1(gcp.GcpStandardCloudApiResource):
+class NetworkSecurityV1Alpha1(gcp.api.GcpStandardCloudApiResource):
     API_NAME = 'networksecurity'
     API_VERSION = 'v1alpha1'
     SERVER_TLS_POLICIES = 'serverTlsPolicies'
@@ -48,7 +46,7 @@ class NetworkSecurityV1Alpha1(gcp.GcpStandardCloudApiResource):
         update_time: str
         create_time: str
 
-    def __init__(self, api_manager: gcp.GcpApiManager, project: str):
+    def __init__(self, api_manager: gcp.api.GcpApiManager, project: str):
         super().__init__(api_manager.networksecurity(self.API_VERSION), project)
         # Shortcut
         self._api_locations = self.api.projects().locations()
@@ -111,5 +109,5 @@ class NetworkSecurityV1Alpha1(gcp.GcpStandardCloudApiResource):
 
     @staticmethod
     def _operation_internal_error(exception):
-        return (isinstance(exception, gcp.OperationError) and
+        return (isinstance(exception, gcp.api.OperationError) and
                 exception.error.code == code_pb2.INTERNAL)

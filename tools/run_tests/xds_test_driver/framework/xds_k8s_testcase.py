@@ -39,7 +39,7 @@ XdsTestClient = client_app.XdsTestClient
 
 class XdsKubernetesTestCase(absltest.TestCase):
     k8s_api_manager: k8s.KubernetesApiManager
-    gcp_api_manager: gcp.GcpApiManager
+    gcp_api_manager: gcp.api.GcpApiManager
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -72,7 +72,7 @@ class XdsKubernetesTestCase(absltest.TestCase):
         # Resource managers
         cls.k8s_api_manager = k8s.KubernetesApiManager(
             xds_k8s_flags.KUBE_CONTEXT.value)
-        cls.gcp_api_manager = gcp.GcpApiManager()
+        cls.gcp_api_manager = gcp.api.GcpApiManager()
 
     def setUp(self):
         # todo(sergiitk): generate for each test

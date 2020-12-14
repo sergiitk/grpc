@@ -25,7 +25,7 @@ from framework.infrastructure import gcp
 logger = logging.getLogger(__name__)
 
 
-class ComputeV1(gcp.GcpProjectApiResource):
+class ComputeV1(gcp.api.GcpProjectApiResource):
     # todo(sergiitk): move someplace better
     _WAIT_FOR_BACKEND_SEC = 1200
     _WAIT_FOR_OPERATION_SEC = 1200
@@ -40,7 +40,7 @@ class ComputeV1(gcp.GcpProjectApiResource):
     class ZonalGcpResource(GcpResource):
         zone: str
 
-    def __init__(self, api_manager: gcp.GcpApiManager, project: str):
+    def __init__(self, api_manager: gcp.api.GcpApiManager, project: str):
         super().__init__(api_manager.compute('v1'), project)
         self._operation_is_done = None
 

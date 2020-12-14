@@ -15,27 +15,24 @@ import logging
 from typing import Optional, Set
 
 from framework.infrastructure import gcp
-from framework.infrastructure.gcp import compute
-from framework.infrastructure.gcp import network_security
-from framework.infrastructure.gcp import network_services
 
 logger = logging.getLogger(__name__)
 
 # Type aliases
 # Compute
-ComputeV1 = compute.ComputeV1
+ComputeV1 = gcp.compute.ComputeV1
 HealthCheckProtocol = ComputeV1.HealthCheckProtocol
 BackendServiceProtocol = ComputeV1.BackendServiceProtocol
 GcpResource = ComputeV1.GcpResource
 ZonalGcpResource = ComputeV1.ZonalGcpResource
 
 # Network Security
-NetworkSecurityV1Alpha1 = network_security.NetworkSecurityV1Alpha1
+NetworkSecurityV1Alpha1 = gcp.network_security.NetworkSecurityV1Alpha1
 ServerTlsPolicy = NetworkSecurityV1Alpha1.ServerTlsPolicy
 ClientTlsPolicy = NetworkSecurityV1Alpha1.ClientTlsPolicy
 
 # Network Services
-NetworkServicesV1Alpha1 = network_services.NetworkServicesV1Alpha1
+NetworkServicesV1Alpha1 = gcp.network_services.NetworkServicesV1Alpha1
 EndpointConfigSelector = NetworkServicesV1Alpha1.EndpointConfigSelector
 
 
@@ -50,7 +47,7 @@ class TrafficDirectorManager:
 
     def __init__(
         self,
-        gcp_api_manager: gcp.GcpApiManager,
+        gcp_api_manager: gcp.api.GcpApiManager,
         project: str,
         *,
         resource_prefix: str,
@@ -286,7 +283,7 @@ class TrafficDirectorSecureManager(TrafficDirectorManager):
 
     def __init__(
         self,
-        gcp_api_manager: gcp.GcpApiManager,
+        gcp_api_manager: gcp.api.GcpApiManager,
         project: str,
         *,
         resource_prefix: str,

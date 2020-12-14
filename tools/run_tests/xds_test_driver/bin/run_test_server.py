@@ -73,7 +73,7 @@ def main(argv):
 
     k8s_api_manager = k8s.KubernetesApiManager(xds_k8s_flags.KUBE_CONTEXT.value)
     server_runner = server_app.KubernetesServerRunner(
-        k8s.KubernetesNamespace(k8s_api_manager, xds_flags.NAMESPACE.value),
+        k8s.KubernetesNamespace(k8s_api_manager, server_namespace),
         **runner_kwargs)
 
     if _CMD.value == 'run':

@@ -54,7 +54,7 @@ def main(argv):
     server_xds_host = xds_flags.SERVER_XDS_HOST.value
     server_xds_port = xds_flags.SERVER_XDS_PORT.value
 
-    gcp_api_manager = gcp.GcpApiManager()
+    gcp_api_manager = gcp.api.GcpApiManager()
 
     if security_mode is None:
         td = traffic_director.TrafficDirectorManager(
