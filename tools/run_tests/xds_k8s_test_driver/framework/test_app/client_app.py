@@ -17,6 +17,7 @@ xDS Test Client.
 TODO(sergiitk): separate XdsTestClient and KubernetesClientRunner to individual
 modules.
 """
+import datetime
 import functools
 import logging
 from typing import Optional, Iterator
@@ -28,10 +29,13 @@ import framework.rpc
 from framework.rpc import grpc_channelz
 from framework.rpc import grpc_testing
 from framework.test_app import base_runner
+from helpers import retryers
 
 logger = logging.getLogger(__name__)
 
 # Type aliases
+ChannelState = grpc_channelz.ChannelConnectivityState.State
+_timedelta = datetime.timedelta
 _ChannelzServiceClient = grpc_channelz.ChannelzServiceClient
 _ChannelConnectivityState = grpc_channelz.ChannelConnectivityState
 _LoadBalancerStatsServiceClient = grpc_testing.LoadBalancerStatsServiceClient
@@ -82,43 +86,72 @@ class XdsTestClient(framework.rpc.grpc.GrpcApp):
     def get_server_channels(self) -> Iterator[grpc_channelz.Channel]:
         return self.channelz.find_channels_for_target(self.server_target)
 
-    def wait_for_active_server_channel(self):
-        retryer = tenacity.Retrying(
-            retry=(tenacity.retry_if_result(lambda r: r is None) |
-                   tenacity.retry_if_exception_type()),
-            wait=tenacity.wait_exponential(min=10, max=25),
-            stop=tenacity.stop_after_delay(60 * 3),
-            reraise=True)
-        logger.info(
-            'Waiting for client %s to establish READY gRPC channel with %s',
-            self.ip, self.server_target)
-        channel = retryer(self.get_active_server_channel)
-        logger.info(
-            'gRPC channel between client %s and %s transitioned to READY:\n%s',
-            self.ip, self.server_target, channel)
+    def wait_for_active_server_channel(self) -> grpc_channelz.Channel:
+        """
+        Wait for the channel to the server to transition to READY.
 
-    def get_active_server_channel(self) -> Optional[grpc_channelz.Channel]:
-        for channel in self.get_server_channels():
-            state: _ChannelConnectivityState = channel.data.state
-            logger.info('Server channel: %s, state: %s', channel.ref.name,
-                        _ChannelConnectivityState.State.Name(state.state))
-            if state.state is _ChannelConnectivityState.READY:
-                return channel
-        raise self.NotFound('Client has no active channel with the server')
+        Raises:
+            GrpcApp.NotFound: If the channel never transitioned to READY.
+        """
+        return self.wait_for_server_channel_state(ChannelState.READY)
 
-    def get_client_socket_with_test_server(self) -> grpc_channelz.Socket:
+    def get_active_server_channel(self) -> grpc_channelz.Channel:
+        """
+        Return a READY channel to the server.
+
+        Raises:
+            GrpcApp.NotFound: If there's no READY channel to the server.
+        """
+        return self.find_server_channel_with_state(ChannelState.READY)
+
+    def get_active_server_channel_socket(self) -> grpc_channelz.Socket:
         channel = self.get_active_server_channel()
-        logger.debug('Retrieving client->server socket: channel %s',
-                     channel.ref.name)
-        # Get the first subchannel of the active server channel
-        subchannel_id = channel.subchannel_ref[0].subchannel_id
-        subchannel = self.channelz.get_subchannel(subchannel_id)
-        logger.debug('Retrieving client->server socket: subchannel %s',
-                     subchannel.ref.name)
+        # Get the first subchannel of the active channel to the server.
+        logger.debug(
+            'Retrieving client -> server socket, '
+            'channel_id: %s, subchannel: %s', channel.ref.channel_id,
+            channel.subchannel_ref[0].name)
+        subchannel, *subchannels = list(
+            self.channelz.list_channel_subchannels(channel))
+        if subchannels:
+            logger.warning('Unexpected subchannels: %r', subchannels)
         # Get the first socket of the subchannel
-        socket = self.channelz.get_socket(subchannel.socket_ref[0].socket_id)
-        logger.debug('Found client->server socket: %s', socket.ref.name)
+        socket, *sockets = list(
+            self.channelz.list_subchannels_sockets(subchannel))
+        if sockets:
+            logger.warning('Unexpected sockets: %r', subchannels)
+        logger.debug('Found client -> server socket: %s', socket.ref.name)
         return socket
+
+    def wait_for_server_channel_state(self,
+                                      state: ChannelState,
+                                      *,
+                                      timeout: Optional[_timedelta] = None
+                                     ) -> grpc_channelz.Channel:
+        # Fine-tuned to wait for channel
+        retryer = retryers.exponential_retryer_with_timeout(
+            wait_min=_timedelta(seconds=10),
+            wait_max=_timedelta(seconds=25),
+            timeout=_timedelta(minutes=3) if timeout is None else timeout)
+
+        logger.info('Waiting for client %s to report a %s channel to %s',
+                    self.ip, ChannelState.Name(state), self.server_target)
+        channel = retryer(self.find_server_channel_with_state, state)
+        logger.info('Client %s channel to %s transitioned to state %s:\n%s',
+                    self.ip, self.server_target, ChannelState.Name(state),
+                    channel)
+        return channel
+
+    def find_server_channel_with_state(self, state: ChannelState
+                                      ) -> grpc_channelz.Channel:
+        for channel in self.get_server_channels():
+            channel_state: ChannelState = channel.data.state.state
+            logger.info('Server channel: %s, state: %s', channel.ref.name,
+                        ChannelState.Name(channel_state))
+            if channel_state is state:
+                return channel
+        raise self.NotFound('Client has no %s channel with the server',
+                            ChannelState.Name(state))
 
 
 class KubernetesClientRunner(base_runner.KubernetesBaseRunner):

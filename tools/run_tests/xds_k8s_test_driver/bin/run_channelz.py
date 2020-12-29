@@ -32,13 +32,19 @@ _SERVER_RPC_HOST = flags.DEFINE_string('server_rpc_host',
 _CLIENT_RPC_HOST = flags.DEFINE_string('client_rpc_host',
                                        default='127.0.0.1',
                                        help='Client RPC host')
+_SECURITY = flags.DEFINE_enum('security',
+                              default='positive_cases',
+                              enum_values=['positive_cases', 'mtls_error'],
+                              help='Test for security setup')
 flags.adopt_module_key_flags(xds_flags)
 flags.adopt_module_key_flags(xds_k8s_flags)
 
 # Type aliases
+_Channel = grpc_channelz.Channel
 _Socket = grpc_channelz.Socket
 _XdsTestServer = server_app.XdsTestServer
 _XdsTestClient = client_app.XdsTestClient
+_ClientChannelState = client_app.ChannelState
 
 
 def debug_cert(cert):
@@ -94,9 +100,10 @@ def main(argv):
         rpc_port=client_port,
         rpc_host=_CLIENT_RPC_HOST.value)
 
-    with test_client, test_server:
+    if _SECURITY.value in 'positive_cases':
+        # Positive cases: mTLS, TLS, Plaintext
         test_client.wait_for_active_server_channel()
-        client_sock: _Socket = test_client.get_client_socket_with_test_server()
+        client_sock: _Socket = test_client.get_active_server_channel_socket()
         server_sock: _Socket = test_server.get_server_socket_matching_client(
             client_sock)
 
@@ -118,6 +125,54 @@ def main(argv):
             print(f'(mTLS) Server remote matches client local: {eq}')
         else:
             print('(mTLS) Not detected')
+
+    elif _SECURITY.value == 'mtls_error':
+        # Negative case
+        # Channel side
+        client_correct_setup = True
+        channel: _Channel = test_client.wait_for_server_channel_state(
+            state=_ClientChannelState.TRANSIENT_FAILURE)
+        try:
+            subchannel, *subchannels = list(
+                test_client.channelz.list_channel_subchannels(channel))
+        except ValueError:
+            print("(mTLS-error) Client setup fail: subchannel not found. "
+                  "Common causes: test client didn't connect to TD; "
+                  "test client exhausted retries, and closed all subchannels.")
+            return
+
+        logger.debug('Found subchannel, %r', subchannel)
+        if subchannels:
+            client_correct_setup = False
+            print(f'(mTLS-error) Unexpected subchannels {subchannels}')
+
+        subchannel_state: _ClientChannelState = subchannel.data.state.state
+        if subchannel_state is not _ClientChannelState.TRANSIENT_FAILURE:
+            client_correct_setup = False
+            print('(mTLS-error) Subchannel expected to be in '
+                  'TRANSIENT_FAILURE, same as its channel')
+
+        sockets = list(
+            test_client.channelz.list_subchannels_sockets(subchannel))
+        if sockets:
+            client_correct_setup = False
+            print(f'(mTLS-error) Unexpected subchannel sockets {sockets}')
+
+        if client_correct_setup:
+            print(f'(mTLS-error) Client setup pass: the channel '
+                  f'to the server has exactly one subchannel '
+                  f'in TRANSIENT_FAILURE, and no sockets')
+
+        # Server side
+        server_sockets = list(test_server.get_test_server_sockets())
+        if server_sockets:
+            print('(mTLS-error) Server setup fail:'
+                  f' unexpected sockets {sockets}')
+        else:
+            print(f'(mTLS-error) Server setup pass: test server has no sockets')
+
+    test_client.close()
+    test_server.close()
 
 
 if __name__ == '__main__':

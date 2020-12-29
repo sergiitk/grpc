@@ -381,7 +381,7 @@ class SecurityXdsKubernetesTestCase(XdsKubernetesTestCase):
     def getConnectedSockets(
             test_client: XdsTestClient, test_server: XdsTestServer
     ) -> Tuple[grpc_channelz.Socket, grpc_channelz.Socket]:
-        client_sock = test_client.get_client_socket_with_test_server()
+        client_sock = test_client.get_active_server_channel_socket()
         server_sock = test_server.get_server_socket_matching_client(client_sock)
         return client_sock, server_sock
 

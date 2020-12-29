@@ -31,10 +31,11 @@ _CMD = flags.DEFINE_enum('cmd',
                              'backends-cleanup'
                          ],
                          help='Command')
-_SECURITY = flags.DEFINE_enum('security',
-                              default=None,
-                              enum_values=['mtls', 'tls', 'plaintext'],
-                              help='Configure td with security')
+_SECURITY = flags.DEFINE_enum(
+    'security',
+    default=None,
+    enum_values=['mtls', 'tls', 'plaintext', 'mtls_error'],
+    help='Configure TD with security')
 flags.adopt_module_key_flags(xds_flags)
 flags.adopt_module_key_flags(xds_k8s_flags)
 
@@ -70,10 +71,9 @@ def main(argv):
             resource_prefix=namespace,
             network=network)
 
-    # noinspection PyBroadException
     try:
-        if command == 'create' or command == 'cycle':
-            logger.info('Create-only mode')
+        if command in ('create', 'cycle'):
+            logger.info('Create mode')
             if security_mode is None:
                 logger.info('No security')
                 td.setup_for_grpc(server_xds_host, server_xds_port)
@@ -117,11 +117,26 @@ def main(argv):
                                          tls=False,
                                          mtls=False)
 
+            elif security_mode == 'mtls_error':
+                # Error case: server expects client mTLS cert,
+                # but client configured only for TLS
+                logger.info('Setting up mtls_error')
+                td.setup_for_grpc(server_xds_host, server_xds_port)
+                td.setup_server_security(server_namespace=namespace,
+                                         server_name=server_name,
+                                         server_port=server_port,
+                                         tls=True,
+                                         mtls=True)
+                td.setup_client_security(server_namespace=namespace,
+                                         server_name=server_name,
+                                         tls=True,
+                                         mtls=False)
+
             logger.info('Works!')
-    except Exception:
+    except Exception:  # noqa  # pylint: disable=broad-except
         logger.exception('Got error during creation')
 
-    if command == 'cleanup' or command == 'cycle':
+    if command in ('cleanup', 'cycle'):
         logger.info('Cleaning up')
         td.cleanup(force=True)
 
