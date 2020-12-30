@@ -394,28 +394,24 @@ class SecurityXdsKubernetesTestCase(XdsKubernetesTestCase):
         # Success
         logger.info('Plaintext security mode confirmed!')
 
-    def assertMtlsErrorSetup(self, test_client, test_server):
+    def assertMtlsErrorSetup(self, test_client: XdsTestClient):
         channel = test_client.wait_for_server_channel_state(
             state=_ChannelState.TRANSIENT_FAILURE)
-
-        # Client must have exactly one subchannel.
         subchannels = list(
             test_client.channelz.list_channel_subchannels(channel))
-        self.assertLen(subchannels, 1)
-        subchannel = subchannels[0]
-        # Same as the channel, subchannel must be in TRANSIENT_FAILURE.
-        self.assertIs(subchannel.data.state.state,
-                      _ChannelState.TRANSIENT_FAILURE)
+        self.assertLen(subchannels,
+                       1,
+                       msg="Client channel must have exactly one subchannel "
+                       "in state TRANSIENT_FAILURE.")
+        sockets = list(
+            test_client.channelz.list_subchannels_sockets(subchannels[0]))
+        self.assertEmpty(sockets, msg="Client subchannel must have no sockets")
 
-        # Client subchannel must have no sockets.
-        self.assertEmpty(
-            list(test_client.channelz.list_subchannels_sockets(subchannel)))
-
-        # Test server must have no sockets on the rpc port.
-        self.assertEmpty(list(test_server.get_test_server_sockets()))
-
-        # Success
-        # logger.info('Plaintext security mode confirmed!')
+        # With negative tests we can't be absolutely certain expected
+        # failure state is not caused by something else.
+        logger.info(
+            "Client's connectivity state is consistent with a mTLS error "
+            "caused by not presenting mTLS certificate to the server.")
 
     @staticmethod
     def getConnectedSockets(

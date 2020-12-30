@@ -129,12 +129,14 @@ class SecurityTest(xds_k8s_testcase.SecurityXdsKubernetesTestCase):
         test_client: _XdsTestClient = self.startSecureTestClient(
             test_server, wait_for_active_server_channel=False)
 
-        # Client and server appear to be configured as expected, run RPCs
-        # and expect them to fail.
+        # With negative tests we can't be absolutely certain expected
+        # failure state is not caused by something else.
+        # To mitigate for this, we repeat the checks a few times in case
+        # the channel eventually stabilizes and RPCs pass.
         wait_sec = 10
         checks = 3
         for check in range(1, checks + 1):
-            self.assertMtlsErrorSetup(test_client, test_server)
+            self.assertMtlsErrorSetup(test_client)
             self.assertFailedRpcs(test_client)
             if check != checks:
                 logger.info(

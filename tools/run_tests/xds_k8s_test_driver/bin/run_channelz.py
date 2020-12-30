@@ -84,7 +84,7 @@ def negative_case_mtls(test_client, test_server):
         return
 
     # Client must have exactly one subchannel.
-    logger.debug('Found subchannel, %r', subchannel)
+    logger.debug('Found subchannel, %s', subchannel)
     if subchannels:
         client_correct_setup = False
         print(f'(mTLS-error) Unexpected subchannels {subchannels}')
@@ -100,21 +100,11 @@ def negative_case_mtls(test_client, test_server):
         client_correct_setup = False
         print(f'(mTLS-error) Unexpected subchannel sockets {sockets}')
 
-    # Test server must have no sockets on the rpc port.
-    server_correct_setup = True
-    server_sockets = list(test_server.get_test_server_sockets())
-    if server_sockets:
-        server_correct_setup = False
-        print('(mTLS-error) Server setup fail:'
-              f' unexpected sockets {sockets}')
-
     # Results.
     if client_correct_setup:
         print('(mTLS-error) Client setup pass: the channel '
               'to the server has exactly one subchannel '
               'in TRANSIENT_FAILURE, and no sockets')
-    if server_correct_setup:
-        print('(mTLS-error) Server setup pass: test server has no sockets')
 
 
 def positive_case_all(test_client, test_server):

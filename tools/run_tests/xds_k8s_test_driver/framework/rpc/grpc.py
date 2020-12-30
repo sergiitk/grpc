@@ -73,6 +73,10 @@ class GrpcApp:
     class NotFound(Exception):
         """Requested resource not found"""
 
+        def __init__(self, message):
+            self.message = message
+            super().__init__(message)
+
     def __init__(self, rpc_host):
         self.rpc_host = rpc_host
         # Cache gRPC channels per port
