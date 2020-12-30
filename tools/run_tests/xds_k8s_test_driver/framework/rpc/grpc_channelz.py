@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 # Channel
 Channel = channelz_pb2.Channel
 ChannelConnectivityState = channelz_pb2.ChannelConnectivityState
+ChannelState = ChannelConnectivityState.State  # pylint: disable=no-member
 _GetTopChannelsRequest = channelz_pb2.GetTopChannelsRequest
 _GetTopChannelsResponse = channelz_pb2.GetTopChannelsResponse
 # Subchannel

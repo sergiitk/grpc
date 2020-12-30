@@ -20,24 +20,21 @@ modules.
 import datetime
 import functools
 import logging
-from typing import Optional, Iterator
+from typing import Iterator, Optional
 
-import tenacity
-
-from framework.infrastructure import k8s
+from helpers import retryers
 import framework.rpc
+from framework.infrastructure import k8s
 from framework.rpc import grpc_channelz
 from framework.rpc import grpc_testing
 from framework.test_app import base_runner
-from helpers import retryers
 
 logger = logging.getLogger(__name__)
 
 # Type aliases
-ChannelState = grpc_channelz.ChannelConnectivityState.State
 _timedelta = datetime.timedelta
 _ChannelzServiceClient = grpc_channelz.ChannelzServiceClient
-_ChannelConnectivityState = grpc_channelz.ChannelConnectivityState
+_ChannelState = grpc_channelz.ChannelState
 _LoadBalancerStatsServiceClient = grpc_testing.LoadBalancerStatsServiceClient
 
 
@@ -93,7 +90,7 @@ class XdsTestClient(framework.rpc.grpc.GrpcApp):
         Raises:
             GrpcApp.NotFound: If the channel never transitioned to READY.
         """
-        return self.wait_for_server_channel_state(ChannelState.READY)
+        return self.wait_for_server_channel_state(_ChannelState.READY)
 
     def get_active_server_channel(self) -> grpc_channelz.Channel:
         """
@@ -102,7 +99,7 @@ class XdsTestClient(framework.rpc.grpc.GrpcApp):
         Raises:
             GrpcApp.NotFound: If there's no READY channel to the server.
         """
-        return self.find_server_channel_with_state(ChannelState.READY)
+        return self.find_server_channel_with_state(_ChannelState.READY)
 
     def get_active_server_channel_socket(self) -> grpc_channelz.Socket:
         channel = self.get_active_server_channel()
@@ -124,7 +121,7 @@ class XdsTestClient(framework.rpc.grpc.GrpcApp):
         return socket
 
     def wait_for_server_channel_state(self,
-                                      state: ChannelState,
+                                      state: _ChannelState,
                                       *,
                                       timeout: Optional[_timedelta] = None
                                      ) -> grpc_channelz.Channel:
@@ -135,23 +132,23 @@ class XdsTestClient(framework.rpc.grpc.GrpcApp):
             timeout=_timedelta(minutes=3) if timeout is None else timeout)
 
         logger.info('Waiting for client %s to report a %s channel to %s',
-                    self.ip, ChannelState.Name(state), self.server_target)
+                    self.ip, _ChannelState.Name(state), self.server_target)
         channel = retryer(self.find_server_channel_with_state, state)
         logger.info('Client %s channel to %s transitioned to state %s:\n%s',
-                    self.ip, self.server_target, ChannelState.Name(state),
+                    self.ip, self.server_target, _ChannelState.Name(state),
                     channel)
         return channel
 
-    def find_server_channel_with_state(self, state: ChannelState
+    def find_server_channel_with_state(self, state: _ChannelState
                                       ) -> grpc_channelz.Channel:
         for channel in self.get_server_channels():
-            channel_state: ChannelState = channel.data.state.state
+            channel_state: _ChannelState = channel.data.state.state
             logger.info('Server channel: %s, state: %s', channel.ref.name,
-                        ChannelState.Name(channel_state))
+                        _ChannelState.Name(channel_state))
             if channel_state is state:
                 return channel
-        raise self.NotFound('Client has no %s channel with the server',
-                            ChannelState.Name(state))
+        raise self.NotFound(f'Client has no {_ChannelState.Name(state)}'
+                            ' channel with the server')
 
 
 class KubernetesClientRunner(base_runner.KubernetesBaseRunner):

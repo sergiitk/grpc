@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import logging
+import time
 
 from absl import flags
 from absl.testing import absltest
@@ -89,14 +90,61 @@ class SecurityTest(xds_k8s_testcase.SecurityXdsKubernetesTestCase):
                                    test_server)
         self.assertSuccessfulRpcs(test_client)
 
-    @absltest.skip(SKIP_REASON)
     def test_mtls_error(self):
         """
         Negative test: mTLS Error.
 
         Server expects client mTLS cert, but client configured only for TLS.
+
+        Note: because this is a negative test we need to make sure the mTLS
+        failure happens after receiving the correct configuration at the
+        client. To ensure that we will perform the following steps in that
+        sequence:
+
+        - Creation of a backendService, and attaching the backend (NEG)
+        - Creation of the Server mTLS Policy, and attaching to the ECS
+        - Creation of the Client TLS Policy, and attaching to the backendService
+        - Creation of the urlMap, targetProxy, and forwardingRule
+
+        With this sequence we are sure that when the client receives the
+        endpoints of the backendService the security-config would also have
+        been received as confirmed by the TD team.
         """
-        pass
+        # Create backend service
+        self.td.setup_backend_for_grpc()
+
+        # Start server and attach its NEGs to the backend service
+        test_server: _XdsTestServer = self.startSecureTestServer()
+        self.setupServerBackends(wait_for_healthy_status=False)
+
+        # Setup policies and attach them.
+        self.setupSecurityPolicies(server_tls=True,
+                                   server_mtls=True,
+                                   client_tls=True,
+                                   client_mtls=False)
+
+        # Create the routing rule map
+        self.td.setup_routing_rule_map_for_grpc(self.server_xds_host,
+                                                self.server_xds_port)
+        # Wait for backends healthy after url map is created
+        self.td.wait_for_backends_healthy_status()
+
+        # Start the client.
+        test_client: _XdsTestClient = self.startSecureTestClient(
+            test_server, wait_for_active_server_channel=False)
+
+        # Client and server appear to be configured as expected, run RPCs
+        # and expect them to fail.
+        wait_sec = 10
+        checks = 3
+        for check in range(1, checks + 1):
+            self.assertMtlsErrorSetup(test_client, test_server)
+            self.assertFailedRpcs(test_client)
+            if check != checks:
+                logger.info(
+                    'Check %s successful, waiting %s sec before the next check',
+                    check, wait_sec)
+                time.sleep(wait_sec)
 
     @absltest.skip(SKIP_REASON)
     def test_server_authz_error(self):
@@ -105,7 +153,6 @@ class SecurityTest(xds_k8s_testcase.SecurityXdsKubernetesTestCase):
 
         Client does not authorize server because of mismatched SAN name.
         """
-        pass
 
 
 if __name__ == '__main__':

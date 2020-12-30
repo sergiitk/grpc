@@ -28,8 +28,8 @@ logger = logging.getLogger(__name__)
 
 class ComputeV1(gcp.api.GcpProjectApiResource):
     # TODO(sergiitk): move someplace better
-    _WAIT_FOR_BACKEND_SEC = 1200
-    _WAIT_FOR_OPERATION_SEC = 1200
+    _WAIT_FOR_BACKEND_SEC = 60 * 5
+    _WAIT_FOR_OPERATION_SEC = 60 * 5
 
     @dataclasses.dataclass(frozen=True)
     class GcpResource:

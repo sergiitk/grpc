@@ -42,9 +42,9 @@ flags.adopt_module_key_flags(xds_k8s_flags)
 # Type aliases
 _Channel = grpc_channelz.Channel
 _Socket = grpc_channelz.Socket
+_ChannelState = grpc_channelz.ChannelState
 _XdsTestServer = server_app.XdsTestServer
 _XdsTestClient = client_app.XdsTestClient
-_ClientChannelState = client_app.ChannelState
 
 
 def debug_cert(cert):
@@ -73,7 +73,7 @@ def negative_case_mtls(test_client, test_server):
     # Client side.
     client_correct_setup = True
     channel: _Channel = test_client.wait_for_server_channel_state(
-        state=_ClientChannelState.TRANSIENT_FAILURE)
+        state=_ChannelState.TRANSIENT_FAILURE)
     try:
         subchannel, *subchannels = list(
             test_client.channelz.list_channel_subchannels(channel))
@@ -88,8 +88,8 @@ def negative_case_mtls(test_client, test_server):
     if subchannels:
         client_correct_setup = False
         print(f'(mTLS-error) Unexpected subchannels {subchannels}')
-    subchannel_state: _ClientChannelState = subchannel.data.state.state
-    if subchannel_state is not _ClientChannelState.TRANSIENT_FAILURE:
+    subchannel_state: _ChannelState = subchannel.data.state.state
+    if subchannel_state is not _ChannelState.TRANSIENT_FAILURE:
         client_correct_setup = False
         print('(mTLS-error) Subchannel expected to be in '
               'TRANSIENT_FAILURE, same as its channel')

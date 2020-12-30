@@ -151,6 +151,7 @@ def main(argv):
 
         td.load_backend_service()
         td.backend_service_add_neg_backends(neg_name, neg_zones)
+        td.wait_for_backends_healthy_status()
         # TODO(sergiitk): wait until client reports rpc health
     elif command == 'backends-cleanup':
         td.load_backend_service()
