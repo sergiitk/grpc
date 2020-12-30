@@ -22,8 +22,8 @@ import functools
 import logging
 from typing import Iterator, Optional
 
-from helpers import retryers
 import framework.rpc
+from framework.helpers import retryers
 from framework.infrastructure import k8s
 from framework.rpc import grpc_channelz
 from framework.rpc import grpc_testing
