@@ -14,7 +14,7 @@
 import enum
 import hashlib
 import logging
-from typing import Tuple, Optional
+from typing import Optional, Tuple
 
 from absl import flags
 from absl.testing import absltest

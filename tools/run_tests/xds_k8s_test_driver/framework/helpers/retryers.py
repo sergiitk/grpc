@@ -21,10 +21,10 @@ We use tenacity as a general-purpose retrying library.
 > adds significant new functionality and fixes a number of longstanding bugs.
 > - https://tenacity.readthedocs.io/en/latest/index.html
 """
-from typing import Optional, List, Any
+import datetime
+from typing import Any, List, Optional
 
 import tenacity
-import datetime
 
 # Type aliases
 timedelta = datetime.timedelta

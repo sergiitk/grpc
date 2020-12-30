@@ -22,9 +22,9 @@ import functools
 import logging
 from typing import Iterator, Optional
 
-import framework.rpc
 from framework.helpers import retryers
 from framework.infrastructure import k8s
+import framework.rpc
 from framework.rpc import grpc_channelz
 from framework.rpc import grpc_testing
 from framework.test_app import base_runner

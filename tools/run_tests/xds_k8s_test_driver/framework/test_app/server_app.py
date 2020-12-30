@@ -19,7 +19,7 @@ modules.
 """
 import functools
 import logging
-from typing import Optional, Iterator
+from typing import Iterator, Optional
 
 from framework.infrastructure import k8s
 import framework.rpc

@@ -21,8 +21,8 @@ from framework import xds_flags
 from framework import xds_k8s_flags
 from framework.infrastructure import k8s
 from framework.rpc import grpc_channelz
-from framework.test_app import server_app
 from framework.test_app import client_app
+from framework.test_app import server_app
 
 logger = logging.getLogger(__name__)
 # Flags
