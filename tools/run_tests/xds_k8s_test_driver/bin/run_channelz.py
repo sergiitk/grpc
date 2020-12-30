@@ -66,9 +66,9 @@ def get_deployment_pod_ips(k8s_ns, deployment_name):
 
 
 def negative_case_mtls(test_client, test_server):
-    """
-    mTLS Error case: server expects client mTLS cert, but client configured
-    only for TLS.
+    """Debug mTLS Error case.
+
+    Server expects client mTLS cert, but client configured only for TLS.
     """
     # Client side.
     client_correct_setup = True
@@ -118,7 +118,7 @@ def negative_case_mtls(test_client, test_server):
 
 
 def positive_case_all(test_client, test_server):
-    """All positive cases: mTLS, TLS, Plaintext"""
+    """Debug positive cases: mTLS, TLS, Plaintext."""
     test_client.wait_for_active_server_channel()
     client_sock: _Socket = test_client.get_active_server_channel_socket()
     server_sock: _Socket = test_server.get_server_socket_matching_client(

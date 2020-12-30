@@ -145,8 +145,7 @@ class ChannelzServiceClient(framework.rpc.grpc.GrpcClientHelper):
                 yield server
 
     def list_server_sockets(self, server: Server) -> Iterator[Socket]:
-        """
-        List all server sockets that exist in server process.
+        """List all server sockets that exist in server process.
 
         Iterating over the results will resolve additional pages automatically.
         """

@@ -79,8 +79,7 @@ class XdsTestServer(framework.rpc.grpc.GrpcApp):
         return f'xds:///{self.xds_address}'
 
     def get_test_server(self) -> grpc_channelz.Server:
-        """
-        Return channelz Server of the test server: a server running TestService.
+        """Return channelz representation of a server running TestService.
 
         Raises:
             GrpcApp.NotFound: Test server not found.
@@ -92,8 +91,7 @@ class XdsTestServer(framework.rpc.grpc.GrpcApp):
         return server
 
     def get_test_server_sockets(self) -> Iterator[grpc_channelz.Socket]:
-        """
-        List all sockets of the test server.
+        """List all sockets of the test server.
 
         Raises:
             GrpcApp.NotFound: Test server not found.
@@ -103,9 +101,7 @@ class XdsTestServer(framework.rpc.grpc.GrpcApp):
 
     def get_server_socket_matching_client(self,
                                           client_socket: grpc_channelz.Socket):
-        """
-        Find test server socket that matches given test client socket
-        to this server.
+        """Find test server socket that matches given test client socket.
 
         Sockets are matched using TCP endpoints (ip:port), further on "address".
         Server socket remote address matched with client socket local address.

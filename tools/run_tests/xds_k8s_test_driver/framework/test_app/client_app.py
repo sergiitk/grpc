@@ -84,8 +84,7 @@ class XdsTestClient(framework.rpc.grpc.GrpcApp):
         return self.channelz.find_channels_for_target(self.server_target)
 
     def wait_for_active_server_channel(self) -> grpc_channelz.Channel:
-        """
-        Wait for the channel to the server to transition to READY.
+        """Wait for the channel to the server to transition to READY.
 
         Raises:
             GrpcApp.NotFound: If the channel never transitioned to READY.
@@ -93,8 +92,7 @@ class XdsTestClient(framework.rpc.grpc.GrpcApp):
         return self.wait_for_server_channel_state(_ChannelState.READY)
 
     def get_active_server_channel(self) -> grpc_channelz.Channel:
-        """
-        Return a READY channel to the server.
+        """Return a READY channel to the server.
 
         Raises:
             GrpcApp.NotFound: If there's no READY channel to the server.

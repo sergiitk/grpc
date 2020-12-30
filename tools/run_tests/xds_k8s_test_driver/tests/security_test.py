@@ -32,8 +32,7 @@ _SecurityMode = xds_k8s_testcase.SecurityXdsKubernetesTestCase.SecurityMode
 class SecurityTest(xds_k8s_testcase.SecurityXdsKubernetesTestCase):
 
     def test_mtls(self):
-        """
-        mTLS test.
+        """mTLS test.
 
         Both client and server configured to use TLS and mTLS.
         """
@@ -51,8 +50,7 @@ class SecurityTest(xds_k8s_testcase.SecurityXdsKubernetesTestCase):
         self.assertSuccessfulRpcs(test_client)
 
     def test_tls(self):
-        """
-        TLS test.
+        """TLS test.
 
         Both client and server configured to use TLS and not use mTLS.
         """
@@ -70,8 +68,7 @@ class SecurityTest(xds_k8s_testcase.SecurityXdsKubernetesTestCase):
         self.assertSuccessfulRpcs(test_client)
 
     def test_plaintext_fallback(self):
-        """
-        Plain-text fallback.
+        """Plain-text fallback test.
 
         Control plane provides no security config so both client and server
         fallback to plaintext based on fallback-credentials.
@@ -91,8 +88,7 @@ class SecurityTest(xds_k8s_testcase.SecurityXdsKubernetesTestCase):
         self.assertSuccessfulRpcs(test_client)
 
     def test_mtls_error(self):
-        """
-        Negative test: mTLS Error.
+        """Negative test: mTLS Error.
 
         Server expects client mTLS cert, but client configured only for TLS.
 
@@ -148,8 +144,7 @@ class SecurityTest(xds_k8s_testcase.SecurityXdsKubernetesTestCase):
 
     @absltest.skip(SKIP_REASON)
     def test_server_authz_error(self):
-        """
-        Negative test: AuthZ error.
+        """Negative test: AuthZ error.
 
         Client does not authorize server because of mismatched SAN name.
         """
