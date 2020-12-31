@@ -133,6 +133,7 @@ class SecurityTest(xds_k8s_testcase.SecurityXdsKubernetesTestCase):
         # failure state is not caused by something else.
         # To mitigate for this, we repeat the checks a few times in case
         # the channel eventually stabilizes and RPCs pass.
+        # TODO(sergiitk): use tenacity retryer, move nums to constants
         wait_sec = 10
         checks = 3
         for check in range(1, checks + 1):

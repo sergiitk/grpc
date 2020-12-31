@@ -21,11 +21,11 @@ logger = logging.getLogger(__name__)
 # Type aliases
 # Compute
 _ComputeV1 = gcp.compute.ComputeV1
-BackendServiceProtocol = _ComputeV1.BackendServiceProtocol
-_BackendGRPC = BackendServiceProtocol.GRPC
 GcpResource = _ComputeV1.GcpResource
 HealthCheckProtocol = _ComputeV1.HealthCheckProtocol
 ZonalGcpResource = _ComputeV1.ZonalGcpResource
+BackendServiceProtocol = _ComputeV1.BackendServiceProtocol
+_BackendGRPC = BackendServiceProtocol.GRPC
 
 # Network Security
 _NetworkSecurityV1Alpha1 = gcp.network_security.NetworkSecurityV1Alpha1
@@ -65,7 +65,7 @@ class TrafficDirectorManager:
         # Managed resources
         self.health_check: Optional[GcpResource] = None
         self.backend_service: Optional[GcpResource] = None
-        # TODO(sergiitk): remove next line once backend service resource loaded
+        # TODO(sergiitk): remove this flag once backend service resource loaded
         self.backend_service_protocol: Optional[BackendServiceProtocol] = None
         self.url_map: Optional[GcpResource] = None
         self.target_proxy: Optional[GcpResource] = None

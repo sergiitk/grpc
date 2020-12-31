@@ -126,7 +126,7 @@ class XdsTestClient(framework.rpc.grpc.GrpcApp):
                                       *,
                                       timeout: Optional[_timedelta] = None
                                      ) -> _ChannelzChannel:
-        # Fine-tuned to wait for channel
+        # Fine-tuned to wait for the channel to the server.
         retryer = retryers.exponential_retryer_with_timeout(
             wait_min=_timedelta(seconds=10),
             wait_max=_timedelta(seconds=25),
@@ -165,8 +165,9 @@ class XdsTestClient(framework.rpc.grpc.GrpcApp):
                         continue
                 return channel
 
-        raise self.NotFound(f'Client has no {_ChannelzChannelState.Name(state)}'
-                            ' channel with the server')
+        raise self.NotFound(
+            f'Client has no {_ChannelzChannelState.Name(state)} channel with '
+            'the server')
 
     def find_subchannel_with_state(self, channel: _ChannelzChannel,
                                    state: _ChannelzChannelState
