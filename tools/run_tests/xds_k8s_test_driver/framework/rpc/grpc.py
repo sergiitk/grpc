@@ -13,7 +13,7 @@
 # limitations under the License.
 import logging
 import re
-from typing import Optional, ClassVar, Dict
+from typing import ClassVar, Dict, Optional
 
 # Workaround: `grpc` must be imported before `google.protobuf.json_format`,
 # to prevent "Segmentation fault". Ref https://github.com/grpc/grpc/issues/24897

@@ -11,6 +11,22 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""Channelz debugging tool for xDS test client/server.
+
+This is intended as a debugging / local development helper and not executed
+as a part of interop test suites.
+
+Typical usage examples:
+
+    # Show channel and socket info
+    python -m bin.run_channelz --flagfile=config/local-dev.cfg
+
+    # Evaluate setup for mtls_error test case
+    python -m bin.run_channelz --flagfile=config/local-dev.cfg --security=mtls_error
+
+    # More information and usage options
+    python -m bin.run_channelz --helpfull
+"""
 import hashlib
 import logging
 

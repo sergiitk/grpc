@@ -11,6 +11,25 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""Configure Traffic Director for different GRPC Proxyless.
+
+This is intended as a debugging / local development helper and not executed
+as a part of interop test suites.
+
+Typical usage examples:
+
+    # Regular proxyless setup
+    python -m bin.run_td_setup --flagfile=config/local-dev.cfg
+
+    # Additional commands: cleanup, backend management, etc.
+    python -m bin.run_td_setup --flagfile=config/local-dev.cfg --cmd=cleanup
+
+    # PSM security setup options: mtls, tls, etc.
+    python -m bin.run_td_setup --flagfile=config/local-dev.cfg --security=mtls
+
+    # More information and usage options
+    python -m bin.run_td_setup --helpfull
+"""
 import logging
 
 from absl import app
@@ -133,7 +152,7 @@ def main(argv):
                                          mtls=False)
 
             logger.info('Works!')
-    except Exception:  # noqa  # pylint: disable=broad-except
+    except Exception:  # noqa pylint: disable=broad-except
         logger.exception('Got error during creation')
 
     if command in ('cleanup', 'cycle'):
