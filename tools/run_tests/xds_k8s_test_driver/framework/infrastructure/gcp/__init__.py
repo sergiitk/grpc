@@ -12,6 +12,3 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from framework.infrastructure.gcp import api
-from framework.infrastructure.gcp import compute
-from framework.infrastructure.gcp import network_security
-from framework.infrastructure.gcp import network_services

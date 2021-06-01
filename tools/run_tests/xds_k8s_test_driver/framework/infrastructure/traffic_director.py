@@ -16,12 +16,15 @@ from typing import List, Optional, Set
 
 from framework import xds_flags
 from framework.infrastructure import gcp
+from framework.infrastructure.gcp import compute
+from framework.infrastructure.gcp import network_security
+from framework.infrastructure.gcp import network_services
 
 logger = logging.getLogger(__name__)
 
 # Type aliases
 # Compute
-_ComputeV1 = gcp.compute.ComputeV1
+_ComputeV1 = compute.ComputeV1
 GcpResource = _ComputeV1.GcpResource
 HealthCheckProtocol = _ComputeV1.HealthCheckProtocol
 ZonalGcpResource = _ComputeV1.ZonalGcpResource
@@ -30,12 +33,12 @@ _BackendGRPC = BackendServiceProtocol.GRPC
 _HealthCheckGRPC = HealthCheckProtocol.GRPC
 
 # Network Security
-_NetworkSecurityV1Alpha1 = gcp.network_security.NetworkSecurityV1Alpha1
+_NetworkSecurityV1Alpha1 = network_security.NetworkSecurityV1Alpha1
 ServerTlsPolicy = _NetworkSecurityV1Alpha1.ServerTlsPolicy
 ClientTlsPolicy = _NetworkSecurityV1Alpha1.ClientTlsPolicy
 
 # Network Services
-_NetworkServicesV1Alpha1 = gcp.network_services.NetworkServicesV1Alpha1
+_NetworkServicesV1Alpha1 = network_services.NetworkServicesV1Alpha1
 EndpointConfigSelector = _NetworkServicesV1Alpha1.EndpointConfigSelector
 
 
