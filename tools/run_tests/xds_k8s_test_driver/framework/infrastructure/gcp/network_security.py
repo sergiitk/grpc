@@ -18,11 +18,12 @@ from google.rpc import code_pb2
 import tenacity
 
 from framework.infrastructure import gcp
+from framework.infrastructure.gcp._internal import gcp_api_standard as _gcp_api_standard
 
 logger = logging.getLogger(__name__)
 
 
-class NetworkSecurityV1Alpha1(gcp.api.GcpStandardCloudApiResource):
+class NetworkSecurityV1Alpha1(_gcp_api_standard.GcpApiStandard):
     SERVER_TLS_POLICIES = 'serverTlsPolicies'
     CLIENT_TLS_POLICIES = 'clientTlsPolicies'
 
@@ -116,5 +117,5 @@ class NetworkSecurityV1Alpha1(gcp.api.GcpStandardCloudApiResource):
 
     @staticmethod
     def _operation_internal_error(exception):
-        return (isinstance(exception, gcp.api.OperationError) and
+        return (isinstance(exception, gcp.GcpOperationError) and
                 exception.error.code == code_pb2.INTERNAL)

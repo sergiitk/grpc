@@ -22,11 +22,12 @@ import googleapiclient.errors
 import retrying
 
 from framework.infrastructure import gcp
+from framework.infrastructure.gcp._internal import gcp_api as _gcp_api
 
 logger = logging.getLogger(__name__)
 
 
-class ComputeV1(gcp.api.GcpProjectApiResource):
+class ComputeV1(_gcp_api.GcpApiBase):
     # TODO(sergiitk): move someplace better
     _WAIT_FOR_BACKEND_SEC = 60 * 10
     _WAIT_FOR_OPERATION_SEC = 60 * 5
