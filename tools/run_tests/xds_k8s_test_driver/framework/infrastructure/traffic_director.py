@@ -54,7 +54,7 @@ class TrafficDirectorManager:
 
     def __init__(
         self,
-        gcp_api_manager: gcp.api.GcpApiManager,
+        gcp_api_manager: gcp.GcpApiManager,
         project: str,
         *,
         resource_prefix: str,
@@ -328,7 +328,7 @@ class TrafficDirectorSecureManager(TrafficDirectorManager):
 
     def __init__(
         self,
-        gcp_api_manager: gcp.api.GcpApiManager,
+        gcp_api_manager: gcp.GcpApiManager,
         project: str,
         *,
         resource_prefix: str,

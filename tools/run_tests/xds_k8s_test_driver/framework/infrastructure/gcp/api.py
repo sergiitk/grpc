@@ -12,17 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import abc
-import contextlib
-import functools
 import logging
-from typing import Optional, List
+from typing import Optional
 
 # Workaround: `grpc` must be imported before `google.protobuf.json_format`,
 # to prevent "Segmentation fault". Ref https://github.com/grpc/grpc/issues/24897
 # TODO(sergiitk): Remove after #24897 is solved
 import grpc  # noqa pylint: disable=unused-import
-from absl import flags
-from google.cloud import secretmanager_v1
 from google.longrunning import operations_pb2
 from google.protobuf import json_format
 from google.rpc import code_pb2
@@ -32,151 +28,9 @@ import tenacity
 import yaml
 
 logger = logging.getLogger(__name__)
-PRIVATE_API_KEY_SECRET_NAME = flags.DEFINE_string(
-    "private_api_key_secret_name",
-    default=None,
-    help="Load Private API access key from the latest version of the secret "
-    "with the given name, in the format projects/*/secrets/*")
-V1_DISCOVERY_URI = flags.DEFINE_string("v1_discovery_uri",
-                                       default=discovery.V1_DISCOVERY_URI,
-                                       help="Override v1 Discovery URI")
-V2_DISCOVERY_URI = flags.DEFINE_string("v2_discovery_uri",
-                                       default=discovery.V2_DISCOVERY_URI,
-                                       help="Override v2 Discovery URI")
-COMPUTE_V1_DISCOVERY_FILE = flags.DEFINE_string(
-    "compute_v1_discovery_file",
-    default=None,
-    help="Load compute v1 from discovery file")
 
 # Type aliases
 Operation = operations_pb2.Operation
-
-
-class GcpApiManager:
-
-    def __init__(self,
-                 *,
-                 v1_discovery_uri=None,
-                 v2_discovery_uri=None,
-                 compute_v1_discovery_file=None,
-                 private_api_key_secret_name=None):
-        self.v1_discovery_uri = v1_discovery_uri or V1_DISCOVERY_URI.value
-        self.v2_discovery_uri = v2_discovery_uri or V2_DISCOVERY_URI.value
-        self.compute_v1_discovery_file = (compute_v1_discovery_file or
-                                          COMPUTE_V1_DISCOVERY_FILE.value)
-        self.private_api_key_secret_name = (private_api_key_secret_name or
-                                            PRIVATE_API_KEY_SECRET_NAME.value)
-        # TODO(sergiitk): add options to pass google Credentials
-        self._exit_stack = contextlib.ExitStack()
-
-    def close(self):
-        self._exit_stack.close()
-
-    @property
-    @functools.lru_cache(None)
-    def private_api_key(self):
-        """
-        Private API key.
-
-        Return API key credential that identifies a GCP project allow-listed for
-        accessing private API discovery documents.
-        https://pantheon.corp.google.com/apis/credentials
-
-        This method lazy-loads the content of the key from the Secret Manager.
-        https://pantheon.corp.google.com/security/secret-manager
-        """
-        if not self.private_api_key_secret_name:
-            raise ValueError('private_api_key_secret_name must be set to '
-                             'access private_api_key.')
-
-        secrets_api = self.secrets('v1')
-        version_resource_path = secrets_api.secret_version_path(
-            **secrets_api.parse_secret_path(self.private_api_key_secret_name),
-            secret_version='latest')
-        secret: secretmanager_v1.AccessSecretVersionResponse
-        secret = secrets_api.access_secret_version(name=version_resource_path)
-        return secret.payload.data.decode()
-
-    @functools.lru_cache(None)
-    def compute(self, version):
-        api_name = 'compute'
-        if version == 'v1':
-            if self.compute_v1_discovery_file:
-                return self._build_from_file(self.compute_v1_discovery_file)
-            else:
-                return self._build_from_discovery_v1(api_name, version)
-
-        raise NotImplementedError(f'Compute {version} not supported')
-
-    @functools.lru_cache(None)
-    def networksecurity(self, version):
-        api_name = 'networksecurity'
-        if version == 'v1alpha1':
-            return self._build_from_discovery_v2(
-                api_name,
-                version,
-                api_key=self.private_api_key,
-                visibility_labels=['NETWORKSECURITY_ALPHA'])
-
-        raise NotImplementedError(f'Network Security {version} not supported')
-
-    @functools.lru_cache(None)
-    def networkservices(self, version):
-        api_name = 'networkservices'
-        if version == 'v1alpha1':
-            return self._build_from_discovery_v2(
-                api_name,
-                version,
-                api_key=self.private_api_key,
-                visibility_labels=['NETWORKSERVICES_ALPHA'])
-
-        raise NotImplementedError(f'Network Services {version} not supported')
-
-    @functools.lru_cache(None)
-    def secrets(self, version):
-        if version == 'v1':
-            return secretmanager_v1.SecretManagerServiceClient()
-
-        raise NotImplementedError(f'Secret Manager {version} not supported')
-
-    def _build_from_discovery_v1(self, api_name, version):
-        api = discovery.build(api_name,
-                              version,
-                              cache_discovery=False,
-                              discoveryServiceUrl=self.v1_discovery_uri)
-        self._exit_stack.enter_context(api)
-        return api
-
-    def _build_from_discovery_v2(self,
-                                 api_name,
-                                 version,
-                                 *,
-                                 api_key: Optional[str] = None,
-                                 visibility_labels: Optional[List] = None):
-        params = {}
-        if api_key:
-            params['key'] = api_key
-        if visibility_labels:
-            # Dash-separated list of labels.
-            params['labels'] = '_'.join(visibility_labels)
-
-        params_str = ''
-        if params:
-            params_str = '&' + ('&'.join(f'{k}={v}' for k, v in params.items()))
-
-        api = discovery.build(
-            api_name,
-            version,
-            cache_discovery=False,
-            discoveryServiceUrl=f'{self.v2_discovery_uri}{params_str}')
-        self._exit_stack.enter_context(api)
-        return api
-
-    def _build_from_file(self, discovery_file):
-        with open(discovery_file, 'r') as f:
-            api = discovery.build_from_document(f.read())
-        self._exit_stack.enter_context(api)
-        return api
 
 
 class Error(Exception):

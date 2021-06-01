@@ -59,7 +59,7 @@ _DEFAULT_SECURE_MODE_MAINTENANCE_PORT = \
 
 class XdsKubernetesTestCase(absltest.TestCase):
     k8s_api_manager: k8s.KubernetesApiManager
-    gcp_api_manager: gcp.api.GcpApiManager
+    gcp_api_manager: gcp.GcpApiManager
 
     @classmethod
     def setUpClass(cls):
@@ -98,7 +98,7 @@ class XdsKubernetesTestCase(absltest.TestCase):
         # Resource managers
         cls.k8s_api_manager = k8s.KubernetesApiManager(
             xds_k8s_flags.KUBE_CONTEXT.value)
-        cls.gcp_api_manager = gcp.api.GcpApiManager()
+        cls.gcp_api_manager = gcp.GcpApiManager()
 
     def setUp(self):
         # TODO(sergiitk): generate namespace with run id for each test

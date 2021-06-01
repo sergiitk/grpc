@@ -40,7 +40,7 @@ class ComputeV1(gcp.api.GcpProjectApiResource):
     class ZonalGcpResource(GcpResource):
         zone: str
 
-    def __init__(self, api_manager: gcp.api.GcpApiManager, project: str):
+    def __init__(self, api_manager: gcp.GcpApiManager, project: str):
         super().__init__(api_manager.compute('v1'), project)
 
     class HealthCheckProtocol(enum.Enum):

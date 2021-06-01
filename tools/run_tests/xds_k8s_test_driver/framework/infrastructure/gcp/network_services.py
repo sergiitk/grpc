@@ -38,7 +38,7 @@ class NetworkServicesV1Alpha1(gcp.api.GcpStandardCloudApiResource):
         update_time: str
         create_time: str
 
-    def __init__(self, api_manager: gcp.api.GcpApiManager, project: str):
+    def __init__(self, api_manager: gcp.GcpApiManager, project: str):
         super().__init__(api_manager.networkservices(self.api_version), project)
         # Shortcut to projects/*/locations/ endpoints
         self._api_locations = self.api.projects().locations()
