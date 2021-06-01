@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import functools
 import logging
 
 import dataclasses
@@ -23,7 +24,7 @@ from framework.infrastructure.gcp._internal import gcp_api_standard as _gcp_api_
 logger = logging.getLogger(__name__)
 
 
-class NetworkSecurityV1Alpha1(_gcp_api_standard.GcpApiStandard):
+class NetworkSecurityV1Alpha1(_gcp_api_standard.GcpApiStandard2):
     SERVER_TLS_POLICIES = 'serverTlsPolicies'
     CLIENT_TLS_POLICIES = 'clientTlsPolicies'
 
@@ -49,7 +50,7 @@ class NetworkSecurityV1Alpha1(_gcp_api_standard.GcpApiStandard):
         super().__init__(gcp_discovery.networksecurity(self.api_version),
                          project)
         # Shortcut to projects/*/locations/ endpoints
-        self._api_locations = self.client.projects().locations()
+        self._api_locations = self.api_client.projects().locations()
 
     @property
     def api_name(self) -> str:
@@ -120,3 +121,31 @@ class NetworkSecurityV1Alpha1(_gcp_api_standard.GcpApiStandard):
     def _operation_internal_error(exception):
         return (isinstance(exception, gcp.GcpOperationError) and
                 exception.error.code == code_pb2.INTERNAL)
+
+
+@dataclasses.dataclass(frozen=True)
+class ServerTlsPolicy:
+    url: str
+    name: str
+    server_certificate: dict
+    mtls_policy: dict
+    update_time: str
+    create_time: str
+
+
+class ServerTlsPoliciesCollection(_gcp_api_standard.CrudResourceCollection):
+    def __init__(self, service: NetworkSecurityV1Alpha1):
+        self._service = service
+        self._collection = service.api_client.projects().locations().serverTlsPolicies()
+
+    @property
+    def service(self):
+        return self._service
+
+    @property
+    def collection(self):
+        return self._collection
+
+    @property
+    def id_field_name(self) -> str:
+        return 'serverTlsPolicyId'

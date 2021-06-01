@@ -86,7 +86,7 @@ class GcpApiStandard(gcp_api.GcpApiBase, metaclass=abc.ABCMeta):
         logger.debug('Waiting for %s operation, timeout %s sec: %s',
                      self.api_name, timeout_sec, op_name)
 
-        op_request = self.client.projects().locations().operations().get(
+        op_request = self.api_client.projects().locations().operations().get(
             name=op_name)
         operation = self.wait_for_operation(
             operation_request=op_request,
@@ -96,3 +96,116 @@ class GcpApiStandard(gcp_api.GcpApiBase, metaclass=abc.ABCMeta):
         logger.debug('Completed operation: %s', operation)
         if 'error' in operation:
             raise gcp.GcpOperationError(self.api_name, operation)
+
+
+class GcpApiStandard2(gcp_api.GcpApiBase2, metaclass=abc.ABCMeta):
+    GLOBAL_LOCATION = 'global'
+
+    def __init__(self, api_client: discovery.Resource, project: str):
+        self.api_client: discovery.Resource = api_client
+        self.project: str = project
+
+
+    def create_resource(self, collection: discovery.Resource, body: dict, *, location, **kwargs):
+        logger.info("Creating %s resource:\n%s", self.api_name,
+                    self._resource_pretty_format(body))
+        create_req = collection.create(parent=self.parent(),
+                                       body=body,
+                                       **kwargs)
+        self._execute(create_req)
+
+    def parent(self, location: Optional[str] = GLOBAL_LOCATION):
+        if location is None:
+            location = self.GLOBAL_LOCATION
+        return f'projects/{self.project}/locations/{location}'
+
+    def resource_full_name(self, name, collection_name):
+        return f'{self.parent()}/{collection_name}/{name}'
+
+    def _create_resource(self, collection: discovery.Resource, body: dict,
+                         **kwargs):
+        logger.info("Creating %s resource:\n%s", self.api_name,
+                    self._resource_pretty_format(body))
+        create_req = collection.create(parent=self.parent(),
+                                       body=body,
+                                       **kwargs)
+        self._execute(create_req)
+
+    @property
+    @abc.abstractmethod
+    def api_name(self) -> str:
+        raise NotImplementedError
+
+    @property
+    @abc.abstractmethod
+    def api_version(self) -> str:
+        raise NotImplementedError
+
+    def _get_resource(self, collection: discovery.Resource, full_name):
+        resource = collection.get(name=full_name).execute()
+        logger.info('Loaded %s:\n%s', full_name,
+                    self._resource_pretty_format(resource))
+        return resource
+
+    def _delete_resource(self, collection: discovery.Resource,
+                         full_name: str) -> bool:
+        logger.debug("Deleting %s", full_name)
+        try:
+            self._execute(collection.delete(name=full_name))
+            return True
+        except googleapiclient.errors.HttpError as error:
+            if error.resp and error.resp.status == 404:
+                logger.info('%s not deleted since it does not exist', full_name)
+            else:
+                logger.warning('Failed to delete %s, %r', full_name, error)
+        return False
+
+    def _execute(self,
+                 request,
+                 timeout_sec=gcp_api.GcpApiBase._WAIT_FOR_OPERATION_SEC):
+        operation = request.execute(num_retries=self._GCP_API_RETRIES)
+        self._wait(operation, timeout_sec)
+
+    def _wait(self,
+              operation,
+              timeout_sec=gcp_api.GcpApiBase._WAIT_FOR_OPERATION_SEC):
+        op_name = operation['name']
+        logger.debug('Waiting for %s operation, timeout %s sec: %s',
+                     self.api_name, timeout_sec, op_name)
+
+        op_request = self.api_client.projects().locations().operations().get(
+            name=op_name)
+        operation = self.wait_for_operation(
+            operation_request=op_request,
+            test_success_fn=lambda result: result['done'],
+            timeout_sec=timeout_sec)
+
+        logger.debug('Completed operation: %s', operation)
+        if 'error' in operation:
+            raise gcp.GcpOperationError(self.api_name, operation)
+
+
+class CrudResourceCollection(metaclass=abc.ABCMeta):
+    @property
+    @abc.abstractmethod
+    def service(self) -> GcpApiStandard2:
+        raise NotImplementedError
+
+    @property
+    @abc.abstractmethod
+    def collection(self) -> discovery.Resource:
+        raise NotImplementedError
+
+    @property
+    @abc.abstractmethod
+    def id_field_name(self) -> str:
+        raise NotImplementedError
+
+    def create(self, name, body: dict, *, location=GcpApiStandard.GLOBAL_LOCATION):
+        call_kwargs = {self.id_field_name: name}
+        self.service.create_resource(self, location=location, body, **call_kwargs)
+        # logger.info("Creating %s resource:\n%s", self.api_name,
+        #             self._resource_pretty_format(body))
+        # create_req = collection.create(parent=self.parent(),
+        #                                body=body,
+        #                                **kwargs)

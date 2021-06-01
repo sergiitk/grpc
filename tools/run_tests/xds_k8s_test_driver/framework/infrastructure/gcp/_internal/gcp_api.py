@@ -25,14 +25,21 @@ class GcpApiError(Exception):
     """Base error class for GCP API errors"""
 
 
-class GcpApiBase(metaclass=abc.ABCMeta):
+class GcpApiBase2(metaclass=abc.ABCMeta):
+    @staticmethod
+    def _resource_pretty_format(body: dict) -> str:
+        """Return a string with pretty-printed resource body."""
+        return yaml.dump(body, explicit_start=True, explicit_end=True)
+
+
+class GcpApiBase(GcpApiBase2, metaclass=abc.ABCMeta):
     # TODO(sergiitk): move someplace better
     _WAIT_FOR_OPERATION_SEC = 60 * 5
     _WAIT_FIXED_SEC = 2
     _GCP_API_RETRIES = 5
 
     def __init__(self, api_client: discovery.Resource, project: str):
-        self.client: discovery.Resource = api_client
+        self.api_client: discovery.Resource = api_client
         self.project: str = project
 
     @staticmethod

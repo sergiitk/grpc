@@ -43,7 +43,7 @@ class NetworkServicesV1Alpha1(_gcp_api_standard.GcpApiStandard):
         super().__init__(gcp_discovery.networkservices(self.api_version),
                          project)
         # Shortcut to projects/*/locations/ endpoints
-        self._api_locations = self.client.projects().locations()
+        self._api_locations = self.api_client.projects().locations()
 
     @property
     def api_name(self) -> str:

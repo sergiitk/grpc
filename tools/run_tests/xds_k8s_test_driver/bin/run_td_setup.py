@@ -109,18 +109,20 @@ def main(argv):
 
             elif security_mode == 'mtls':
                 logger.info('Setting up mtls')
-                td.setup_for_grpc(server_xds_host,
-                                  server_xds_port,
-                                  health_check_port=server_maintenance_port)
-                td.setup_server_security(server_namespace=namespace,
-                                         server_name=server_name,
-                                         server_port=server_port,
-                                         tls=True,
-                                         mtls=True)
-                td.setup_client_security(server_namespace=namespace,
-                                         server_name=server_name,
-                                         tls=True,
-                                         mtls=True)
+                td.create_server_tls_policy(tls=True, mtls=True)
+                td.create_client_tls_policy(tls=True, mtls=True)
+                # td.setup_for_grpc(server_xds_host,
+                #                   server_xds_port,
+                #                   health_check_port=server_maintenance_port)
+                # td.setup_server_security(server_namespace=namespace,
+                #                          server_name=server_name,
+                #                          server_port=server_port,
+                #                          tls=True,
+                #                          mtls=True)
+                # td.setup_client_security(server_namespace=namespace,
+                #                          server_name=server_name,
+                #                          tls=True,
+                #                          mtls=True)
 
             elif security_mode == 'tls':
                 logger.info('Setting up tls')
