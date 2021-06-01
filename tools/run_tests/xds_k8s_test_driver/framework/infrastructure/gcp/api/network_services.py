@@ -43,7 +43,8 @@ class NetworkServicesV1Alpha1(_gcp_api_standard.GcpApiStandard):
         create_time: str
 
     def __init__(self, api_client_manager: GcpApiClientManager, project: str):
-        super().__init__(api_client_manager.networkservices(self.api_version), project)
+        super().__init__(api_client_manager.networkservices(self.api_version),
+                         project)
         # Shortcut to projects/*/locations/ endpoints
         self._api_locations = self.api_client.projects().locations()
 

@@ -55,12 +55,16 @@ class GcpApiClientManager:
                  v2_discovery_uri=None,
                  compute_v1_discovery_file=None,
                  private_api_key_secret_name=None):
-        self.v1_discovery_uri = (v1_discovery_uri or gcp_flags.V1_DISCOVERY_URI.value)
-        self.v2_discovery_uri = (v2_discovery_uri or gcp_flags.V2_DISCOVERY_URI.value)
-        self.compute_v1_discovery_file = (compute_v1_discovery_file or
-                                          gcp_flags.COMPUTE_V1_DISCOVERY_FILE.value)
-        self.private_api_key_secret_name = (private_api_key_secret_name or
-                                            gcp_flags.PRIVATE_API_KEY_SECRET_NAME.value)
+        self.v1_discovery_uri = (v1_discovery_uri or
+                                 gcp_flags.V1_DISCOVERY_URI.value)
+        self.v2_discovery_uri = (v2_discovery_uri or
+                                 gcp_flags.V2_DISCOVERY_URI.value)
+        self.compute_v1_discovery_file = (
+            compute_v1_discovery_file or
+            gcp_flags.COMPUTE_V1_DISCOVERY_FILE.value)
+        self.private_api_key_secret_name = (
+            private_api_key_secret_name or
+            gcp_flags.PRIVATE_API_KEY_SECRET_NAME.value)
         # TODO(sergiitk): add options to pass google Credentials
         self._exit_stack = contextlib.ExitStack()
 
@@ -78,7 +82,8 @@ class GcpApiClientManager:
         api_name = 'compute'
         if version == 'v1':
             if self.compute_v1_discovery_file:
-                return self._build_client_from_file(self.compute_v1_discovery_file)
+                return self._build_client_from_file(
+                    self.compute_v1_discovery_file)
             else:
                 return self._build_client_from_discovery_v1(api_name, version)
 
@@ -150,18 +155,19 @@ class GcpApiClientManager:
 
     def _build_client_from_discovery_v1(self, api_name, version):
         api_client = discovery.build(api_name,
-                              version,
-                              cache_discovery=False,
-                              discoveryServiceUrl=self.v1_discovery_uri)
+                                     version,
+                                     cache_discovery=False,
+                                     discoveryServiceUrl=self.v1_discovery_uri)
         self._exit_stack.enter_context(api_client)
         return api_client
 
-    def _build_client_from_discovery_v2(self,
-                                        api_name,
-                                        version,
-                                        *,
-                                        api_key: Optional[str] = None,
-                                        visibility_labels: Optional[List] = None):
+    def _build_client_from_discovery_v2(
+            self,
+            api_name,
+            version,
+            *,
+            api_key: Optional[str] = None,
+            visibility_labels: Optional[List] = None):
         params = {}
         if api_key:
             params['key'] = api_key

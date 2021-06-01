@@ -81,7 +81,8 @@ class ComputeV1(_gcp_api.GcpApiBase):
             })
 
     def delete_health_check(self, name):
-        self._delete_resource(self.api_client.healthChecks(), 'healthCheck', name)
+        self._delete_resource(self.api_client.healthChecks(), 'healthCheck',
+                              name)
 
     def create_firewall_rule(self, name: str, network_url: str,
                              source_ranges: List[str],
@@ -155,8 +156,8 @@ class ComputeV1(_gcp_api.GcpApiBase):
                              backendService=backend_service.name)
 
     def delete_backend_service(self, name):
-        self._delete_resource(self.api_client.backendServices(), 'backendService',
-                              name)
+        self._delete_resource(self.api_client.backendServices(),
+                              'backendService', name)
 
     def create_url_map(
         self,
@@ -199,8 +200,8 @@ class ComputeV1(_gcp_api.GcpApiBase):
         })
 
     def delete_target_grpc_proxy(self, name):
-        self._delete_resource(self.api_client.targetGrpcProxies(), 'targetGrpcProxy',
-                              name)
+        self._delete_resource(self.api_client.targetGrpcProxies(),
+                              'targetGrpcProxy', name)
 
     def create_target_http_proxy(
         self,
@@ -213,8 +214,8 @@ class ComputeV1(_gcp_api.GcpApiBase):
         })
 
     def delete_target_http_proxy(self, name):
-        self._delete_resource(self.api_client.targetHttpProxies(), 'targetHttpProxy',
-                              name)
+        self._delete_resource(self.api_client.targetHttpProxies(),
+                              'targetHttpProxy', name)
 
     def create_forwarding_rule(
         self,
@@ -268,9 +269,9 @@ class ComputeV1(_gcp_api.GcpApiBase):
                                      network_endpoint_group['selfLink'], zone)
 
     def get_network_endpoint_group(self, name, zone):
-        neg = self.api_client.networkEndpointGroups().get(project=self.project,
-                                                          networkEndpointGroup=name,
-                                                          zone=zone).execute()
+        neg = self.api_client.networkEndpointGroups().get(
+            project=self.project, networkEndpointGroup=name,
+            zone=zone).execute()
         # TODO(sergiitk): dataclass
         return neg
 

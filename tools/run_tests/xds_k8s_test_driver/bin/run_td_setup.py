@@ -86,10 +86,11 @@ def main(argv):
     server_xds_port = xds_flags.SERVER_XDS_PORT.value
 
     if security_mode is None:
-        td = traffic_director.TrafficDirectorManager(gcp_api_client_manager.GcpApiClientManager(),
-                                                     project=project,
-                                                     resource_prefix=namespace,
-                                                     network=network)
+        td = traffic_director.TrafficDirectorManager(
+            gcp_api_client_manager.GcpApiClientManager(),
+            project=project,
+            resource_prefix=namespace,
+            network=network)
     else:
         td = traffic_director.TrafficDirectorSecureManager(
             gcp_api_client_manager.GcpApiClientManager(),
