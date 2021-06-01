@@ -25,7 +25,7 @@ from absl.testing import absltest
 from framework import xds_flags
 from framework import xds_k8s_flags
 from framework.helpers import retryers
-from framework.infrastructure import gcp
+from framework.infrastructure.gcp import gcp_api_client_manager
 from framework.infrastructure import k8s
 from framework.infrastructure import traffic_director
 from framework.rpc import grpc_channelz
@@ -48,6 +48,7 @@ flags.adopt_module_key_flags(xds_flags)
 flags.adopt_module_key_flags(xds_k8s_flags)
 
 # Type aliases
+GcpApiClientManager = gcp_api_client_manager.GcpApiClientManager
 XdsTestServer = server_app.XdsTestServer
 XdsTestClient = client_app.XdsTestClient
 LoadBalancerStatsResponse = grpc_testing.LoadBalancerStatsResponse
@@ -59,7 +60,7 @@ _DEFAULT_SECURE_MODE_MAINTENANCE_PORT = \
 
 class XdsKubernetesTestCase(absltest.TestCase):
     k8s_api_manager: k8s.KubernetesApiManager
-    gcp_api_manager: gcp.GcpApiManager
+    gcp_api_client_manager: GcpApiClientManager
 
     @classmethod
     def setUpClass(cls):
@@ -98,7 +99,7 @@ class XdsKubernetesTestCase(absltest.TestCase):
         # Resource managers
         cls.k8s_api_manager = k8s.KubernetesApiManager(
             xds_k8s_flags.KUBE_CONTEXT.value)
-        cls.gcp_api_manager = gcp.GcpApiManager()
+        cls.gcp_api_client_manager = GcpApiClientManager()
 
     def setUp(self):
         # TODO(sergiitk): generate namespace with run id for each test
@@ -114,7 +115,7 @@ class XdsKubernetesTestCase(absltest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.k8s_api_manager.close()
-        cls.gcp_api_manager.close()
+        cls.gcp_api_client_manager.close()
 
     def tearDown(self):
         logger.info('----- TestMethod %s teardown -----', self.id())
@@ -216,7 +217,7 @@ class RegularXdsKubernetesTestCase(XdsKubernetesTestCase):
 
         # Traffic Director Configuration
         self.td = traffic_director.TrafficDirectorManager(
-            self.gcp_api_manager,
+            self.gcp_api_client_manager,
             project=self.project,
             resource_prefix=self.namespace,
             network=self.network)
@@ -291,7 +292,7 @@ class SecurityXdsKubernetesTestCase(XdsKubernetesTestCase):
 
         # Traffic Director Configuration
         self.td = traffic_director.TrafficDirectorSecureManager(
-            self.gcp_api_manager,
+            self.gcp_api_client_manager,
             project=self.project,
             resource_prefix=self.namespace,
             network=self.network)

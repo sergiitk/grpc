@@ -1,4 +1,4 @@
-# Copyright 2021 gRPC authors.
+# Copyright 2020 gRPC authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ from googleapiclient import discovery
 from framework.infrastructure.gcp import gcp_flags
 
 
-class GcpApiManager:
+class GcpApiClientManager:
     """Manage raw access to GCP API services.
 
     Abstracts out the logic of building heterogeneous API clients.
@@ -36,11 +36,13 @@ class GcpApiManager:
        Libraries: https://cloud.google.com/apis/docs/client-libraries-explained
 
     Google API Client Libraries:
-    - https://github.com/googleapis/google-api-python-client
+    - https://github.com/googleapis/google-api-python-client/
+    - https://googleapis.github.io/google-api-python-client/docs/start.html
     - API List: https://googleapis.github.io/google-api-python-client/docs/dyn/
     - Reference: https://googleapis.github.io/google-api-python-client/docs/epy/
 
     Google Cloud Client Libraries:
+    - https://cloud.google.com/apis/docs/cloud-client-libraries
     - https://github.com/googleapis/google-cloud-python
 
     Client Libraries usage samples:
@@ -65,11 +67,67 @@ class GcpApiManager:
     def close(self):
         self._exit_stack.close()
 
+    @functools.lru_cache(None)
+    def compute(self, version):
+        """Compute Engine API dynamic client
+
+        https://googleapis.github.io/google-api-python-client/docs/dyn/compute_v1.html
+        https://cloud.google.com/compute/docs/reference/rest/v1
+        https://cloud.google.com/compute/docs/tutorials/python-guide
+        """
+        api_name = 'compute'
+        if version == 'v1':
+            if self.compute_v1_discovery_file:
+                return self._build_client_from_file(self.compute_v1_discovery_file)
+            else:
+                return self._build_client_from_discovery_v1(api_name, version)
+
+        raise NotImplementedError(f'Compute {version} not supported')
+
+    @functools.lru_cache(None)
+    def networksecurity(self, version):
+        """Network Security dynamic client"""
+        api_name = 'networksecurity'
+        if version == 'v1alpha1':
+            return self._build_client_from_discovery_v2(
+                api_name,
+                version,
+                api_key=self._private_api_key,
+                visibility_labels=['NETWORKSECURITY_ALPHA'])
+
+        raise NotImplementedError(f'Network Security {version} not supported')
+
+    @functools.lru_cache(None)
+    def networkservices(self, version):
+        """Network Services dynamic client"""
+        api_name = 'networkservices'
+        if version == 'v1alpha1':
+            return self._build_client_from_discovery_v2(
+                api_name,
+                version,
+                api_key=self._private_api_key,
+                visibility_labels=['NETWORKSERVICES_ALPHA'])
+
+        raise NotImplementedError(f'Network Services {version} not supported')
+
+    @functools.lru_cache(None)
+    def secrets(self, version):
+        """Secret Manager API Cloud Client Library
+
+        https://github.com/googleapis/python-secret-manager
+        https://googleapis.dev/python/secretmanager/latest/index.html
+        https://cloud.google.com/secret-manager/docs/reference/rest
+        https://cloud.google.com/secret-manager/docs/reference/libraries
+        """
+        if version == 'v1':
+            return secretmanager_v1.SecretManagerServiceClient()
+
+        raise NotImplementedError(f'Secret Manager {version} not supported')
+
     @property
     @functools.lru_cache(None)
-    def private_api_key(self):
-        """
-        Private API key.
+    def _private_api_key(self):
+        """Load private API key.
 
         Return API key credential that identifies a GCP project allow-listed for
         accessing private API discovery documents.
@@ -90,75 +148,20 @@ class GcpApiManager:
         secret = secrets_api.access_secret_version(name=version_resource_path)
         return secret.payload.data.decode()
 
-    @functools.lru_cache(None)
-    def compute(self, version):
-        """Compute Engine API dynamic client
-
-        https://cloud.google.com/compute/docs/reference/rest/v1
-        https://googleapis.github.io/google-api-python-client/docs/dyn/compute_v1.html
-        """
-        api_name = 'compute'
-        if version == 'v1':
-            if self.compute_v1_discovery_file:
-                return self._build_from_file(self.compute_v1_discovery_file)
-            else:
-                return self._build_from_discovery_v1(api_name, version)
-
-        raise NotImplementedError(f'Compute {version} not supported')
-
-    @functools.lru_cache(None)
-    def networksecurity(self, version):
-        """Network Security dynamic client"""
-        api_name = 'networksecurity'
-        if version == 'v1alpha1':
-            return self._build_from_discovery_v2(
-                api_name,
-                version,
-                api_key=self.private_api_key,
-                visibility_labels=['NETWORKSECURITY_ALPHA'])
-
-        raise NotImplementedError(f'Network Security {version} not supported')
-
-    @functools.lru_cache(None)
-    def networkservices(self, version):
-        """Network Services dynamic client"""
-        api_name = 'networkservices'
-        if version == 'v1alpha1':
-            return self._build_from_discovery_v2(
-                api_name,
-                version,
-                api_key=self.private_api_key,
-                visibility_labels=['NETWORKSERVICES_ALPHA'])
-
-        raise NotImplementedError(f'Network Services {version} not supported')
-
-    @functools.lru_cache(None)
-    def secrets(self, version):
-        """Secret Manager API Cloud Client Library
-
-        https://cloud.google.com/secret-manager/docs/reference/rest
-        https://github.com/googleapis/python-secret-manager
-        https://googleapis.dev/python/secretmanager/latest/index.html
-        """
-        if version == 'v1':
-            return secretmanager_v1.SecretManagerServiceClient()
-
-        raise NotImplementedError(f'Secret Manager {version} not supported')
-
-    def _build_from_discovery_v1(self, api_name, version):
-        api = discovery.build(api_name,
+    def _build_client_from_discovery_v1(self, api_name, version):
+        api_client = discovery.build(api_name,
                               version,
                               cache_discovery=False,
                               discoveryServiceUrl=self.v1_discovery_uri)
-        self._exit_stack.enter_context(api)
-        return api
+        self._exit_stack.enter_context(api_client)
+        return api_client
 
-    def _build_from_discovery_v2(self,
-                                 api_name,
-                                 version,
-                                 *,
-                                 api_key: Optional[str] = None,
-                                 visibility_labels: Optional[List] = None):
+    def _build_client_from_discovery_v2(self,
+                                        api_name,
+                                        version,
+                                        *,
+                                        api_key: Optional[str] = None,
+                                        visibility_labels: Optional[List] = None):
         params = {}
         if api_key:
             params['key'] = api_key
@@ -170,16 +173,16 @@ class GcpApiManager:
         if params:
             params_str = '&' + ('&'.join(f'{k}={v}' for k, v in params.items()))
 
-        api = discovery.build(
+        api_client = discovery.build(
             api_name,
             version,
             cache_discovery=False,
             discoveryServiceUrl=f'{self.v2_discovery_uri}{params_str}')
-        self._exit_stack.enter_context(api)
-        return api
+        self._exit_stack.enter_context(api_client)
+        return api_client
 
-    def _build_from_file(self, discovery_file):
+    def _build_client_from_file(self, discovery_file):
         with open(discovery_file, 'r') as f:
-            api = discovery.build_from_document(f.read())
-        self._exit_stack.enter_context(api)
-        return api
+            api_client = discovery.build_from_document(f.read())
+        self._exit_stack.enter_context(api_client)
+        return api_client

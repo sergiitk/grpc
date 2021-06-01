@@ -31,8 +31,8 @@ class GcpApiBase(metaclass=abc.ABCMeta):
     _WAIT_FIXED_SEC = 2
     _GCP_API_RETRIES = 5
 
-    def __init__(self, api: discovery.Resource, project: str):
-        self.api: discovery.Resource = api
+    def __init__(self, api_client: discovery.Resource, project: str):
+        self.api_client: discovery.Resource = api_client
         self.project: str = project
 
     @staticmethod

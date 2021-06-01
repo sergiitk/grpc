@@ -39,6 +39,7 @@ from absl import flags
 from framework import xds_flags
 from framework import xds_k8s_flags
 from framework.infrastructure import gcp
+from framework.infrastructure.gcp import gcp_api_client_manager
 from framework.infrastructure import k8s
 from framework.infrastructure import traffic_director
 from framework.test_app import server_app
@@ -84,16 +85,14 @@ def main(argv):
     server_xds_host = xds_flags.SERVER_XDS_HOST.value
     server_xds_port = xds_flags.SERVER_XDS_PORT.value
 
-    gcp_api_manager = gcp.GcpApiManager()
-
     if security_mode is None:
-        td = traffic_director.TrafficDirectorManager(gcp_api_manager,
+        td = traffic_director.TrafficDirectorManager(gcp_api_client_manager.GcpApiClientManager(),
                                                      project=project,
                                                      resource_prefix=namespace,
                                                      network=network)
     else:
         td = traffic_director.TrafficDirectorSecureManager(
-            gcp_api_manager,
+            gcp_api_client_manager.GcpApiClientManager(),
             project=project,
             resource_prefix=namespace,
             network=network)

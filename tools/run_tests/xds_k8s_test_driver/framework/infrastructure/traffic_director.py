@@ -16,13 +16,16 @@ from typing import List, Optional, Set
 
 from framework import xds_flags
 from framework.infrastructure import gcp
-from framework.infrastructure.gcp import compute
-from framework.infrastructure.gcp import network_security
-from framework.infrastructure.gcp import network_services
+from framework.infrastructure.gcp import gcp_api_client_manager
+from framework.infrastructure.gcp.api import compute
+from framework.infrastructure.gcp.api import network_security
+from framework.infrastructure.gcp.api import network_services
 
 logger = logging.getLogger(__name__)
 
 # Type aliases
+GcpApiClientManager = gcp_api_client_manager.GcpApiClientManager
+
 # Compute
 _ComputeV1 = compute.ComputeV1
 GcpResource = _ComputeV1.GcpResource
@@ -54,14 +57,14 @@ class TrafficDirectorManager:
 
     def __init__(
         self,
-        gcp_api_manager: gcp.GcpApiManager,
+        gcp_api_client_manager: GcpApiClientManager,
         project: str,
         *,
         resource_prefix: str,
         network: str = 'default',
     ):
         # API
-        self.compute = _ComputeV1(gcp_api_manager, project)
+        self.compute = _ComputeV1(gcp_api_client_manager, project)
 
         # Settings
         self.project: str = project
@@ -328,20 +331,20 @@ class TrafficDirectorSecureManager(TrafficDirectorManager):
 
     def __init__(
         self,
-        gcp_api_manager: gcp.GcpApiManager,
+        gcp_api_client_manager: GcpApiClientManager,
         project: str,
         *,
         resource_prefix: str,
         network: str = 'default',
     ):
-        super().__init__(gcp_api_manager,
+        super().__init__(gcp_api_client_manager,
                          project,
                          resource_prefix=resource_prefix,
                          network=network)
 
         # API
-        self.netsec = _NetworkSecurityV1Alpha1(gcp_api_manager, project)
-        self.netsvc = _NetworkServicesV1Alpha1(gcp_api_manager, project)
+        self.netsec = _NetworkSecurityV1Alpha1(gcp_api_client_manager, project)
+        self.netsvc = _NetworkServicesV1Alpha1(gcp_api_client_manager, project)
 
         # Managed resources
         self.server_tls_policy: Optional[ServerTlsPolicy] = None
