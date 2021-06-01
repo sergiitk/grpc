@@ -21,12 +21,10 @@ import googleapiclient.errors
 # TODO(sergiitk): replace with tenacity
 import retrying
 
-from framework.infrastructure.gcp import gcp_api_client_manager
+from framework.infrastructure import gcp
 from framework.infrastructure.gcp._internal import gcp_api as _gcp_api
 
 logger = logging.getLogger(__name__)
-# Type aliases
-GcpApiClientManager = gcp_api_client_manager.GcpApiClientManager
 
 
 class ComputeV1(_gcp_api.GcpApiBase):
@@ -43,8 +41,8 @@ class ComputeV1(_gcp_api.GcpApiBase):
     class ZonalGcpResource(GcpResource):
         zone: str
 
-    def __init__(self, api_client_manager: GcpApiClientManager, project: str):
-        super().__init__(api_client_manager.compute('v1'), project)
+    def __init__(self, gcp_discovery: gcp.GcpDiscovery, project: str):
+        super().__init__(gcp_discovery.compute('v1'), project)
 
     class HealthCheckProtocol(enum.Enum):
         TCP = enum.auto()
@@ -74,22 +72,21 @@ class ComputeV1(_gcp_api.GcpApiBase):
             health_check_settings['port'] = port
 
         return self._insert_resource(
-            self.api_client.healthChecks(), {
+            self.client.healthChecks(), {
                 'name': name,
                 'type': protocol.name,
                 health_check_field: health_check_settings,
             })
 
     def delete_health_check(self, name):
-        self._delete_resource(self.api_client.healthChecks(), 'healthCheck',
-                              name)
+        self._delete_resource(self.client.healthChecks(), 'healthCheck', name)
 
     def create_firewall_rule(self, name: str, network_url: str,
                              source_ranges: List[str],
                              ports: List[str]) -> Optional[GcpResource]:
         try:
             return self._insert_resource(
-                self.api_client.firewalls(), {
+                self.client.firewalls(), {
                     "allowed": [{
                         "IPProtocol": "tcp",
                         "ports": ports
@@ -110,7 +107,7 @@ class ComputeV1(_gcp_api.GcpApiBase):
                 raise
 
     def delete_firewall_rule(self, name):
-        self._delete_resource(self.api_client.firewalls(), 'firewall', name)
+        self._delete_resource(self.client.firewalls(), 'firewall', name)
 
     def create_backend_service_traffic_director(
             self,
@@ -120,7 +117,7 @@ class ComputeV1(_gcp_api.GcpApiBase):
         if not isinstance(protocol, self.BackendServiceProtocol):
             raise TypeError(f'Unexpected Backend Service protocol: {protocol}')
         return self._insert_resource(
-            self.api_client.backendServices(),
+            self.client.backendServices(),
             {
                 'name': name,
                 'loadBalancingScheme':
@@ -130,11 +127,11 @@ class ComputeV1(_gcp_api.GcpApiBase):
             })
 
     def get_backend_service_traffic_director(self, name: str) -> GcpResource:
-        return self._get_resource(self.api_client.backendServices(),
+        return self._get_resource(self.client.backendServices(),
                                   backendService=name)
 
     def patch_backend_service(self, backend_service, body, **kwargs):
-        self._patch_resource(collection=self.api_client.backendServices(),
+        self._patch_resource(collection=self.client.backendServices(),
                              backendService=backend_service.name,
                              body=body,
                              **kwargs)
@@ -146,18 +143,18 @@ class ComputeV1(_gcp_api.GcpApiBase):
             'maxRatePerEndpoint': 5
         } for backend in backends]
 
-        self._patch_resource(collection=self.api_client.backendServices(),
+        self._patch_resource(collection=self.client.backendServices(),
                              body={'backends': backend_list},
                              backendService=backend_service.name)
 
     def backend_service_remove_all_backends(self, backend_service):
-        self._patch_resource(collection=self.api_client.backendServices(),
+        self._patch_resource(collection=self.client.backendServices(),
                              body={'backends': []},
                              backendService=backend_service.name)
 
     def delete_backend_service(self, name):
-        self._delete_resource(self.api_client.backendServices(),
-                              'backendService', name)
+        self._delete_resource(self.client.backendServices(), 'backendService',
+                              name)
 
     def create_url_map(
         self,
@@ -170,7 +167,7 @@ class ComputeV1(_gcp_api.GcpApiBase):
         if dst_host_rule_match_backend_service is None:
             dst_host_rule_match_backend_service = dst_default_backend_service
         return self._insert_resource(
-            self.api_client.urlMaps(), {
+            self.client.urlMaps(), {
                 'name':
                     name,
                 'defaultService':
@@ -186,21 +183,21 @@ class ComputeV1(_gcp_api.GcpApiBase):
             })
 
     def delete_url_map(self, name):
-        self._delete_resource(self.api_client.urlMaps(), 'urlMap', name)
+        self._delete_resource(self.client.urlMaps(), 'urlMap', name)
 
     def create_target_grpc_proxy(
         self,
         name: str,
         url_map: GcpResource,
     ) -> GcpResource:
-        return self._insert_resource(self.api_client.targetGrpcProxies(), {
+        return self._insert_resource(self.client.targetGrpcProxies(), {
             'name': name,
             'url_map': url_map.url,
             'validate_for_proxyless': True,
         })
 
     def delete_target_grpc_proxy(self, name):
-        self._delete_resource(self.api_client.targetGrpcProxies(),
+        self._delete_resource(self.client.targetGrpcProxies(),
                               'targetGrpcProxy', name)
 
     def create_target_http_proxy(
@@ -208,13 +205,13 @@ class ComputeV1(_gcp_api.GcpApiBase):
         name: str,
         url_map: GcpResource,
     ) -> GcpResource:
-        return self._insert_resource(self.api_client.targetHttpProxies(), {
+        return self._insert_resource(self.client.targetHttpProxies(), {
             'name': name,
             'url_map': url_map.url,
         })
 
     def delete_target_http_proxy(self, name):
-        self._delete_resource(self.api_client.targetHttpProxies(),
+        self._delete_resource(self.client.targetHttpProxies(),
                               'targetHttpProxy', name)
 
     def create_forwarding_rule(
@@ -225,7 +222,7 @@ class ComputeV1(_gcp_api.GcpApiBase):
         network_url: str,
     ) -> GcpResource:
         return self._insert_resource(
-            self.api_client.globalForwardingRules(),
+            self.client.globalForwardingRules(),
             {
                 'name': name,
                 'loadBalancingScheme':
@@ -237,7 +234,7 @@ class ComputeV1(_gcp_api.GcpApiBase):
             })
 
     def delete_forwarding_rule(self, name):
-        self._delete_resource(self.api_client.globalForwardingRules(),
+        self._delete_resource(self.client.globalForwardingRules(),
                               'forwardingRule', name)
 
     @staticmethod
@@ -269,9 +266,9 @@ class ComputeV1(_gcp_api.GcpApiBase):
                                      network_endpoint_group['selfLink'], zone)
 
     def get_network_endpoint_group(self, name, zone):
-        neg = self.api_client.networkEndpointGroups().get(
-            project=self.project, networkEndpointGroup=name,
-            zone=zone).execute()
+        neg = self.client.networkEndpointGroups().get(project=self.project,
+                                                      networkEndpointGroup=name,
+                                                      zone=zone).execute()
         # TODO(sergiitk): dataclass
         return neg
 
@@ -316,7 +313,7 @@ class ComputeV1(_gcp_api.GcpApiBase):
         _retry_backends_health()
 
     def get_backend_service_backend_health(self, backend_service, backend):
-        return self.api_client.backendServices().getHealth(
+        return self.client.backendServices().getHealth(
             project=self.project,
             backendService=backend_service.name,
             body={
@@ -373,7 +370,7 @@ class ComputeV1(_gcp_api.GcpApiBase):
 
         # TODO(sergiitk) try using wait() here
         # https://googleapis.github.io/google-api-python-client/docs/dyn/compute_v1.globalOperations.html#wait
-        operation_request = self.api_client.globalOperations().get(
+        operation_request = self.client.globalOperations().get(
             project=self.project, operation=operation['name'])
 
         if test_success_fn is None:

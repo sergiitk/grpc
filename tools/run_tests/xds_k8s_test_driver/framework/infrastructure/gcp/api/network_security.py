@@ -18,12 +18,9 @@ from google.rpc import code_pb2
 import tenacity
 
 from framework.infrastructure import gcp
-from framework.infrastructure.gcp import gcp_api_client_manager
 from framework.infrastructure.gcp._internal import gcp_api_standard as _gcp_api_standard
 
 logger = logging.getLogger(__name__)
-# Type aliases
-GcpApiClientManager = gcp_api_client_manager.GcpApiClientManager
 
 
 class NetworkSecurityV1Alpha1(_gcp_api_standard.GcpApiStandard):
@@ -48,11 +45,11 @@ class NetworkSecurityV1Alpha1(_gcp_api_standard.GcpApiStandard):
         update_time: str
         create_time: str
 
-    def __init__(self, api_client_manager: GcpApiClientManager, project: str):
-        super().__init__(api_client_manager.networksecurity(self.api_version),
+    def __init__(self, gcp_discovery: gcp.GcpDiscovery, project: str):
+        super().__init__(gcp_discovery.networksecurity(self.api_version),
                          project)
         # Shortcut to projects/*/locations/ endpoints
-        self._api_locations = self.api_client.projects().locations()
+        self._api_locations = self.client.projects().locations()
 
     @property
     def api_name(self) -> str:

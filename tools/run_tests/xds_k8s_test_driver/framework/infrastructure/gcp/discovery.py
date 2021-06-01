@@ -1,4 +1,4 @@
-# Copyright 2020 gRPC authors.
+# Copyright 2021 gRPC authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,16 +13,35 @@
 # limitations under the License.
 import contextlib
 import functools
-from typing import List, Optional
+from typing import List, Optional, Union
 
+from absl import flags
 from google.cloud import secretmanager_v1
 from googleapiclient import discovery
 
-from framework.infrastructure.gcp import gcp_flags
+_V1_DISCOVERY_URI = flags.DEFINE_string("v1_discovery_uri",
+                                        default=discovery.V1_DISCOVERY_URI,
+                                        help="Override v1 Discovery URI")
+_V2_DISCOVERY_URI = flags.DEFINE_string("v2_discovery_uri",
+                                        default=discovery.V2_DISCOVERY_URI,
+                                        help="Override v2 Discovery URI")
+_COMPUTE_V1_DISCOVERY_FILE = flags.DEFINE_string(
+    "compute_v1_discovery_file",
+    default=None,
+    help="Load compute v1 from a discovery file")
+_PRIVATE_API_KEY_SECRET_NAME = flags.DEFINE_string(
+    "private_api_key_secret_name",
+    default=None,
+    help="Load Private API access key from the latest version of the secret "
+    "with the given name, in the format projects/*/secrets/*")
+
+# Type aliases
+# Dynamic API client built from a discovery document
+GcpDiscoveryClient = discovery.Resource
 
 
-class GcpApiClientManager:
-    """Manage raw access to GCP API services.
+class GcpDiscovery:
+    """Build and manage API clients for GCP services.
 
     Abstracts out the logic of building heterogeneous API clients.
     1) Builds dynamic APIs clients using:
@@ -55,16 +74,12 @@ class GcpApiClientManager:
                  v2_discovery_uri=None,
                  compute_v1_discovery_file=None,
                  private_api_key_secret_name=None):
-        self.v1_discovery_uri = (v1_discovery_uri or
-                                 gcp_flags.V1_DISCOVERY_URI.value)
-        self.v2_discovery_uri = (v2_discovery_uri or
-                                 gcp_flags.V2_DISCOVERY_URI.value)
-        self.compute_v1_discovery_file = (
-            compute_v1_discovery_file or
-            gcp_flags.COMPUTE_V1_DISCOVERY_FILE.value)
-        self.private_api_key_secret_name = (
-            private_api_key_secret_name or
-            gcp_flags.PRIVATE_API_KEY_SECRET_NAME.value)
+        self.v1_discovery_uri = (v1_discovery_uri or _V1_DISCOVERY_URI.value)
+        self.v2_discovery_uri = (v2_discovery_uri or _V2_DISCOVERY_URI.value)
+        self.compute_v1_discovery_file = (compute_v1_discovery_file or
+                                          _COMPUTE_V1_DISCOVERY_FILE.value)
+        self.private_api_key_secret_name = (private_api_key_secret_name or
+                                            _PRIVATE_API_KEY_SECRET_NAME.value)
         # TODO(sergiitk): add options to pass google Credentials
         self._exit_stack = contextlib.ExitStack()
 
@@ -72,7 +87,7 @@ class GcpApiClientManager:
         self._exit_stack.close()
 
     @functools.lru_cache(None)
-    def compute(self, version):
+    def compute(self, version) -> GcpDiscoveryClient:
         """Compute Engine API dynamic client
 
         https://googleapis.github.io/google-api-python-client/docs/dyn/compute_v1.html
@@ -90,7 +105,7 @@ class GcpApiClientManager:
         raise NotImplementedError(f'Compute {version} not supported')
 
     @functools.lru_cache(None)
-    def networksecurity(self, version):
+    def networksecurity(self, version) -> GcpDiscoveryClient:
         """Network Security dynamic client"""
         api_name = 'networksecurity'
         if version == 'v1alpha1':
@@ -103,7 +118,7 @@ class GcpApiClientManager:
         raise NotImplementedError(f'Network Security {version} not supported')
 
     @functools.lru_cache(None)
-    def networkservices(self, version):
+    def networkservices(self, version) -> GcpDiscoveryClient:
         """Network Services dynamic client"""
         api_name = 'networkservices'
         if version == 'v1alpha1':
@@ -116,7 +131,8 @@ class GcpApiClientManager:
         raise NotImplementedError(f'Network Services {version} not supported')
 
     @functools.lru_cache(None)
-    def secrets(self, version):
+    def secrets(self,
+                version) -> Union[secretmanager_v1.SecretManagerServiceClient]:
         """Secret Manager API Cloud Client Library
 
         https://github.com/googleapis/python-secret-manager

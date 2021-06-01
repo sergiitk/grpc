@@ -11,9 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from framework.infrastructure.gcp import gcp_api_client_manager
+from framework.infrastructure.gcp import discovery
 from framework.infrastructure.gcp._internal import gcp_api as _gcp_api
 from framework.infrastructure.gcp._internal import gcp_lro as _gcp_lro
 
+GcpDiscovery = discovery.GcpDiscovery
 GcpApiError = _gcp_api.GcpApiError
 GcpOperationError = _gcp_lro.GcpOperationError

@@ -86,7 +86,7 @@ class GcpApiStandard(gcp_api.GcpApiBase, metaclass=abc.ABCMeta):
         logger.debug('Waiting for %s operation, timeout %s sec: %s',
                      self.api_name, timeout_sec, op_name)
 
-        op_request = self.api_client.projects().locations().operations().get(
+        op_request = self.client.projects().locations().operations().get(
             name=op_name)
         operation = self.wait_for_operation(
             operation_request=op_request,
