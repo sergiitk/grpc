@@ -16,12 +16,14 @@ from typing import List, Optional, Set
 
 from framework import xds_flags
 from framework.infrastructure import gcp
+from framework.infrastructure.gcp.api import compute
+from framework.infrastructure.gcp.api import network_security
+from framework.infrastructure.gcp.api import network_services
 
 logger = logging.getLogger(__name__)
 
-# Type aliases
 # Compute
-_ComputeV1 = gcp.compute.ComputeV1
+_ComputeV1 = compute.ComputeV1
 GcpResource = _ComputeV1.GcpResource
 HealthCheckProtocol = _ComputeV1.HealthCheckProtocol
 ZonalGcpResource = _ComputeV1.ZonalGcpResource
@@ -30,12 +32,12 @@ _BackendGRPC = BackendServiceProtocol.GRPC
 _HealthCheckGRPC = HealthCheckProtocol.GRPC
 
 # Network Security
-_NetworkSecurityV1Alpha1 = gcp.network_security.NetworkSecurityV1Alpha1
+_NetworkSecurityV1Alpha1 = network_security.NetworkSecurityV1Alpha1
 ServerTlsPolicy = _NetworkSecurityV1Alpha1.ServerTlsPolicy
 ClientTlsPolicy = _NetworkSecurityV1Alpha1.ClientTlsPolicy
 
 # Network Services
-_NetworkServicesV1Alpha1 = gcp.network_services.NetworkServicesV1Alpha1
+_NetworkServicesV1Alpha1 = network_services.NetworkServicesV1Alpha1
 EndpointConfigSelector = _NetworkServicesV1Alpha1.EndpointConfigSelector
 
 
@@ -51,14 +53,14 @@ class TrafficDirectorManager:
 
     def __init__(
         self,
-        gcp_api_manager: gcp.api.GcpApiManager,
+        gcp_discovery: gcp.GcpDiscovery,
         project: str,
         *,
         resource_prefix: str,
         network: str = 'default',
     ):
         # API
-        self.compute = _ComputeV1(gcp_api_manager, project)
+        self.compute = _ComputeV1(gcp_discovery, project)
 
         # Settings
         self.project: str = project
@@ -325,20 +327,20 @@ class TrafficDirectorSecureManager(TrafficDirectorManager):
 
     def __init__(
         self,
-        gcp_api_manager: gcp.api.GcpApiManager,
+        gcp_discovery: gcp.GcpDiscovery,
         project: str,
         *,
         resource_prefix: str,
         network: str = 'default',
     ):
-        super().__init__(gcp_api_manager,
+        super().__init__(gcp_discovery,
                          project,
                          resource_prefix=resource_prefix,
                          network=network)
 
         # API
-        self.netsec = _NetworkSecurityV1Alpha1(gcp_api_manager, project)
-        self.netsvc = _NetworkServicesV1Alpha1(gcp_api_manager, project)
+        self.netsec = _NetworkSecurityV1Alpha1(gcp_discovery, project)
+        self.netsvc = _NetworkServicesV1Alpha1(gcp_discovery, project)
 
         # Managed resources
         self.server_tls_policy: Optional[ServerTlsPolicy] = None

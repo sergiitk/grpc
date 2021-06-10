@@ -19,11 +19,12 @@ from google.rpc import code_pb2
 import tenacity
 
 from framework.infrastructure import gcp
+from framework.infrastructure.gcp._internal import gcp_api_standard as _gcp_api_standard
 
 logger = logging.getLogger(__name__)
 
 
-class NetworkServicesV1Alpha1(gcp.api.GcpStandardCloudApiResource):
+class NetworkServicesV1Alpha1(_gcp_api_standard.GcpApiStandard):
     ENDPOINT_CONFIG_SELECTORS = 'endpointConfigSelectors'
 
     @dataclasses.dataclass(frozen=True)
@@ -38,10 +39,11 @@ class NetworkServicesV1Alpha1(gcp.api.GcpStandardCloudApiResource):
         update_time: str
         create_time: str
 
-    def __init__(self, api_manager: gcp.api.GcpApiManager, project: str):
-        super().__init__(api_manager.networkservices(self.api_version), project)
+    def __init__(self, gcp_discovery: gcp.GcpDiscovery, project: str):
+        super().__init__(gcp_discovery.networkservices(self.api_version),
+                         project)
         # Shortcut to projects/*/locations/ endpoints
-        self._api_locations = self.api.projects().locations()
+        self._api_locations = self.api_client.projects().locations()
 
     @property
     def api_name(self) -> str:
@@ -92,5 +94,5 @@ class NetworkServicesV1Alpha1(gcp.api.GcpStandardCloudApiResource):
 
     @staticmethod
     def _operation_internal_error(exception):
-        return (isinstance(exception, gcp.api.OperationError) and
+        return (isinstance(exception, gcp.GcpOperationError) and
                 exception.error.code == code_pb2.INTERNAL)

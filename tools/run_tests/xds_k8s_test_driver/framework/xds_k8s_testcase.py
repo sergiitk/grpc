@@ -59,7 +59,7 @@ _DEFAULT_SECURE_MODE_MAINTENANCE_PORT = \
 
 class XdsKubernetesTestCase(absltest.TestCase):
     k8s_api_manager: k8s.KubernetesApiManager
-    gcp_api_manager: gcp.api.GcpApiManager
+    gcp_discovery: gcp.GcpDiscovery
 
     @classmethod
     def setUpClass(cls):
@@ -98,7 +98,7 @@ class XdsKubernetesTestCase(absltest.TestCase):
         # Resource managers
         cls.k8s_api_manager = k8s.KubernetesApiManager(
             xds_k8s_flags.KUBE_CONTEXT.value)
-        cls.gcp_api_manager = gcp.api.GcpApiManager()
+        cls.gcp_discovery = GcpApiClientManager()
 
     def setUp(self):
         # TODO(sergiitk): generate namespace with run id for each test
@@ -114,7 +114,7 @@ class XdsKubernetesTestCase(absltest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.k8s_api_manager.close()
-        cls.gcp_api_manager.close()
+        cls.gcp_discovery.close()
 
     def tearDown(self):
         logger.info('----- TestMethod %s teardown -----', self.id())
@@ -216,7 +216,7 @@ class RegularXdsKubernetesTestCase(XdsKubernetesTestCase):
 
         # Traffic Director Configuration
         self.td = traffic_director.TrafficDirectorManager(
-            self.gcp_api_manager,
+            self.gcp_discovery,
             project=self.project,
             resource_prefix=self.namespace,
             network=self.network)
@@ -291,7 +291,7 @@ class SecurityXdsKubernetesTestCase(XdsKubernetesTestCase):
 
         # Traffic Director Configuration
         self.td = traffic_director.TrafficDirectorSecureManager(
-            self.gcp_api_manager,
+            self.gcp_discovery,
             project=self.project,
             resource_prefix=self.namespace,
             network=self.network)
