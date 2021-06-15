@@ -78,7 +78,10 @@ def main(argv):
         iam = gcp.iam.IamV1(gcp_api_manager, project)
         # sa = iam.get_service_account(gcp_service_account)
         # logger.info(sa)
-        iam.add_service_account_iam_policy_binding(
+        # iam.add_service_account_iam_policy_binding(
+        #     gcp_service_account, 'roles/iam.workloadIdentityUser',
+        #     f'serviceAccount:{project}.svc.id.goog[{server_namespace}/hello]')
+        iam.remove_service_account_iam_policy_binding(
             gcp_service_account, 'roles/iam.workloadIdentityUser',
             f'serviceAccount:{project}.svc.id.goog[{server_namespace}/hello]')
         # policy = iam.get_service_account_iam_policy(gcp_service_account)

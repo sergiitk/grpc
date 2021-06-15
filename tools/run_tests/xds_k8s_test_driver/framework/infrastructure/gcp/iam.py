@@ -171,7 +171,7 @@ class Policy:
 
 class IamV1(gcp.api.GcpProjectApiResource):
     """
-    Identity and Access Management (IAM) API
+    Identity and Access Management (IAM) API.
 
     https://cloud.google.com/iam/docs/reference/rest
     """
@@ -243,7 +243,7 @@ class IamV1(gcp.api.GcpProjectApiResource):
     @handle_etag_conflict
     def add_service_account_iam_policy_binding(self, account: str, role: str,
                                                member: str):
-        """Add an IAM policy binding to an IAM service account
+        """Add an IAM policy binding to an IAM service account.
 
         See for details on updating policy bindings:
         https://cloud.google.com/iam/docs/reference/rest/v1/projects.serviceAccounts/setIamPolicy
@@ -251,26 +251,55 @@ class IamV1(gcp.api.GcpProjectApiResource):
         # TODO(sergiitk): test add binding when no elements
         policy = self.get_service_account_iam_policy(account)
         binding = policy.find_binding_for_role(role)
-        new_member_set = frozenset([member])
-        if binding is None:
-            updated_binding = Policy.Binding(role, new_member_set)
-        elif member not in binding.members:
-            updated_binding = dataclasses.replace(
-                binding,
-                members=frozenset(binding.members.union(new_member_set)))
-        else:
+        if binding and member in binding.members:
             logger.debug('Member %s already has role %s for Service Account %s',
                          member, role, account)
             return
 
+        if binding is None:
+            updated_binding = Policy.Binding(role, frozenset([member]))
+        else:
+            updated_members = binding.members.union({member})
+            updated_binding = dataclasses.replace(binding,
+                                                  members=updated_members)
+
+        updated_policy = self._replace_binding(policy, binding, updated_binding)
+        self.set_service_account_iam_policy(account, updated_policy)
+        logger.info('Role %s granted to member %s for Service Account %s', role,
+                    member, account)
+
+    @handle_etag_conflict
+    def remove_service_account_iam_policy_binding(self, account: str, role: str,
+                                                  member: str):
+        """Remove an IAM policy binding from the IAM policy of a service
+        account.
+
+        See for details on updating policy bindings:
+        https://cloud.google.com/iam/docs/reference/rest/v1/projects.serviceAccounts/setIamPolicy
+        """
+        policy = self.get_service_account_iam_policy(account)
+        binding = policy.find_binding_for_role(role)
+
+        if binding is None:
+            logger.debug('Noop: Service Account %s has no bindings for role %s',
+                         account, role)
+            return
+        if member not in binding.members:
+            logger.debug(
+                'Noop: Service Account %s binding for role %s has no member %s',
+                account, role, member)
+            return
+
+        updated_members = binding.members.difference({member})
+        updated_binding = dataclasses.replace(binding, members=updated_members)
+        updated_policy = self._replace_binding(policy, binding, updated_binding)
+        self.set_service_account_iam_policy(account, updated_policy)
+        logger.info('Role %s removed from member %s for Service Account %s',
+                    role, member, account)
+
+    @staticmethod
+    def _replace_binding(policy, binding, new_binding):
         new_bindings = set(policy.bindings)
         new_bindings.discard(binding)
-        new_bindings.add(updated_binding)
-
-        new_policy = dataclasses.replace(policy,
-                                         bindings=frozenset(new_bindings),
-                                         etag='BwXEyDDh9HI=')
-
-        self.set_service_account_iam_policy(account, new_policy)
-        logger.debug('Role %s granted to member %s for Service Account %s',
-                     role, member, account)
+        new_bindings.add(new_binding)
+        return dataclasses.replace(policy, bindings=frozenset(new_bindings))
