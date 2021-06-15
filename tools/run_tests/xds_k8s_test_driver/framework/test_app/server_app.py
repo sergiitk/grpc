@@ -167,13 +167,13 @@ class KubernetesServerRunner(base_runner.KubernetesBaseRunner):
                                      f'{self.service_name}')
         self.network = network
         self.deployment_template = deployment_template
-        self.service_account_template = service_account_template
         self.service_template = service_template
         self.reuse_service = reuse_service
         self.debug_use_port_forwarding = debug_use_port_forwarding
         # Service account settings:
         # Kubernetes service account
         self.service_account_name = service_account_name or deployment_name
+        self.service_account_template = service_account_template
         # GCP service account to map to Kubernetes service account
         self.gcp_service_account = gcp_service_account
         # GCP IAM API used to grant allow workload service accounts permission

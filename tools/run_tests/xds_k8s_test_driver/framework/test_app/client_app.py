@@ -23,7 +23,7 @@ import logging
 from typing import Iterator, Optional
 
 from framework.helpers import retryers
-from framework.infrastructure import k8s
+from framework.infrastructure import k8s, gcp
 import framework.rpc
 from framework.rpc import grpc_channelz
 from framework.rpc import grpc_csds
@@ -205,7 +205,9 @@ class KubernetesClientRunner(base_runner.KubernetesBaseRunner):
                  deployment_name,
                  image_name,
                  td_bootstrap_image,
-                 gcp_service_account,
+                 gcp_api_manager: gcp.api.GcpApiManager,
+                 gcp_project: str,
+                 gcp_service_account: str,
                  xds_server_uri=None,
                  network='default',
                  service_account_name=None,
@@ -220,18 +222,22 @@ class KubernetesClientRunner(base_runner.KubernetesBaseRunner):
         # Settings
         self.deployment_name = deployment_name
         self.image_name = image_name
-        self.service_account_name = service_account_name or deployment_name
         self.stats_port = stats_port
-        # GCP API services required to run workloads
-        # self.gcp_iam = gcp.iam.IamV1(gcp_api_manager, gcp_project)
-        self.gcp_service_account = gcp_service_account
         # xDS bootstrap generator
         self.td_bootstrap_image = td_bootstrap_image
         self.xds_server_uri = xds_server_uri
         self.network = network
         self.deployment_template = deployment_template
-        self.service_account_template = service_account_template
         self.debug_use_port_forwarding = debug_use_port_forwarding
+        # Service account settings:
+        # Kubernetes service account
+        self.service_account_name = service_account_name or deployment_name
+        self.service_account_template = service_account_template
+        # GCP service account to map to Kubernetes service account
+        self.gcp_service_account = gcp_service_account
+        # GCP IAM API used to grant allow workload service accounts permission
+        # to use GCP service account identity.
+        self.gcp_iam = gcp.iam.IamV1(gcp_api_manager, gcp_project)
 
         # Mutable state
         self.deployment: Optional[k8s.V1Deployment] = None
@@ -248,11 +254,12 @@ class KubernetesClientRunner(base_runner.KubernetesBaseRunner):
         super().run()
         # TODO(sergiitk): make rpc UnaryCall enum or get it from proto
 
-        # # Allow Kubernetes service account to use
-        # self._grant_workload_identity_user(
-        #     service_account_name=self.service_account_name,
-        #     namespace_name=self.k8s_namespace.name,
-        #     gcp_service_account=self.gcp_service_account)
+        # Allow Kubernetes service account to use the GCP service account
+        # identity.
+        self._grant_workload_identity_user(
+            gcp_iam=self.gcp_iam,
+            gcp_service_account=self.gcp_service_account,
+            service_account_name=self.service_account_name)
 
         # Create service account
         self.service_account = self._create_service_account(
@@ -307,6 +314,10 @@ class KubernetesClientRunner(base_runner.KubernetesBaseRunner):
             self._delete_deployment(self.deployment_name)
             self.deployment = None
         if self.service_account or force:
+            self._revoke_workload_identity_user(
+                gcp_iam=self.gcp_iam,
+                gcp_service_account=self.gcp_service_account,
+                service_account_name=self.service_account_name)
             self._delete_service_account(self.service_account_name)
             self.service_account = None
         super().cleanup(force=force_namespace and force)
