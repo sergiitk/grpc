@@ -238,7 +238,7 @@ class IamV1(gcp.api.GcpProjectApiResource):
                 logger.debug(error)
                 raise EtagConflict from error
             else:
-                raise
+                raise gcp.api.Error from error
 
     @handle_etag_conflict
     def add_service_account_iam_policy_binding(self, account: str, role: str,
@@ -294,7 +294,7 @@ class IamV1(gcp.api.GcpProjectApiResource):
         updated_binding = dataclasses.replace(binding, members=updated_members)
         updated_policy = self._replace_binding(policy, binding, updated_binding)
         self.set_service_account_iam_policy(account, updated_policy)
-        logger.info('Role %s removed from member %s for Service Account %s',
+        logger.info('Role %s revoked from member %s for Service Account %s',
                     role, member, account)
 
     @staticmethod

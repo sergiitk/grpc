@@ -220,9 +220,11 @@ class KubernetesClientRunner(base_runner.KubernetesBaseRunner):
         # Settings
         self.deployment_name = deployment_name
         self.image_name = image_name
-        self.gcp_service_account = gcp_service_account
         self.service_account_name = service_account_name or deployment_name
         self.stats_port = stats_port
+        # GCP API services required to run workloads
+        # self.gcp_iam = gcp.iam.IamV1(gcp_api_manager, gcp_project)
+        self.gcp_service_account = gcp_service_account
         # xDS bootstrap generator
         self.td_bootstrap_image = td_bootstrap_image
         self.xds_server_uri = xds_server_uri
@@ -245,6 +247,12 @@ class KubernetesClientRunner(base_runner.KubernetesBaseRunner):
             print_response=False) -> XdsTestClient:
         super().run()
         # TODO(sergiitk): make rpc UnaryCall enum or get it from proto
+
+        # # Allow Kubernetes service account to use
+        # self._grant_workload_identity_user(
+        #     service_account_name=self.service_account_name,
+        #     namespace_name=self.k8s_namespace.name,
+        #     gcp_service_account=self.gcp_service_account)
 
         # Create service account
         self.service_account = self._create_service_account(

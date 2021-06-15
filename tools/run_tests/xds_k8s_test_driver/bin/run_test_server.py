@@ -57,6 +57,8 @@ def main(argv):
 
     runner_kwargs = dict(deployment_name=xds_flags.SERVER_NAME.value,
                          image_name=xds_k8s_flags.SERVER_IMAGE.value,
+                         gcp_project=project,
+                         gcp_api_manager=gcp.api.GcpApiManager(),
                          gcp_service_account=gcp_service_account,
                          network=xds_flags.NETWORK.value,
                          reuse_namespace=_REUSE_NAMESPACE.value)
@@ -72,25 +74,12 @@ def main(argv):
         k8s.KubernetesNamespace(k8s_api_manager, server_namespace),
         **runner_kwargs)
 
-    gcp_api_manager = gcp.api.GcpApiManager()
-
     if _CMD.value == 'run':
-        iam = gcp.iam.IamV1(gcp_api_manager, project)
-        # sa = iam.get_service_account(gcp_service_account)
-        # logger.info(sa)
-        # iam.add_service_account_iam_policy_binding(
-        #     gcp_service_account, 'roles/iam.workloadIdentityUser',
-        #     f'serviceAccount:{project}.svc.id.goog[{server_namespace}/hello]')
-        iam.remove_service_account_iam_policy_binding(
-            gcp_service_account, 'roles/iam.workloadIdentityUser',
-            f'serviceAccount:{project}.svc.id.goog[{server_namespace}/hello]')
-        # policy = iam.get_service_account_iam_policy(gcp_service_account)
-        # logger.info(dataclasses.asdict(policy))
-        # logger.info('Run server, secure_mode=%s', _SECURE.value)
-        # server_runner.run(
-        #     test_port=xds_flags.SERVER_PORT.value,
-        #     maintenance_port=xds_flags.SERVER_MAINTENANCE_PORT.value,
-        #     secure_mode=_SECURE.value)
+        logger.info('Run server, secure_mode=%s', _SECURE.value)
+        server_runner.run(
+            test_port=xds_flags.SERVER_PORT.value,
+            maintenance_port=xds_flags.SERVER_MAINTENANCE_PORT.value,
+            secure_mode=_SECURE.value)
 
     elif _CMD.value == 'cleanup':
         logger.info('Cleanup server')
