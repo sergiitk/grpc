@@ -38,6 +38,19 @@ class EtagConflict(gcp.api.Error):
     pass
 
 
+def handle_etag_conflict(func):
+
+    def wrap_retry_on_etag_conflict(*args, **kwargs):
+        retryer = retryers.exponential_retryer_with_timeout(
+            retry_on_exceptions=(EtagConflict,),
+            wait_min=_timedelta(seconds=1),
+            wait_max=_timedelta(seconds=10),
+            timeout=_timedelta(minutes=2))
+        return retryer(func, *args, **kwargs)
+
+    return wrap_retry_on_etag_conflict
+
+
 @dataclasses.dataclass(frozen=True)
 class ServiceAccount:
     """An IAM service account.
@@ -206,6 +219,10 @@ class IamV1(gcp.api.GcpProjectApiResource):
 
     def set_service_account_iam_policy(self, account: str,
                                        policy: Policy) -> Policy:
+        """Sets the IAM policy that is attached to a service account.
+
+        https://cloud.google.com/iam/docs/reference/rest/v1/projects.serviceAccounts/setIamPolicy
+        """
         body = {'policy': policy.as_dict()}
         logger.debug('Updating Service Account %s policy:\n%s', account,
                      self._resource_pretty_format(body))
@@ -223,14 +240,7 @@ class IamV1(gcp.api.GcpProjectApiResource):
             else:
                 raise
 
-    @staticmethod
-    def _set_iam_policy_retryer():
-        return retryers.exponential_retryer_with_timeout(
-            retry_on_exceptions=(EtagConflict,),
-            wait_min=_timedelta(seconds=1),
-            wait_max=_timedelta(seconds=10),
-            timeout=_timedelta(minutes=2))
-
+    @handle_etag_conflict
     def add_service_account_iam_policy_binding(self, account: str, role: str,
                                                member: str):
         """Add an IAM policy binding to an IAM service account
@@ -238,19 +248,13 @@ class IamV1(gcp.api.GcpProjectApiResource):
         See for details on updating policy bindings:
         https://cloud.google.com/iam/docs/reference/rest/v1/projects.serviceAccounts/setIamPolicy
         """
-        retryer = self._set_iam_policy_retryer()
-        retryer(self._add_service_account_iam_policy_binding, account, role,
-                member)
-
-    def _add_service_account_iam_policy_binding(self, account: str, role: str,
-                                                member: str):
         # TODO(sergiitk): test add binding when no elements
         policy = self.get_service_account_iam_policy(account)
         binding = policy.find_binding_for_role(role)
         new_member_set = frozenset([member])
         if binding is None:
             updated_binding = Policy.Binding(role, new_member_set)
-        elif True or member not in binding.members:
+        elif member not in binding.members:
             updated_binding = dataclasses.replace(
                 binding,
                 members=frozenset(binding.members.union(new_member_set)))
