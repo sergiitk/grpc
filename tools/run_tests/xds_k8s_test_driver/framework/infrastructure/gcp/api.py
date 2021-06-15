@@ -17,7 +17,6 @@ import functools
 import logging
 from typing import Optional, List
 
-
 # Workaround: `grpc` must be imported before `google.protobuf.json_format`,
 # to prevent "Segmentation fault". Ref https://github.com/grpc/grpc/issues/24897
 # TODO(sergiitk): Remove after #24897 is solved

@@ -15,6 +15,7 @@ import logging
 
 from absl import app
 from absl import flags
+import dataclasses
 
 from framework import xds_flags
 from framework import xds_k8s_flags
@@ -46,17 +47,19 @@ def main(argv):
     if len(argv) > 1:
         raise app.UsageError('Too many command-line arguments.')
 
+    # Flag shortcuts.
     project: str = xds_flags.PROJECT.value
+    # GCP Service Account email
+    gcp_service_account: str = xds_k8s_flags.GCP_SERVICE_ACCOUNT.value
     # Base namespace
     namespace = xds_flags.NAMESPACE.value
     server_namespace = namespace
 
-    runner_kwargs = dict(
-        deployment_name=xds_flags.SERVER_NAME.value,
-        image_name=xds_k8s_flags.SERVER_IMAGE.value,
-        gcp_service_account=xds_k8s_flags.GCP_SERVICE_ACCOUNT.value,
-        network=xds_flags.NETWORK.value,
-        reuse_namespace=_REUSE_NAMESPACE.value)
+    runner_kwargs = dict(deployment_name=xds_flags.SERVER_NAME.value,
+                         image_name=xds_k8s_flags.SERVER_IMAGE.value,
+                         gcp_service_account=gcp_service_account,
+                         network=xds_flags.NETWORK.value,
+                         reuse_namespace=_REUSE_NAMESPACE.value)
 
     if _SECURE.value:
         runner_kwargs.update(
@@ -73,8 +76,13 @@ def main(argv):
 
     if _CMD.value == 'run':
         iam = gcp.iam.IamV1(gcp_api_manager, project)
-        sa = iam.get_service_account(xds_k8s_flags.GCP_SERVICE_ACCOUNT.value)
-        logger.info(sa)
+        # sa = iam.get_service_account(gcp_service_account)
+        # logger.info(sa)
+        iam.add_service_account_iam_policy_binding(
+            gcp_service_account, 'roles/iam.workloadIdentityUser',
+            f'serviceAccount:{project}.svc.id.goog[{server_namespace}/hello]')
+        # policy = iam.get_service_account_iam_policy(gcp_service_account)
+        # logger.info(dataclasses.asdict(policy))
         # logger.info('Run server, secure_mode=%s', _SECURE.value)
         # server_runner.run(
         #     test_port=xds_flags.SERVER_PORT.value,
