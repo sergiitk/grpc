@@ -19,6 +19,7 @@ from absl import flags
 from framework import xds_flags
 from framework import xds_k8s_flags
 from framework.infrastructure import k8s
+from framework.infrastructure import gcp
 from framework.test_app import server_app
 
 logger = logging.getLogger(__name__)
@@ -45,6 +46,7 @@ def main(argv):
     if len(argv) > 1:
         raise app.UsageError('Too many command-line arguments.')
 
+    project: str = xds_flags.PROJECT.value
     # Base namespace
     namespace = xds_flags.NAMESPACE.value
     server_namespace = namespace
@@ -67,12 +69,17 @@ def main(argv):
         k8s.KubernetesNamespace(k8s_api_manager, server_namespace),
         **runner_kwargs)
 
+    gcp_api_manager = gcp.api.GcpApiManager()
+
     if _CMD.value == 'run':
-        logger.info('Run server, secure_mode=%s', _SECURE.value)
-        server_runner.run(
-            test_port=xds_flags.SERVER_PORT.value,
-            maintenance_port=xds_flags.SERVER_MAINTENANCE_PORT.value,
-            secure_mode=_SECURE.value)
+        iam = gcp.iam.IamV1(gcp_api_manager, project)
+        sa = iam.get_service_account(xds_k8s_flags.GCP_SERVICE_ACCOUNT.value)
+        logger.info(sa)
+        # logger.info('Run server, secure_mode=%s', _SECURE.value)
+        # server_runner.run(
+        #     test_port=xds_flags.SERVER_PORT.value,
+        #     maintenance_port=xds_flags.SERVER_MAINTENANCE_PORT.value,
+        #     secure_mode=_SECURE.value)
 
     elif _CMD.value == 'cleanup':
         logger.info('Cleanup server')

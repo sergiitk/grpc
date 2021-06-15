@@ -17,6 +17,7 @@ import functools
 import logging
 from typing import Optional, List
 
+
 # Workaround: `grpc` must be imported before `google.protobuf.json_format`,
 # to prevent "Segmentation fault". Ref https://github.com/grpc/grpc/issues/24897
 # TODO(sergiitk): Remove after #24897 is solved
@@ -138,6 +139,16 @@ class GcpApiManager:
             return secretmanager_v1.SecretManagerServiceClient()
 
         raise NotImplementedError(f'Secret Manager {version} not supported')
+
+    @functools.lru_cache(None)
+    def iam(self, version):
+        api_name = 'iam'
+        if version == 'v1':
+            # TODO(sergiitk): does this need build from file, same as compute?
+            return self._build_from_discovery_v1(api_name, version)
+
+        raise NotImplementedError(
+            f'Identity and Access Management (IAM) {version} not supported')
 
     def _build_from_discovery_v1(self, api_name, version):
         api = discovery.build(api_name,
