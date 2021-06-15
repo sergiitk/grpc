@@ -15,7 +15,7 @@ import functools
 import logging
 
 import dataclasses
-from typing import List, Optional, FrozenSet
+from typing import Optional, FrozenSet
 
 from framework.infrastructure import gcp
 
@@ -26,8 +26,7 @@ logger = logging.getLogger(__name__)
 class ServiceAccount:
     """An IAM service account.
 
-    https://cloud.google.com/iam/docs/reference/rest/v1/projects
-    .serviceAccounts#ServiceAccount
+    https://cloud.google.com/iam/docs/reference/rest/v1/projects.serviceAccounts
     Note: "etag" field is skipped because it's deprecated
     """
     name: str
@@ -105,17 +104,15 @@ class Policy:
             return cls(**fields)
 
         def as_dict(self):
-            if self.condition is not None:
-                condition = self.condition.as_dict()
-            else:
-                condition = {}
-            return {
+            result = {
                 'role': self.role,
                 'members': list(self.members),
-                'condition': condition,
             }
+            if self.condition is not None:
+                result['condition'] = self.condition.as_dict()
+            return result
 
-    bindings: List[Binding]
+    bindings: FrozenSet[Binding]
     etag: str
     version: Optional[int] = None
 
@@ -127,11 +124,8 @@ class Policy:
 
     @classmethod
     def from_response(cls, response):
-        bindings = []
-        if 'bindings' in response:
-            for binding in response['bindings']:
-                bindings.append(cls.Binding.from_response(binding))
-
+        bindings = frozenset(
+            cls.Binding.from_response(b) for b in response.get('bindings', []))
         return cls(bindings=bindings,
                    etag=response['etag'],
                    version=response.get('version'))
@@ -195,22 +189,52 @@ class IamV1(gcp.api.GcpProjectApiResource):
         return Policy.from_response(response)
 
     def add_service_account_iam_policy_binding(self, account: str, role: str,
-                                               member: str) -> Policy:
+                                               member: str) -> bool:
         """Add an IAM policy binding to an IAM service account
 
-        ❯ gcloud iam service-accounts add-iam-policy-binding
-
-        '--role=roles/iam.workloadIdentityUser' --member
-        'serviceAccount:sergiitk-grpc-gke.svc.id.goog[sergii-psm-test/test-app]'
+        See for details on updating policy bindings:
+        https://cloud.google.com/iam/docs/reference/rest/v1/projects.serviceAccounts/setIamPolicy
         """
         # TODO(sergiitk): test add binding when no elements
 
+        new_member = frozenset([member])
         current_policy = self.get_service_account_iam_policy(account)
-        # logger.info(current_policy)
-        # binding = current_policy.find_binding_for_role(role)
-        # binding.members.append(member)
+        binding = current_policy.find_binding_for_role(role)
+
+        if binding is None:
+            updated_binding = Policy.Binding(role, new_member)
+        elif member not in binding.members:
+            updated_binding = dataclasses.replace(
+                binding, members=frozenset(binding.members.union(new_member)))
+        else:
+            logger.debug(
+                'Member %s already has role %s for Service Account %s',
+                member, role, account)
+            return True
+
+        updated_bindings = set(current_policy.bindings)
+        updated_bindings.discard(binding)
+        updated_bindings.add(updated_binding)
+
+        updated_policy = dataclasses.replace(
+            current_policy, bindings=frozenset(updated_bindings))
+
+        policy_body = updated_policy.as_dict()
+        logger.debug('Updating Service Account %s policy:\n%s',
+                     account, self._resource_pretty_format(policy_body))
+
+        response = self._service_accounts.setIamPolicy(
+            resource=self.service_account_resource_name(account),
+            body={'policy': policy_body}).execute()
+        logger.info(response)
+
+        # logger.info(updated_policy.as_dict())
+        # logger.info(updated_binding.as_dict())
+
+        # request = current_policy.as_dict()
+        # logger.info(binding)
         # logger.info(binding.members)
-        logger.info(current_policy.as_dict())
+        # logger.info(current_policy.as_dict())
 
         # current_policy.bindings.
         # response = self._service_accounts.getIamPolicy(
