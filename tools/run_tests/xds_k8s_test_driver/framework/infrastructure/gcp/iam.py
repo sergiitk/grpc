@@ -11,15 +11,31 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import datetime
 import functools
 import logging
 
 import dataclasses
 from typing import Optional, FrozenSet
 
+import googleapiclient.errors
+
+from framework.helpers import retryers
 from framework.infrastructure import gcp
 
 logger = logging.getLogger(__name__)
+
+# Type aliases
+_timedelta = datetime.timedelta
+
+
+class EtagConflict(gcp.api.Error):
+    """
+    Indicates concurrent policy changes.
+
+    https://cloud.google.com/iam/docs/policies#etag
+    """
+    pass
 
 
 @dataclasses.dataclass(frozen=True)
@@ -188,58 +204,69 @@ class IamV1(gcp.api.GcpProjectApiResource):
                      self._resource_pretty_format(response))
         return Policy.from_response(response)
 
+    def set_service_account_iam_policy(self, account: str,
+                                       policy: Policy) -> Policy:
+        body = {'policy': policy.as_dict()}
+        logger.debug('Updating Service Account %s policy:\n%s', account,
+                     self._resource_pretty_format(body))
+        try:
+            response = self._service_accounts.setIamPolicy(
+                resource=self.service_account_resource_name(account),
+                body=body).execute()
+            return Policy.from_response(response)
+        except googleapiclient.errors.HttpError as error:
+            # TODO(sergiitk) use status_code() when we upgrade googleapiclient
+            if error.resp and error.resp.status == 409:
+                # https://cloud.google.com/iam/docs/policies#etag
+                logger.debug(error)
+                raise EtagConflict from error
+            else:
+                raise
+
+    @staticmethod
+    def _set_iam_policy_retryer():
+        return retryers.exponential_retryer_with_timeout(
+            retry_on_exceptions=(EtagConflict,),
+            wait_min=_timedelta(seconds=1),
+            wait_max=_timedelta(seconds=10),
+            timeout=_timedelta(minutes=2))
+
     def add_service_account_iam_policy_binding(self, account: str, role: str,
-                                               member: str) -> bool:
+                                               member: str):
         """Add an IAM policy binding to an IAM service account
 
         See for details on updating policy bindings:
         https://cloud.google.com/iam/docs/reference/rest/v1/projects.serviceAccounts/setIamPolicy
         """
+        retryer = self._set_iam_policy_retryer()
+        retryer(self._add_service_account_iam_policy_binding, account, role,
+                member)
+
+    def _add_service_account_iam_policy_binding(self, account: str, role: str,
+                                                member: str):
         # TODO(sergiitk): test add binding when no elements
-
-        new_member = frozenset([member])
-        current_policy = self.get_service_account_iam_policy(account)
-        binding = current_policy.find_binding_for_role(role)
-
+        policy = self.get_service_account_iam_policy(account)
+        binding = policy.find_binding_for_role(role)
+        new_member_set = frozenset([member])
         if binding is None:
-            updated_binding = Policy.Binding(role, new_member)
-        elif member not in binding.members:
+            updated_binding = Policy.Binding(role, new_member_set)
+        elif True or member not in binding.members:
             updated_binding = dataclasses.replace(
-                binding, members=frozenset(binding.members.union(new_member)))
+                binding,
+                members=frozenset(binding.members.union(new_member_set)))
         else:
-            logger.debug(
-                'Member %s already has role %s for Service Account %s',
-                member, role, account)
-            return True
+            logger.debug('Member %s already has role %s for Service Account %s',
+                         member, role, account)
+            return
 
-        updated_bindings = set(current_policy.bindings)
-        updated_bindings.discard(binding)
-        updated_bindings.add(updated_binding)
+        new_bindings = set(policy.bindings)
+        new_bindings.discard(binding)
+        new_bindings.add(updated_binding)
 
-        updated_policy = dataclasses.replace(
-            current_policy, bindings=frozenset(updated_bindings))
+        new_policy = dataclasses.replace(policy,
+                                         bindings=frozenset(new_bindings),
+                                         etag='BwXEyDDh9HI=')
 
-        policy_body = updated_policy.as_dict()
-        logger.debug('Updating Service Account %s policy:\n%s',
-                     account, self._resource_pretty_format(policy_body))
-
-        response = self._service_accounts.setIamPolicy(
-            resource=self.service_account_resource_name(account),
-            body={'policy': policy_body}).execute()
-        logger.info(response)
-
-        # logger.info(updated_policy.as_dict())
-        # logger.info(updated_binding.as_dict())
-
-        # request = current_policy.as_dict()
-        # logger.info(binding)
-        # logger.info(binding.members)
-        # logger.info(current_policy.as_dict())
-
-        # current_policy.bindings.
-        # response = self._service_accounts.getIamPolicy(
-        #     resource=self.service_account_resource_name(account),
-        #     options_requestedPolicyVersion=self.POLICY_VERSION).execute()
-        # logger.debug('Loaded Service Account Policy:\n%s',
-        #              self._resource_pretty_format(response))
-        # return self.Policy.from_response(response)
+        self.set_service_account_iam_policy(account, new_policy)
+        logger.debug('Role %s granted to member %s for Service Account %s',
+                     role, member, account)
