@@ -248,7 +248,6 @@ class IamV1(gcp.api.GcpProjectApiResource):
         See for details on updating policy bindings:
         https://cloud.google.com/iam/docs/reference/rest/v1/projects.serviceAccounts/setIamPolicy
         """
-        # TODO(sergiitk): test add binding when no elements
         policy = self.get_service_account_iam_policy(account)
         binding = policy.find_binding_for_role(role)
         if binding and member in binding.members:

@@ -143,7 +143,6 @@ class GcpApiManager:
     def iam(self, version):
         api_name = 'iam'
         if version == 'v1':
-            # TODO(sergiitk): does this need build from file, same as compute?
             return self._build_from_discovery_v1(api_name, version)
 
         raise NotImplementedError(
