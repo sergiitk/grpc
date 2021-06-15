@@ -57,6 +57,7 @@ def main(argv):
 
     runner_kwargs = dict(deployment_name=xds_flags.SERVER_NAME.value,
                          image_name=xds_k8s_flags.SERVER_IMAGE.value,
+                         td_bootstrap_image=xds_k8s_flags.TD_BOOTSTRAP_IMAGE.value,
                          gcp_project=project,
                          gcp_api_manager=gcp.api.GcpApiManager(),
                          gcp_service_account=gcp_service_account,
@@ -65,7 +66,6 @@ def main(argv):
 
     if _SECURE.value:
         runner_kwargs.update(
-            td_bootstrap_image=xds_k8s_flags.TD_BOOTSTRAP_IMAGE.value,
             xds_server_uri=xds_flags.XDS_SERVER_URI.value,
             deployment_template='server-secure.deployment.yaml')
 
