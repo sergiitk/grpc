@@ -32,6 +32,7 @@ Typical usage examples:
 """
 import logging
 import uuid
+from typing import Optional
 
 from absl import app
 from absl import flags
@@ -75,7 +76,10 @@ def main(argv):
 
     project: str = xds_flags.PROJECT.value
     network: str = xds_flags.NETWORK.value
-    namespace = xds_flags.NAMESPACE.value
+
+    # Resource names.
+    resource_prefix: str = xds_flags.RESOURCE_PREFIX.value
+    resource_suffix: Optional[str] = xds_flags.RESOURCE_SUFFIX.value
 
     # Test server
     server_name = xds_flags.SERVER_NAME.value
@@ -83,19 +87,23 @@ def main(argv):
     server_maintenance_port = xds_flags.SERVER_MAINTENANCE_PORT.value
     server_xds_host = xds_flags.SERVER_XDS_HOST.value
     server_xds_port = xds_flags.SERVER_XDS_PORT.value
+    server_namespace = resource_prefix
 
     gcp_api_manager = gcp.api.GcpApiManager()
 
     if security_mode is None:
-        td = traffic_director.TrafficDirectorManager(gcp_api_manager,
-                                                     project=project,
-                                                     resource_prefix=namespace,
-                                                     network=network)
+        td = traffic_director.TrafficDirectorManager(
+            gcp_api_manager,
+            project=project,
+            resource_prefix=resource_prefix,
+            resource_suffix=resource_suffix,
+            network=network)
     else:
         td = traffic_director.TrafficDirectorSecureManager(
             gcp_api_manager,
             project=project,
-            resource_prefix=namespace,
+            resource_prefix=resource_prefix,
+            resource_suffix=resource_suffix,
             network=network)
         if server_maintenance_port is None:
             server_maintenance_port = _DEFAULT_SECURE_MODE_MAINTENANCE_PORT
@@ -114,12 +122,12 @@ def main(argv):
                 td.setup_for_grpc(server_xds_host,
                                   server_xds_port,
                                   health_check_port=server_maintenance_port)
-                td.setup_server_security(server_namespace=namespace,
+                td.setup_server_security(server_namespace=server_namespace,
                                          server_name=server_name,
                                          server_port=server_port,
                                          tls=True,
                                          mtls=True)
-                td.setup_client_security(server_namespace=namespace,
+                td.setup_client_security(server_namespace=server_namespace,
                                          server_name=server_name,
                                          tls=True,
                                          mtls=True)
@@ -129,12 +137,12 @@ def main(argv):
                 td.setup_for_grpc(server_xds_host,
                                   server_xds_port,
                                   health_check_port=server_maintenance_port)
-                td.setup_server_security(server_namespace=namespace,
+                td.setup_server_security(server_namespace=server_namespace,
                                          server_name=server_name,
                                          server_port=server_port,
                                          tls=True,
                                          mtls=False)
-                td.setup_client_security(server_namespace=namespace,
+                td.setup_client_security(server_namespace=server_namespace,
                                          server_name=server_name,
                                          tls=True,
                                          mtls=False)
@@ -144,12 +152,12 @@ def main(argv):
                 td.setup_for_grpc(server_xds_host,
                                   server_xds_port,
                                   health_check_port=server_maintenance_port)
-                td.setup_server_security(server_namespace=namespace,
+                td.setup_server_security(server_namespace=server_namespace,
                                          server_name=server_name,
                                          server_port=server_port,
                                          tls=False,
                                          mtls=False)
-                td.setup_client_security(server_namespace=namespace,
+                td.setup_client_security(server_namespace=server_namespace,
                                          server_name=server_name,
                                          tls=False,
                                          mtls=False)
@@ -161,12 +169,12 @@ def main(argv):
                 td.setup_for_grpc(server_xds_host,
                                   server_xds_port,
                                   health_check_port=server_maintenance_port)
-                td.setup_server_security(server_namespace=namespace,
+                td.setup_server_security(server_namespace=server_namespace,
                                          server_name=server_name,
                                          server_port=server_port,
                                          tls=True,
                                          mtls=True)
-                td.setup_client_security(server_namespace=namespace,
+                td.setup_client_security(server_namespace=server_namespace,
                                          server_name=server_name,
                                          tls=True,
                                          mtls=False)
@@ -180,12 +188,12 @@ def main(argv):
                                   health_check_port=server_maintenance_port)
                 # Regular TLS setup, but with client policy configured using
                 # intentionality incorrect server_namespace.
-                td.setup_server_security(server_namespace=namespace,
+                td.setup_server_security(server_namespace=server_namespace,
                                          server_name=server_name,
                                          server_port=server_port,
                                          tls=True,
                                          mtls=False)
-                incorrect_namespace = f'incorrect-namespace-{uuid.uuid4().hex}'
+                incorrect_namespace = f'incorrect-resource_prefix-{uuid.uuid4().hex}'
                 td.setup_client_security(server_namespace=incorrect_namespace,
                                          server_name=server_name,
                                          tls=True,
@@ -203,7 +211,8 @@ def main(argv):
         logger.info('Adding backends')
         k8s_api_manager = k8s.KubernetesApiManager(
             xds_k8s_flags.KUBE_CONTEXT.value)
-        k8s_namespace = k8s.KubernetesNamespace(k8s_api_manager, namespace)
+        k8s_namespace = k8s.KubernetesNamespace(k8s_api_manager,
+                                                server_namespace)
 
         neg_name, neg_zones = k8s_namespace.get_service_neg(
             server_name, server_port)

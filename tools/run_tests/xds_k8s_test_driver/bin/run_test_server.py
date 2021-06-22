@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import logging
+from typing import Optional
 
 from absl import app
 from absl import flags
@@ -46,14 +47,16 @@ def main(argv):
     if len(argv) > 1:
         raise app.UsageError('Too many command-line arguments.')
 
-    # Flag shortcuts.
     project: str = xds_flags.PROJECT.value
     # GCP Service Account email
     gcp_service_account: str = xds_k8s_flags.GCP_SERVICE_ACCOUNT.value
-    # Base namespace
-    namespace = xds_flags.NAMESPACE.value
-    server_namespace = namespace
 
+    # Resource names.
+    resource_prefix: str = xds_flags.RESOURCE_PREFIX.value
+    resource_suffix: Optional[str] = xds_flags.RESOURCE_SUFFIX.value
+
+    # Server
+    server_namespace = resource_prefix
     runner_kwargs = dict(
         deployment_name=xds_flags.SERVER_NAME.value,
         image_name=xds_k8s_flags.SERVER_IMAGE.value,

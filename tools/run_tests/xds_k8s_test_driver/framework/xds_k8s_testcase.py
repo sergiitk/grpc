@@ -72,9 +72,9 @@ class XdsKubernetesTestCase(absltest.TestCase):
         cls.ensure_firewall = xds_flags.ENSURE_FIREWALL.value
         cls.firewall_allowed_ports = xds_flags.FIREWALL_ALLOWED_PORTS.value
 
-        # Base namespace
-        # TODO(sergiitk): generate for each test
-        cls.namespace: str = xds_flags.NAMESPACE.value
+        # Resource names.
+        cls.resource_prefix: str = xds_flags.RESOURCE_PREFIX.value
+        cls.resource_suffix: str = xds_flags.RESOURCE_SUFFIX.value
 
         # Test server
         cls.server_image = xds_k8s_flags.SERVER_IMAGE.value
@@ -102,8 +102,8 @@ class XdsKubernetesTestCase(absltest.TestCase):
 
     def setUp(self):
         # TODO(sergiitk): generate namespace with run id for each test
-        self.server_namespace = self.namespace
-        self.client_namespace = self.namespace
+        self.server_namespace = self.resource_prefix
+        self.client_namespace = self.resource_prefix
 
         # Init this in child class
         # TODO(sergiitk): consider making a method to be less error-prone
@@ -218,7 +218,8 @@ class RegularXdsKubernetesTestCase(XdsKubernetesTestCase):
         self.td = traffic_director.TrafficDirectorManager(
             self.gcp_api_manager,
             project=self.project,
-            resource_prefix=self.namespace,
+            resource_prefix=self.resource_prefix,
+            resource_suffix=self.resource_suffix,
             network=self.network)
 
         # Ensures the firewall exist
@@ -297,7 +298,8 @@ class SecurityXdsKubernetesTestCase(XdsKubernetesTestCase):
         self.td = traffic_director.TrafficDirectorSecureManager(
             self.gcp_api_manager,
             project=self.project,
-            resource_prefix=self.namespace,
+            resource_prefix=self.resource_prefix,
+            resource_suffix=self.resource_suffix,
             network=self.network)
 
         # Ensures the firewall exist
