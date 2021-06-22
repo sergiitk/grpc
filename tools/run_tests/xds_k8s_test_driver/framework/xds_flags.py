@@ -17,11 +17,21 @@ import googleapiclient.discovery
 # GCP
 PROJECT = flags.DEFINE_string("project",
                               default=None,
-                              help="GCP Project ID. Required")
-NAMESPACE = flags.DEFINE_string(
-    "namespace",
+                              help="(required) GCP Project ID.")
+RESOURCE_PREFIX = flags.DEFINE_string(
+    "resource_prefix",
     default=None,
-    help="Isolate GCP resources using given namespace / name prefix. Required")
+    help=("(required) The prefix used to name GCP resources.\n"
+          "Together with `resource_suffix` used to create unique "
+          "resource names."))
+RESOURCE_SUFFIX = flags.DEFINE_string(
+    "resource_suffix",
+    default=None,
+    help=("The suffix used to name GCP resources.\n"
+          "Together with `resource_prefix` used to create unique "
+          "resource names.\n"
+          "(default: test suite will generate a random suffix, based on suite "
+          "resource management preferences)"))
 NETWORK = flags.DEFINE_string("network",
                               default="default",
                               help="GCP Network ID")
@@ -29,7 +39,7 @@ NETWORK = flags.DEFINE_string("network",
 XDS_SERVER_URI = flags.DEFINE_string(
     "xds_server_uri",
     default=None,
-    help="Override Traffic Director server uri, for testing")
+    help="Override Traffic Director server URI.")
 ENSURE_FIREWALL = flags.DEFINE_bool(
     "ensure_firewall",
     default=False,
@@ -61,9 +71,9 @@ SERVER_MAINTENANCE_PORT = flags.DEFINE_integer(
     upper_bound=65535,
     help=("Server port running maintenance services: Channelz, CSDS, Health, "
           "XdsUpdateHealth, and ProtoReflection (optional).\n"
-          "When omitted, the port is chosen automatically based on "
-          "the security configuration.\n"
-          "Must be within --firewall_allowed_ports."))
+          "Must be within --firewall_allowed_ports.\n"
+          "(default: the port is chosen automatically based on "
+          "the security configuration)"))
 SERVER_XDS_HOST = flags.DEFINE_string(
     "server_xds_host",
     default="xds-test-server",
@@ -98,5 +108,5 @@ CLIENT_PORT = flags.DEFINE_integer(
 
 flags.mark_flags_as_required([
     "project",
-    "namespace",
+    "resource_prefix",
 ])
