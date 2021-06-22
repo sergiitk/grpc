@@ -22,7 +22,7 @@ ALPHANUM = string.ascii_letters + string.digits
 ALPHANUM_LOWERCASE = string.ascii_lowercase + string.digits
 
 
-def rand_string(length: int = 8, *, lowercase=False):
+def rand_string(length: int = 8, *, lowercase: bool = False) -> str:
     """Returns random alphanumeric string of given length.
 
     Space for default arguments: alphabet^length

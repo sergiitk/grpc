@@ -15,7 +15,6 @@ import logging
 from typing import List, Optional, Set
 
 from framework import xds_flags
-from framework.helpers import rand
 from framework.infrastructure import gcp
 
 logger = logging.getLogger(__name__)
@@ -59,7 +58,7 @@ class TrafficDirectorManager:
         project: str,
         *,
         resource_prefix: str,
-        resource_suffix: Optional[str] = None,
+        resource_suffix: str,
         network: str = 'default',
     ):
         # API
@@ -69,10 +68,7 @@ class TrafficDirectorManager:
         self.project: str = project
         self.network: str = network
         self.resource_prefix: str = resource_prefix
-        if resource_suffix is not None:
-            self.resource_suffix = resource_suffix
-        else:
-            self.resource_suffix = self.random_resource_prefix()
+        self.resource_suffix: str = resource_suffix
 
         # Managed resources
         self.health_check: Optional[GcpResource] = None
@@ -86,11 +82,6 @@ class TrafficDirectorManager:
         self.target_proxy_is_http: bool = False
         self.forwarding_rule: Optional[GcpResource] = None
         self.backends: Set[ZonalGcpResource] = set()
-
-    @staticmethod
-    def random_resource_prefix():
-        # Use lowercase chars because some resource names won't allow uppercase.
-        return rand.rand_string(lowercase=True)
 
     @property
     def network_url(self):
@@ -132,7 +123,12 @@ class TrafficDirectorManager:
         self.delete_health_check(force=force)
 
     def _make_resource_name(self, name):
-        return f'{self.resource_prefix}-{name}-f{self.resource_suffix}'
+        """Make dash-separated resource name with resource prefix and suffix."""
+        parts = [self.resource_prefix, name]
+        # Avoid trailing dash when the suffix is an empty string.
+        if self.resource_suffix != '':
+            parts.append(self.resource_suffix)
+        return '-'.join(parts)
 
     def create_health_check(
             self,

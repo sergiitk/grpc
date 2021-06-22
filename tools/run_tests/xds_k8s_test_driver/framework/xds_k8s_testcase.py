@@ -24,7 +24,7 @@ from absl.testing import absltest
 
 from framework import xds_flags
 from framework import xds_k8s_flags
-from framework.helpers import retryers
+from framework.helpers import retryers, rand
 from framework.infrastructure import gcp
 from framework.infrastructure import k8s
 from framework.infrastructure import traffic_director
@@ -58,11 +58,17 @@ _DEFAULT_SECURE_MODE_MAINTENANCE_PORT = \
 
 
 class XdsKubernetesTestCase(absltest.TestCase):
+    resource_prefix: str
+    _resource_suffix_randomize: bool = True
+    resource_suffix: str = ''
     k8s_api_manager: k8s.KubernetesApiManager
     gcp_api_manager: gcp.api.GcpApiManager
 
     @classmethod
     def setUpClass(cls):
+        """Hook method for setting up class fixture before running tests in
+        the class.
+        """
         # GCP
         cls.project: str = xds_flags.PROJECT.value
         cls.network: str = xds_flags.NETWORK.value
@@ -73,8 +79,10 @@ class XdsKubernetesTestCase(absltest.TestCase):
         cls.firewall_allowed_ports = xds_flags.FIREWALL_ALLOWED_PORTS.value
 
         # Resource names.
-        cls.resource_prefix: str = xds_flags.RESOURCE_PREFIX.value
-        cls.resource_suffix: str = xds_flags.RESOURCE_SUFFIX.value
+        cls.resource_prefix = xds_flags.RESOURCE_PREFIX.value
+        if xds_flags.RESOURCE_SUFFIX.value is not None:
+            cls._resource_suffix_randomize = False
+            cls.resource_suffix = xds_flags.RESOURCE_SUFFIX.value
 
         # Test server
         cls.server_image = xds_k8s_flags.SERVER_IMAGE.value
@@ -101,15 +109,28 @@ class XdsKubernetesTestCase(absltest.TestCase):
         cls.gcp_api_manager = gcp.api.GcpApiManager()
 
     def setUp(self):
+        """Hook method for setting up the test fixture before exercising it."""
+        super().setUp()
+
+        if self._resource_suffix_randomize:
+            self.resource_suffix = self._random_resource_suffix()
+        logger.info('Test run resource prefix: %s, suffix: %s',
+                    self.resource_prefix, self.resource_suffix)
+
         # TODO(sergiitk): generate namespace with run id for each test
-        self.server_namespace = self.resource_prefix
-        self.client_namespace = self.resource_prefix
+        self.server_namespace = f'{self.resource_prefix}-{self.resource_suffix}'
+        self.client_namespace = f'{self.resource_prefix}-{self.resource_suffix}'
 
         # Init this in child class
         # TODO(sergiitk): consider making a method to be less error-prone
         self.server_runner = None
         self.client_runner = None
         self.td = None
+
+    @staticmethod
+    def _random_resource_suffix() -> str:
+        # Use lowercase chars because some resource names won't allow uppercase.
+        return rand.rand_string(lowercase=True)
 
     @classmethod
     def tearDownClass(cls):
@@ -206,12 +227,16 @@ class RegularXdsKubernetesTestCase(XdsKubernetesTestCase):
 
     @classmethod
     def setUpClass(cls):
+        """Hook method for setting up class fixture before running tests in
+        the class.
+        """
         super().setUpClass()
         if cls.server_maintenance_port is None:
             cls.server_maintenance_port = \
                 server_app.KubernetesServerRunner.DEFAULT_MAINTENANCE_PORT
 
     def setUp(self):
+        """Hook method for setting up the test fixture before exercising it."""
         super().setUp()
 
         # Traffic Director Configuration
@@ -282,6 +307,9 @@ class SecurityXdsKubernetesTestCase(XdsKubernetesTestCase):
 
     @classmethod
     def setUpClass(cls):
+        """Hook method for setting up class fixture before running tests in
+        the class.
+        """
         super().setUpClass()
         if cls.server_maintenance_port is None:
             # In secure mode, the maintenance port is different from
@@ -292,6 +320,7 @@ class SecurityXdsKubernetesTestCase(XdsKubernetesTestCase):
             cls.server_maintenance_port = _DEFAULT_SECURE_MODE_MAINTENANCE_PORT
 
     def setUp(self):
+        """Hook method for setting up the test fixture before exercising it."""
         super().setUp()
 
         # Traffic Director Configuration

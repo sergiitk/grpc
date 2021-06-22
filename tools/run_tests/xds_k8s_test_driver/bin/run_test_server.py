@@ -41,6 +41,8 @@ _CLEANUP_NAMESPACE = flags.DEFINE_bool(
     help="Delete namespace during resource cleanup")
 flags.adopt_module_key_flags(xds_flags)
 flags.adopt_module_key_flags(xds_k8s_flags)
+# Running outside of a test suite, so require explicit resource_suffix.
+flags.mark_flag_as_required("resource_suffix")
 
 
 def main(argv):
@@ -53,7 +55,7 @@ def main(argv):
 
     # Resource names.
     resource_prefix: str = xds_flags.RESOURCE_PREFIX.value
-    resource_suffix: Optional[str] = xds_flags.RESOURCE_SUFFIX.value
+    resource_suffix: str = xds_flags.RESOURCE_SUFFIX.value
 
     # Server
     server_namespace = resource_prefix

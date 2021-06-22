@@ -30,7 +30,6 @@ Typical usage examples:
 """
 import hashlib
 import logging
-from typing import Optional
 
 from absl import app
 from absl import flags
@@ -59,6 +58,8 @@ _SECURITY = flags.DEFINE_enum('security',
                               help='Show info for a security setup')
 flags.adopt_module_key_flags(xds_flags)
 flags.adopt_module_key_flags(xds_k8s_flags)
+# Running outside of a test suite, so require explicit resource_suffix.
+flags.mark_flag_as_required("resource_suffix")
 
 # Type aliases
 _Channel = grpc_channelz.Channel
@@ -177,7 +178,7 @@ def main(argv):
 
     # Resource names.
     resource_prefix: str = xds_flags.RESOURCE_PREFIX.value
-    resource_suffix: Optional[str] = xds_flags.RESOURCE_SUFFIX.value
+    resource_suffix: str = xds_flags.RESOURCE_SUFFIX.value
 
     # Server
     server_name = xds_flags.SERVER_NAME.value

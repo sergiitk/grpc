@@ -32,13 +32,13 @@ Typical usage examples:
 """
 import logging
 import uuid
-from typing import Optional
 
 from absl import app
 from absl import flags
 
 from framework import xds_flags
 from framework import xds_k8s_flags
+from framework.helpers import rand
 from framework.infrastructure import gcp
 from framework.infrastructure import k8s
 from framework.infrastructure import traffic_director
@@ -62,6 +62,8 @@ _SECURITY = flags.DEFINE_enum('security',
                               help='Configure TD with security')
 flags.adopt_module_key_flags(xds_flags)
 flags.adopt_module_key_flags(xds_k8s_flags)
+# Running outside of a test suite, so require explicit resource_suffix.
+flags.mark_flag_as_required("resource_suffix")
 
 _DEFAULT_SECURE_MODE_MAINTENANCE_PORT = \
     server_app.KubernetesServerRunner.DEFAULT_SECURE_MODE_MAINTENANCE_PORT
@@ -79,7 +81,7 @@ def main(argv):
 
     # Resource names.
     resource_prefix: str = xds_flags.RESOURCE_PREFIX.value
-    resource_suffix: Optional[str] = xds_flags.RESOURCE_SUFFIX.value
+    resource_suffix: str = xds_flags.RESOURCE_SUFFIX.value
 
     # Test server
     server_name = xds_flags.SERVER_NAME.value
@@ -95,16 +97,16 @@ def main(argv):
         td = traffic_director.TrafficDirectorManager(
             gcp_api_manager,
             project=project,
+            network=network,
             resource_prefix=resource_prefix,
-            resource_suffix=resource_suffix,
-            network=network)
+            resource_suffix=resource_suffix)
     else:
         td = traffic_director.TrafficDirectorSecureManager(
             gcp_api_manager,
             project=project,
+            network=network,
             resource_prefix=resource_prefix,
-            resource_suffix=resource_suffix,
-            network=network)
+            resource_suffix=resource_suffix)
         if server_maintenance_port is None:
             server_maintenance_port = _DEFAULT_SECURE_MODE_MAINTENANCE_PORT
 
@@ -193,11 +195,11 @@ def main(argv):
                                          server_port=server_port,
                                          tls=True,
                                          mtls=False)
-                incorrect_namespace = f'incorrect-resource_prefix-{uuid.uuid4().hex}'
-                td.setup_client_security(server_namespace=incorrect_namespace,
-                                         server_name=server_name,
-                                         tls=True,
-                                         mtls=False)
+                td.setup_client_security(
+                    server_namespace=f'incorrect-namespace-{rand.rand_string()}',
+                    server_name=server_name,
+                    tls=True,
+                    mtls=False)
 
             logger.info('Works!')
     except Exception:  # noqa pylint: disable=broad-except
