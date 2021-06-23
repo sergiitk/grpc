@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import logging
-from typing import Optional
 
 from absl import app
 from absl import flags
@@ -48,6 +47,9 @@ flags.adopt_module_key_flags(xds_k8s_flags)
 # Running outside of a test suite, so require explicit resource_suffix.
 flags.mark_flag_as_required("resource_suffix")
 
+# Type aliases
+KubernetesClientRunner = client_app.KubernetesClientRunner
+
 
 def main(argv):
     if len(argv) > 1:
@@ -57,12 +59,7 @@ def main(argv):
     # GCP Service Account email
     gcp_service_account: str = xds_k8s_flags.GCP_SERVICE_ACCOUNT.value
 
-    # Resource names.
-    resource_prefix: str = xds_flags.RESOURCE_PREFIX.value
-    resource_suffix: str = xds_flags.RESOURCE_SUFFIX.value
-
-    # Client
-    client_namespace = resource_prefix
+    # KubernetesClientRunner arguments.
     runner_kwargs = dict(
         deployment_name=xds_flags.CLIENT_NAME.value,
         image_name=xds_k8s_flags.CLIENT_IMAGE.value,
@@ -80,7 +77,9 @@ def main(argv):
             deployment_template='client-secure.deployment.yaml')
 
     k8s_api_manager = k8s.KubernetesApiManager(xds_k8s_flags.KUBE_CONTEXT.value)
-    client_runner = client_app.KubernetesClientRunner(
+    client_namespace = KubernetesClientRunner.make_namespace_name(
+        xds_flags.RESOURCE_PREFIX.value, xds_flags.RESOURCE_SUFFIX.value)
+    client_runner = KubernetesClientRunner(
         k8s.KubernetesNamespace(k8s_api_manager, client_namespace),
         **runner_kwargs)
 

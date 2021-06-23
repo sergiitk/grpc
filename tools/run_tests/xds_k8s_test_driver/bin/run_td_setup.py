@@ -31,7 +31,6 @@ Typical usage examples:
     python -m bin.run_td_setup --helpfull
 """
 import logging
-import uuid
 
 from absl import app
 from absl import flags
@@ -65,8 +64,7 @@ flags.adopt_module_key_flags(xds_k8s_flags)
 # Running outside of a test suite, so require explicit resource_suffix.
 flags.mark_flag_as_required("resource_suffix")
 
-_DEFAULT_SECURE_MODE_MAINTENANCE_PORT = \
-    server_app.KubernetesServerRunner.DEFAULT_SECURE_MODE_MAINTENANCE_PORT
+KubernetesServerRunner = server_app.KubernetesServerRunner
 
 
 def main(argv):
@@ -89,7 +87,8 @@ def main(argv):
     server_maintenance_port = xds_flags.SERVER_MAINTENANCE_PORT.value
     server_xds_host = xds_flags.SERVER_XDS_HOST.value
     server_xds_port = xds_flags.SERVER_XDS_PORT.value
-    server_namespace = resource_prefix
+    server_namespace = KubernetesServerRunner.make_namespace_name(
+        resource_prefix, resource_suffix)
 
     gcp_api_manager = gcp.api.GcpApiManager()
 
@@ -108,7 +107,7 @@ def main(argv):
             resource_prefix=resource_prefix,
             resource_suffix=resource_suffix)
         if server_maintenance_port is None:
-            server_maintenance_port = _DEFAULT_SECURE_MODE_MAINTENANCE_PORT
+            server_maintenance_port = KubernetesServerRunner.DEFAULT_SECURE_MODE_MAINTENANCE_PORT
 
     try:
         if command in ('create', 'cycle'):
@@ -222,7 +221,6 @@ def main(argv):
         td.load_backend_service()
         td.backend_service_add_neg_backends(neg_name, neg_zones)
         td.wait_for_backends_healthy_status()
-        # TODO(sergiitk): wait until client reports rpc health
     elif command == 'backends-cleanup':
         td.load_backend_service()
         td.backend_service_remove_all_backends()

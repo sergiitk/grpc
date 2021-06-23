@@ -50,17 +50,19 @@ flags.adopt_module_key_flags(xds_k8s_flags)
 # Type aliases
 XdsTestServer = server_app.XdsTestServer
 XdsTestClient = client_app.XdsTestClient
+KubernetesServerRunner = server_app.KubernetesServerRunner
+KubernetesClientRunner = client_app.KubernetesClientRunner
 LoadBalancerStatsResponse = grpc_testing.LoadBalancerStatsResponse
 _ChannelState = grpc_channelz.ChannelState
 _timedelta = datetime.timedelta
-_DEFAULT_SECURE_MODE_MAINTENANCE_PORT = \
-    server_app.KubernetesServerRunner.DEFAULT_SECURE_MODE_MAINTENANCE_PORT
 
 
 class XdsKubernetesTestCase(absltest.TestCase):
     resource_prefix: str
     _resource_suffix_randomize: bool = True
     resource_suffix: str = ''
+    server_namespace: str
+    client_namespace: str
     k8s_api_manager: k8s.KubernetesApiManager
     gcp_api_manager: gcp.api.GcpApiManager
 
@@ -117,9 +119,10 @@ class XdsKubernetesTestCase(absltest.TestCase):
         logger.info('Test run resource prefix: %s, suffix: %s',
                     self.resource_prefix, self.resource_suffix)
 
-        # TODO(sergiitk): generate namespace with run id for each test
-        self.server_namespace = f'{self.resource_prefix}-{self.resource_suffix}'
-        self.client_namespace = f'{self.resource_prefix}-{self.resource_suffix}'
+        self.server_namespace = KubernetesServerRunner.make_namespace_name(
+            self.resource_prefix, self.resource_suffix)
+        self.client_namespace = KubernetesClientRunner.make_namespace_name(
+            self.resource_prefix, self.resource_suffix)
 
         # Init this in child class
         # TODO(sergiitk): consider making a method to be less error-prone
@@ -232,8 +235,7 @@ class RegularXdsKubernetesTestCase(XdsKubernetesTestCase):
         """
         super().setUpClass()
         if cls.server_maintenance_port is None:
-            cls.server_maintenance_port = \
-                server_app.KubernetesServerRunner.DEFAULT_MAINTENANCE_PORT
+            cls.server_maintenance_port = KubernetesServerRunner.DEFAULT_MAINTENANCE_PORT
 
     def setUp(self):
         """Hook method for setting up the test fixture before exercising it."""
@@ -253,7 +255,7 @@ class RegularXdsKubernetesTestCase(XdsKubernetesTestCase):
                 allowed_ports=self.firewall_allowed_ports)
 
         # Test Server Runner
-        self.server_runner = server_app.KubernetesServerRunner(
+        self.server_runner = KubernetesServerRunner(
             k8s.KubernetesNamespace(self.k8s_api_manager,
                                     self.server_namespace),
             deployment_name=self.server_name,
@@ -266,7 +268,7 @@ class RegularXdsKubernetesTestCase(XdsKubernetesTestCase):
             network=self.network)
 
         # Test Client Runner
-        self.client_runner = client_app.KubernetesClientRunner(
+        self.client_runner = KubernetesClientRunner(
             k8s.KubernetesNamespace(self.k8s_api_manager,
                                     self.client_namespace),
             deployment_name=self.client_name,
@@ -317,7 +319,7 @@ class SecurityXdsKubernetesTestCase(XdsKubernetesTestCase):
             # Health Checks and Channelz tests available.
             # When not provided, use explicit numeric port value, so
             # Backend Health Checks are created on a fixed port.
-            cls.server_maintenance_port = _DEFAULT_SECURE_MODE_MAINTENANCE_PORT
+            cls.server_maintenance_port = KubernetesServerRunner.DEFAULT_SECURE_MODE_MAINTENANCE_PORT
 
     def setUp(self):
         """Hook method for setting up the test fixture before exercising it."""
@@ -337,7 +339,7 @@ class SecurityXdsKubernetesTestCase(XdsKubernetesTestCase):
                 allowed_ports=self.firewall_allowed_ports)
 
         # Test Server Runner
-        self.server_runner = server_app.KubernetesServerRunner(
+        self.server_runner = KubernetesServerRunner(
             k8s.KubernetesNamespace(self.k8s_api_manager,
                                     self.server_namespace),
             deployment_name=self.server_name,
@@ -352,7 +354,7 @@ class SecurityXdsKubernetesTestCase(XdsKubernetesTestCase):
             debug_use_port_forwarding=self.debug_use_port_forwarding)
 
         # Test Client Runner
-        self.client_runner = client_app.KubernetesClientRunner(
+        self.client_runner = KubernetesClientRunner(
             k8s.KubernetesNamespace(self.k8s_api_manager,
                                     self.client_namespace),
             deployment_name=self.client_name,

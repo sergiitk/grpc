@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import logging
-from typing import Optional
 
 from absl import app
 from absl import flags
@@ -44,6 +43,8 @@ flags.adopt_module_key_flags(xds_k8s_flags)
 # Running outside of a test suite, so require explicit resource_suffix.
 flags.mark_flag_as_required("resource_suffix")
 
+KubernetesServerRunner = server_app.KubernetesServerRunner
+
 
 def main(argv):
     if len(argv) > 1:
@@ -57,8 +58,7 @@ def main(argv):
     resource_prefix: str = xds_flags.RESOURCE_PREFIX.value
     resource_suffix: str = xds_flags.RESOURCE_SUFFIX.value
 
-    # Server
-    server_namespace = resource_prefix
+    # KubernetesServerRunner arguments.
     runner_kwargs = dict(
         deployment_name=xds_flags.SERVER_NAME.value,
         image_name=xds_k8s_flags.SERVER_IMAGE.value,
@@ -75,7 +75,9 @@ def main(argv):
             deployment_template='server-secure.deployment.yaml')
 
     k8s_api_manager = k8s.KubernetesApiManager(xds_k8s_flags.KUBE_CONTEXT.value)
-    server_runner = server_app.KubernetesServerRunner(
+    server_namespace = KubernetesServerRunner.make_namespace_name(
+        resource_prefix, resource_suffix)
+    server_runner = KubernetesServerRunner(
         k8s.KubernetesNamespace(k8s_api_manager, server_namespace),
         **runner_kwargs)
 
