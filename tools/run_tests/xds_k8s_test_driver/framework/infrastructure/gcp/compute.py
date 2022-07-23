@@ -435,7 +435,8 @@ class ComputeV1(gcp.api.GcpProjectApiResource):  # pylint: disable=too-many-publ
         logger.debug('Operation %s', operation)
         return self._wait(operation['name'], timeout_sec)
 
-    def _wait(self, operation_id: str,
+    def _wait(self,
+              operation_id: str,
               timeout_sec: int = _WAIT_FOR_OPERATION_SEC) -> dict:
         logger.info('Waiting %s sec for compute operation id: %s', timeout_sec,
                     operation_id)
