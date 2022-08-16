@@ -363,8 +363,7 @@ class KubernetesNamespace:  # pylint: disable=too-many-public-methods
             pods = self.list_deployment_pods(deployment)
             logger.debug(
                 'Waiting for deployment %s to match %i replicas '
-                'current match: %s', deployment.metadata.name, count,
-                pods)
+                'current match: %s', deployment.metadata.name, count, pods)
             return pods
 
         _wait_for_deployment_replica_count()
@@ -432,10 +431,15 @@ class KubernetesNamespace:  # pylint: disable=too-many-public-methods
                              daemon=True)
         t.start()
 
-    def pod_stream_append_log(self, pod_name: str, logfile: pathlib.Path,
-                              log_stop_event: threading.Event, *,
+    def pod_stream_append_log(self,
+                              pod_name: str,
+                              logfile: pathlib.Path,
+                              log_stop_event: threading.Event,
+                              *,
                               backoff_seconds: int = 1):
+        logger.info('Starting log collection on a thread')
         query_restarted = False
+        read_namespaced_pod_log = self.api.core.read_namespaced_pod_log
         with open(logfile, "w") as stream:
             while not log_stop_event.is_set():
                 try:
@@ -446,18 +450,23 @@ class KubernetesNamespace:  # pylint: disable=too-many-public-methods
                         )
 
                     watcher = watch.Watch()
-                    for msg in watcher.stream(self.api.core.read_namespaced_pod_log,
+                    for msg in watcher.stream(read_namespaced_pod_log,
                                               name=pod_name,
                                               namespace=self.name,
+                                              timestamps=True,
                                               follow=True):
+                        logger.info(msg)
                         stream.write(msg)
                         stream.write("\n")
+                        stream.flush()
                     if log_stop_event.is_set():
                         watcher.stop()
                 except ApiException as e:
                     stream.write(f"Exception fetching logs: {e}\n")
                     query_restarted = True
                     time.sleep(backoff_seconds)
+                finally:
+                    stream.flush()
 
     @staticmethod
     def _pod_started(pod: V1Pod):
