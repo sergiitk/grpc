@@ -69,6 +69,7 @@ class KubernetesBaseRunner(base_runner.BaseRunner):
                 self.namespace_template, namespace_name=self.k8s_namespace.name)
 
     def cleanup(self, *, force=False):
+        self.stop_logging_if_needed()
         if (self.namespace and not self.reuse_namespace) or force:
             self.delete_namespace()
             self.namespace = None
@@ -232,6 +233,7 @@ class KubernetesBaseRunner(base_runner.BaseRunner):
 
     def _delete_deployment(self, name, wait_for_deletion=True):
         logger.info('Deleting deployment %s', name)
+        self.stop_logging_if_needed()
         try:
             self.k8s_namespace.delete_deployment(name)
         except k8s.ApiException as e:
@@ -309,6 +311,13 @@ class KubernetesBaseRunner(base_runner.BaseRunner):
         pod = self.k8s_namespace.get_pod(name)
         logger.info('Pod %s ready, IP: %s', pod.metadata.name,
                     pod.status.pod_ip)
+
+    def _start_logging_pod(self, pod: k8s.V1Pod):
+        pod_name = pod.metadata.name
+        logger.info('Enabling log collection from pod %s', pod_name)
+        logfile = self.logs_subdir / f'{pod_name}.log'
+        self.k8s_namespace.pod_start_logging(pod_name, logfile,
+                                             self.log_stop_event)
 
     def _wait_service_neg(self, name, service_port, **kwargs):
         logger.info('Waiting for NEG for service %s', name)

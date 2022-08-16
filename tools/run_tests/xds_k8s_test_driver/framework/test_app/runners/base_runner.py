@@ -14,6 +14,7 @@
 """
 Common functionality for running xDS Test Client and Server remotely.
 """
+import threading
 from abc import ABCMeta
 from abc import abstractmethod
 import functools
@@ -36,10 +37,12 @@ class RunnerError(Exception):
 
 class BaseRunner(metaclass=ABCMeta):
     _logs_subdir: Optional[pathlib.Path] = None
+    _log_stop_event: Optional[threading.Event] = None
 
     def __init__(self):
         if xds_flags.COLLECT_APP_LOGS.value:
             self._logs_subdir = logs.log_dir_mkdir(_LOGS_SUBDIR)
+            self._log_stop_event = threading.Event()
 
     @property
     @functools.lru_cache(None)
@@ -52,6 +55,16 @@ class BaseRunner(metaclass=ABCMeta):
         if not self.should_collect_logs:
             raise FileNotFoundError('Log collection is not enabled.')
         return self._logs_subdir
+
+    @property
+    def log_stop_event(self) -> threading.Event:
+        if not self.should_collect_logs:
+            raise ValueError('Log collection is not enabled.')
+        return self._log_stop_event
+
+    def stop_logging_if_needed(self):
+        if self.should_collect_logs and not self.log_stop_event.is_set():
+            self.log_stop_event.set()
 
     @abstractmethod
     def run(self, **kwargs):

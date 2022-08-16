@@ -14,13 +14,16 @@
 import functools
 import json
 import logging
+import pathlib
 import re
 import subprocess
+import threading
 import time
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, TextIO
 
 from kubernetes import client
 from kubernetes import utils
+from kubernetes import watch
 import kubernetes.config
 # TODO(sergiitk): replace with tenacity
 import retrying
@@ -421,6 +424,40 @@ class KubernetesNamespace:  # pylint: disable=too-many-public-methods
                            local_address)
         pf.connect()
         return pf
+
+    def pod_start_logging(self, pod_name: str, logfile: pathlib.Path,
+                          log_stop_event: threading.Event):
+        t = threading.Thread(target=self.pod_stream_append_log,
+                             args=(pod_name, logfile, log_stop_event),
+                             daemon=True)
+        t.start()
+
+    def pod_stream_append_log(self, pod_name: str, logfile: pathlib.Path,
+                              log_stop_event: threading.Event, *,
+                              backoff_seconds: int = 1):
+        query_restarted = False
+        with open(logfile, "w") as stream:
+            while not log_stop_event.is_set():
+                try:
+                    if query_restarted:
+                        stream.write(
+                            "Restarted log fetching. Attempting to read from "
+                            "the beginning, but truncation may have occurred.\n"
+                        )
+
+                    watcher = watch.Watch()
+                    for msg in watcher.stream(self.api.core.read_namespaced_pod_log,
+                                              name=pod_name,
+                                              namespace=self.name,
+                                              follow=True):
+                        stream.write(msg)
+                        stream.write("\n")
+                    if log_stop_event.is_set():
+                        watcher.stop()
+                except ApiException as e:
+                    stream.write(f"Exception fetching logs: {e}\n")
+                    query_restarted = True
+                    time.sleep(backoff_seconds)
 
     @staticmethod
     def _pod_started(pod: V1Pod):
