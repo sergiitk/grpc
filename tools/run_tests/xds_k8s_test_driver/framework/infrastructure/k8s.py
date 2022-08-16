@@ -19,7 +19,7 @@ import re
 import subprocess
 import threading
 import time
-from typing import List, Optional, Tuple, TextIO
+from typing import List, Optional, TextIO, Tuple
 
 from kubernetes import client
 from kubernetes import utils

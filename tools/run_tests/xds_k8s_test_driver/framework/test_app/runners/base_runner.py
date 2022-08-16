@@ -14,11 +14,11 @@
 """
 Common functionality for running xDS Test Client and Server remotely.
 """
-import threading
 from abc import ABCMeta
 from abc import abstractmethod
 import functools
 import pathlib
+import threading
 from typing import Dict, Optional
 import urllib.parse
 
