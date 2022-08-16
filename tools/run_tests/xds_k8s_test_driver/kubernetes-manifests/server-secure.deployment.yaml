@@ -12,12 +12,14 @@ spec:
   selector:
     matchLabels:
       app: ${deployment_name}
+      run_id: ${run_id}
   template:
     metadata:
       annotations:
         security.cloud.google.com/use-workload-certificates: ""
       labels:
         app: ${deployment_name}
+        run_id: ${run_id}
         owner: xds-k8s-interop-test
     spec:
       serviceAccountName: ${service_account_name}

@@ -18,11 +18,13 @@ import contextlib
 import datetime
 import logging
 import pathlib
-from typing import Optional
+import threading
+from typing import Optional, List
 
 import mako.template
 import yaml
 
+import framework.helpers.rand
 import framework.helpers.datetime
 import framework.helpers.highlighter
 from framework.infrastructure import gcp
@@ -199,6 +201,11 @@ class KubernetesBaseRunner(base_runner.BaseRunner):
         return resource
 
     def _create_deployment(self, template, **kwargs) -> k8s.V1Deployment:
+        # Automatically apply random run id to use in the matchLabels to avoid
+        # collisions with pods # in the same namespace (may not be unique).
+        if 'run_id' not in kwargs:
+            kwargs['run_id'] = framework.helpers.rand.rand_string(
+                lowercase=True)
         deployment = self._create_from_template(template, **kwargs)
         if not isinstance(deployment, k8s.V1Deployment):
             raise _RunnerError('Expected V1Deployment to be created '
@@ -276,8 +283,8 @@ class KubernetesBaseRunner(base_runner.BaseRunner):
         logger.debug('Namespace %s deleted', self.k8s_namespace.name)
 
     def _wait_deployment_with_available_replicas(self, name, count=1, **kwargs):
-        logger.info('Waiting for deployment %s to have %s available replica(s)',
-                    name, count)
+        logger.info('Waiting for deployment %s to report %s '
+                    'available replica(s)', name, count)
         self.k8s_namespace.wait_for_deployment_available_replicas(
             name, count, **kwargs)
         deployment = self.k8s_namespace.get_deployment(name)
@@ -285,8 +292,19 @@ class KubernetesBaseRunner(base_runner.BaseRunner):
                     deployment.metadata.name,
                     deployment.status.available_replicas)
 
+    def _wait_deployment_pod_count(self, deployment: k8s.V1Deployment, count: int = 1, **kwargs) -> List[k8s.V1Pod]:
+        logger.info('Waiting for deployment %s to initialize %s pod(s)',
+                    deployment.metadata.name, count)
+        self.k8s_namespace.wait_for_deployment_replica_count(
+            deployment, count, **kwargs)
+        pods = self.k8s_namespace.list_deployment_pods(deployment)
+        logger.info('Deployment %s initialized %i pod(s): %s',
+                    deployment.metadata.name, count,
+                    [pod.metadata.name for pod in pods])
+        return pods
+
     def _wait_pod_started(self, name, **kwargs):
-        logger.info('Waiting for pod %s to start', name)
+        logger.info('Waiting for pod %s of to start', name)
         self.k8s_namespace.wait_for_pod_started(name, **kwargs)
         pod = self.k8s_namespace.get_pod(name)
         logger.info('Pod %s ready, IP: %s', pod.metadata.name,
@@ -338,3 +356,97 @@ class KubernetesBaseRunner(base_runner.BaseRunner):
         if resource_suffix:
             parts.append(resource_suffix)
         return '-'.join(parts)
+
+    # def _await_container_ready(self, core: client.CoreV1Api, pod_name: str,
+    #                            container_name: str, namespace: str) -> None:
+    #     while not self._log_stop_event.is_set():
+    #         try:
+    #             pod_status = core.read_namespaced_pod_status(
+    #                 pod_name, namespace).status
+    #             candidate_containers = [
+    #                 container for container in pod_status.container_statuses
+    #                 if container.name == container_name
+    #             ]
+    #             if not candidate_containers:
+    #                 time.sleep(_BACKOFF_SECONDS)
+    #                 continue
+    #             container = candidate_containers[0]
+    #             if not container.ready:
+    #                 time.sleep(_BACKOFF_SECONDS)
+    #             else:
+    #                 break
+    #         except kubernetes.client.rest.ApiException:
+    #             time.sleep(_BACKOFF_SECONDS)
+    #
+    # def _log_container(self, core: client.CoreV1Api, pod_name: str,
+    #                    container_name: str, namespace: str) -> None:
+    #     query_restarted = False
+    #     logfile = os.path.join(
+    #         _TEST_LOG_BASE_DIR,
+    #         f"{self.case_name}.{pod_name}.{container_name}.sponge_log.log")
+    #
+    #     self._await_container_ready(core, pod_name, container_name, namespace)
+    #
+    #     with open(logfile, "w") as f:
+    #         while not self._log_stop_event.is_set():
+    #             try:
+    #                 if query_restarted:
+    #                     f.write(
+    #                         "Restarted log fetching. Attempting to read from the beginning, but truncation may have occurred.\n"
+    #                     )
+    #                 w = watch.Watch()
+    #                 for msg in w.stream(core.read_namespaced_pod_log,
+    #                                     name=pod_name,
+    #                                     namespace=namespace,
+    #                                     container=container_name,
+    #                                     follow=True):
+    #                     f.write(msg)
+    #                     f.write("\n")
+    #             except kubernetes.client.rest.ApiException as e:
+    #                 f.write(f"Exception fetching logs: {e}\n")
+    #                 query_restarted = True
+    #                 time.sleep(_BACKOFF_SECONDS)
+    #
+    # def _start_logging_container(self, core: client.CoreV1Api, pod_name: str,
+    #                              container_name: str, namespace: str) -> None:
+    #     t = threading.Thread(target=self._log_container,
+    #                          args=(core, pod_name, container_name, namespace),
+    #                          daemon=True)
+    #     t.start()
+    #
+    # def _start_logging_pod(self, core: client.CoreV1Api, pod_name: str,
+    #                        namespace: str) -> None:
+    #     retryer = tenacity.Retrying(retry=tenacity.retry_if_exception_type(
+    #         kubernetes.client.rest.ApiException),
+    #                                 wait=tenacity.wait_fixed(_BACKOFF_SECONDS),
+    #                                 reraise=True)
+    #     pod = retryer(core.read_namespaced_pod, pod_name, namespace)
+    #     for container in pod.spec.containers:
+    #         self._start_logging_container(core, pod_name, container.name,
+    #                                       namespace)
+    #
+    # def _start_logging_deployment(self, deployment_name: str):
+    #     core = self.k8s_namespace.api.core
+    #     apps = self.k8s_namespace.api.apps
+    #
+    #     pod_names = None
+    #     namespace = self.k8s_namespace.name
+    #
+    #     def _get_deployment_pods():
+    #         pods_all_namespaces = core.list_pod_for_all_namespaces(
+    #             label_selector=self.pod_label_selector).items
+    #         pods = [
+    #             pod for pod in pods_all_namespaces
+    #             if pod.metadata.namespace == namespace
+    #         ]
+    #         return [pod.metadata.name for pod in pods]
+    #
+    #     retryer = tenacity.Retrying(retry=tenacity.retry_if_exception_type(
+    #         kubernetes.client.rest.ApiException),
+    #                                 wait=tenacity.wait_fixed(_BACKOFF_SECONDS),
+    #                                 reraise=True)
+    #
+    #     pod_names = retryer(_get_deployment_pods)
+    #
+    #     for pod_name in pod_names:
+    #         self._start_logging_pod(core, pod_name, namespace)

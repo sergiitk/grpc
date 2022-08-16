@@ -183,17 +183,16 @@ class KubernetesServerRunner(k8s_base_runner.KubernetesBaseRunner):
             server_id=server_id,
             secure_mode=secure_mode)
 
+        pods = self._wait_deployment_pod_count(self.deployment, replica_count)
+        for pod in pods:
+            self._wait_pod_started(pod.metadata.name)
+
+        # Verify the deployment reports all pods started as well.
         self._wait_deployment_with_available_replicas(self.deployment_name,
                                                       replica_count)
 
-        # Wait for pods running
-        pods = self.k8s_namespace.list_deployment_pods(self.deployment)
-
         servers = []
         for pod in pods:
-            pod_name = pod.metadata.name
-            self._wait_pod_started(pod_name)
-
             pod_ip = pod.status.pod_ip
             rpc_host = None
             # Experimental, for local debugging.
@@ -214,7 +213,7 @@ class KubernetesServerRunner(k8s_base_runner.KubernetesBaseRunner):
                               secure_mode=secure_mode,
                               server_id=server_id,
                               rpc_host=rpc_host,
-                              pod_name=pod_name))
+                              pod_name=pod.metadata.name))
         return servers
 
     def cleanup(self, *, force=False, force_namespace=False):  # pylint: disable=arguments-differ

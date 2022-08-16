@@ -12,10 +12,12 @@ spec:
   selector:
     matchLabels:
       app: ${deployment_name}
+      run_id: ${run_id}
   template:
     metadata:
       labels:
         app: ${deployment_name}
+        run_id: ${run_id}
         owner: xds-k8s-interop-test
     spec:
       % if service_account_name:

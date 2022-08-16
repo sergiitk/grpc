@@ -39,6 +39,10 @@ def log_dir_mkdir(name: str) -> pathlib.Path:
     if ".." in name:
         raise ValueError(f'Dir name must not be above the log root.')
     log_subdir = log_get_root_dir() / name
-    log_subdir.mkdir(exist_ok=True)
-    logging.info("Created log subdir: %s", log_subdir)
+    if log_subdir.exists() and log_subdir.is_dir():
+        logging.debug("Using existing log subdir: %s", log_subdir)
+    else:
+        log_subdir.mkdir()
+        logging.debug("Created log subdir: %s", log_subdir)
+
     return log_subdir
