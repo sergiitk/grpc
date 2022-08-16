@@ -16,8 +16,18 @@ Common functionality for running xDS Test Client and Server remotely.
 """
 from abc import ABCMeta
 from abc import abstractmethod
+import functools
+import pathlib
 from typing import Dict, Optional
 import urllib.parse
+
+from absl import flags
+
+from framework import xds_flags
+from framework.helpers import logs
+
+flags.adopt_module_key_flags(logs)
+_LOGS_SUBDIR = 'test_app_logs'
 
 
 class RunnerError(Exception):
@@ -25,6 +35,23 @@ class RunnerError(Exception):
 
 
 class BaseRunner(metaclass=ABCMeta):
+    _logs_subdir: Optional[pathlib.Path] = None
+
+    def __init__(self):
+        if xds_flags.COLLECT_APP_LOGS.value:
+            self._logs_subdir = logs.log_dir_mkdir(_LOGS_SUBDIR)
+
+    @property
+    @functools.lru_cache(None)
+    def should_collect_logs(self) -> bool:
+        return self._logs_subdir is not None
+
+    @property
+    @functools.lru_cache(None)
+    def logs_subdir(self) -> pathlib.Path:
+        if not self.should_collect_logs:
+            raise FileNotFoundError('Log collection is not enabled.')
+        return self._logs_subdir
 
     @abstractmethod
     def run(self, **kwargs):

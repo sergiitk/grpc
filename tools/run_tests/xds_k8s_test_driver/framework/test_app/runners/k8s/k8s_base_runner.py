@@ -47,6 +47,7 @@ class KubernetesBaseRunner(base_runner.BaseRunner):
                  k8s_namespace,
                  namespace_template=None,
                  reuse_namespace=False):
+        super().__init__()
         self._highlighter = _HighlighterYaml()
 
         # Kubernetes namespaced resources manager
