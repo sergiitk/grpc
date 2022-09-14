@@ -40,6 +40,8 @@ from framework.infrastructure import k8s
 from framework.rpc import grpc_channelz
 from framework.test_app import client_app
 from framework.test_app import server_app
+from framework.test_app.runners.k8s import k8s_xds_client_runner
+from framework.test_app.runners.k8s import k8s_xds_server_runner
 
 logger = logging.getLogger(__name__)
 # Flags
@@ -67,7 +69,8 @@ _Socket = grpc_channelz.Socket
 _ChannelState = grpc_channelz.ChannelState
 _XdsTestServer = server_app.XdsTestServer
 _XdsTestClient = client_app.XdsTestClient
-
+_KubernetesClientRunner = k8s_xds_client_runner.KubernetesClientRunner
+_KubernetesServerRunner = k8s_xds_server_runner.KubernetesServerRunner
 
 def debug_cert(cert):
     if not cert:
@@ -161,12 +164,12 @@ def debug_security_setup_positive(test_client, test_server):
 def debug_basic_setup(test_client, test_server):
     """Show channel and server socket pair"""
     test_client.wait_for_active_server_channel()
-    client_sock: _Socket = test_client.get_active_server_channel_socket()
-    server_sock: _Socket = test_server.get_server_socket_matching_client(
-        client_sock)
+    # client_sock: _Socket = test_client.get_active_server_channel_socket()
+    # server_sock: _Socket = test_server.get_server_socket_matching_client(
+    #     client_sock)
 
-    print(f'Client socket:\n{client_sock}\n')
-    print(f'Matching server:\n{server_sock}\n')
+    # print(f'Client socket:\n{client_sock}\n')
+    # print(f'Matching server:\n{server_sock}\n')
 
 
 def main(argv):
@@ -180,10 +183,12 @@ def main(argv):
 
     # Resource names.
     resource_prefix: str = xds_flags.RESOURCE_PREFIX.value
+    resource_suffix: str = xds_flags.RESOURCE_SUFFIX.value
 
     # Server
     server_name = xds_flags.SERVER_NAME.value
-    server_namespace = resource_prefix
+    server_namespace = _KubernetesServerRunner.make_namespace_name(
+        resource_prefix, resource_suffix)
     server_k8s_ns = k8s.KubernetesNamespace(k8s_api_manager, server_namespace)
     server_pod = get_deployment_pods(server_k8s_ns, server_name)[0]
     test_server: _XdsTestServer = _XdsTestServer(
@@ -196,7 +201,8 @@ def main(argv):
 
     # Client
     client_name = xds_flags.CLIENT_NAME.value
-    client_namespace = resource_prefix
+    client_namespace = _KubernetesClientRunner.make_namespace_name(
+        xds_flags.RESOURCE_PREFIX.value, xds_flags.RESOURCE_SUFFIX.value)
     client_k8s_ns = k8s.KubernetesNamespace(k8s_api_manager, client_namespace)
     client_pod = get_deployment_pods(client_k8s_ns, client_name)[0]
     test_client: _XdsTestClient = _XdsTestClient(
