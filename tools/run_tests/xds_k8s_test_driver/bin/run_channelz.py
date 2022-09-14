@@ -72,6 +72,7 @@ _XdsTestClient = client_app.XdsTestClient
 _KubernetesClientRunner = k8s_xds_client_runner.KubernetesClientRunner
 _KubernetesServerRunner = k8s_xds_server_runner.KubernetesServerRunner
 
+
 def debug_cert(cert):
     if not cert:
         return '<missing>'
