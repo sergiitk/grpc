@@ -58,3 +58,12 @@ flags.mark_flags_as_required([
     "server_image",
     "client_image",
 ])
+
+
+def require_secondary_context(filename):
+    flags.mark_flag_as_required('secondary_kube_context')
+    flags.register_validator('secondary_kube_context',
+                             lambda val: bool(len(val)),
+                             message=f"{filename}  requires configured "
+                             f"secondary_kube_context to access the "
+                             f"secondary k8s cluster")
