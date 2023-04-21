@@ -34,7 +34,7 @@ spec:
           periodSeconds: 3
           ## Extend the number of probes well beyond the duration of the test
           ## driver waiting for the container to start.
-          failureThreshold: 1000
+          failureThreshold: 3
         args:
           - "--port=${test_port}"
           - "--maintenance_port=${maintenance_port}"
@@ -54,6 +54,8 @@ spec:
             value: "true"
           - name: GRPC_XDS_EXPERIMENTAL_RBAC
             value: "true"
+          - name: JAVA_OPTS
+            value: "-Djava.util.logging.config.file=/usr/src/app/logging.properties"
         volumeMounts:
           - mountPath: /tmp/grpc-xds/
             name: grpc-td-conf

@@ -36,6 +36,7 @@ class PodLogCollector(threading.Thread):
     _out_stream: Optional[TextIO]
     _watcher: Optional[watch.Watch]
     _read_pod_log_fn: Callable[..., Any]
+    _stream_restarts: int = 0
 
     def __init__(self,
                  *,
@@ -64,8 +65,8 @@ class PodLogCollector(threading.Thread):
         super().__init__(name=f'pod-log-{pod_name}', daemon=True)
 
     def run(self):
-        logger.info('Starting log collection thread %i for %s', self.ident,
-                    self.pod_name)
+        logger.info('[%s] Starting pod log collection on thread %i',
+                    self.pod_name, self.ident)
         try:
             self._out_stream = open(self.log_path,
                                     'w',
@@ -87,8 +88,9 @@ class PodLogCollector(threading.Thread):
             self._watcher.stop()
             self._watcher = None
         if self._out_stream is not None:
-            self._write(f'Finished log collection for pod {self.pod_name}',
-                        force_flush=True)
+            self._log('[%s] Finished pod log collection.',
+                      self.pod_name,
+                      force_flush=True)
             self._out_stream.close()
             self._out_stream = None
         self.drain_event.set()
@@ -97,28 +99,52 @@ class PodLogCollector(threading.Thread):
         try:
             self._restart_stream()
         except client.ApiException as e:
-            self._write(f"Exception fetching logs: {e}")
+            self._log(
+                '[%s] Exception fetching pod logs: %s.'
+                ' Restarting log fetching in %i sec.',
+                self.pod_name,
+                e,
+                self.error_backoff_sec,
+                log_level=logging.WARNING)
             self._write(
-                f'Restarting log fetching in {self.error_backoff_sec} sec. '
-                f'Will attempt to read from the beginning, but log '
-                f'truncation may occur.',
+                f'Will attempt to read from the beginning,'
+                f' but log truncation may occur.',
                 force_flush=True)
+        finally:
+            # Ensure the delay between stream restarts.
             # Instead of time.sleep(), we're waiting on the stop event
             # in case it gets set earlier.
             self.stop_event.wait(timeout=self.error_backoff_sec)
 
     def _restart_stream(self):
+        if self._stream_restarts > 10:
+            # bail out, just in case.
+            self._stop()
+            return
+        self._log('[%s] Started watching pod logs, stream restarts: %i.',
+                  self.pod_name, self._stream_restarts)
+        self._stream_restarts += 1
         self._watcher = watch.Watch()
         for msg in self._watcher.stream(self._read_pod_log_fn,
                                         name=self.pod_name,
                                         namespace=self.namespace_name,
                                         timestamps=self.log_timestamps,
+                                        previous=False,
                                         follow=True):
+            msg: str  # Plain log line.
             self._write(msg)
             # Every message check if a stop is requested.
             if self.stop_event.is_set():
                 self._stop()
                 return
+
+    def _log(self,
+             msg: str,
+             *args,
+             force_flush: bool = False,
+             log_level: int = logging.INFO):
+        logger.log(log_level, msg, *args)
+        self._write(msg % tuple(args), force_flush=force_flush)
 
     def _write(self, msg: str, force_flush: bool = False):
         self._out_stream.write(msg)

@@ -382,7 +382,7 @@ class KubernetesBaseRunner(base_runner.BaseRunner):
             # Timestamps are enabled because not all language implementations
             # include them.
             # TODO(sergiitk): Make this setting language-specific.
-            log_timestamps=True)
+            log_timestamps=False)
         self.pod_log_collectors.append(pod_log_collector)
         return pod_log_collector
 
