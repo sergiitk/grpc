@@ -50,19 +50,19 @@ argp.add_argument(
     "--dns_server_port",
     default=None,
     type=int,
-    help="Port that local DNS server is listening on.",
+    help=("Port that local DNS server is listening on."),
 )
 argp.add_argument(
     "--dns_resolver_bin_path",
     default=None,
     type=str,
-    help="Path to the DNS health check utility.",
+    help=("Path to the DNS health check utility."),
 )
 argp.add_argument(
     "--tcp_connect_bin_path",
     default=None,
     type=str,
-    help="Path to the TCP health check utility.",
+    help=("Path to the TCP health check utility."),
 )
 argp.add_argument(
     "--extra_args",
@@ -89,8 +89,10 @@ def python_args(arg_list):
 cur_resolver = os.environ.get("GRPC_DNS_RESOLVER")
 if cur_resolver and cur_resolver != "ares":
     test_runner_log(
-        "WARNING: cur resolver set to %s. This set of tests "
-        "needs to use GRPC_DNS_RESOLVER=ares."
+        (
+            "WARNING: cur resolver set to %s. This set of tests "
+            "needs to use GRPC_DNS_RESOLVER=ares."
+        )
     )
     test_runner_log("Exit 1 without running tests.")
     sys.exit(1)
@@ -120,7 +122,10 @@ def wait_until_dns_server_is_up(
         tcp_connect_subprocess.communicate()
         if tcp_connect_subprocess.returncode == 0:
             test_runner_log(
-                "Health check: attempt to make an A-record query to DNS server."
+                (
+                    "Health check: attempt to make an A-record "
+                    "query to DNS server."
+                )
             )
             dns_resolver_subprocess = subprocess.Popen(
                 python_args(
@@ -142,19 +147,23 @@ def wait_until_dns_server_is_up(
             if dns_resolver_subprocess.returncode == 0:
                 if "123.123.123.123".encode("ascii") in dns_resolver_stdout:
                     test_runner_log(
-                        "DNS server is up! "
-                        "Successfully reached it over UDP and TCP."
+                        (
+                            "DNS server is up! "
+                            "Successfully reached it over UDP and TCP."
+                        )
                     )
                 return
         time.sleep(0.1)
     dns_server_subprocess.kill()
     dns_server_subprocess.wait()
     test_runner_log(
-        "Failed to reach DNS server over TCP and/or UDP. "
-        "Exitting without running tests."
+        (
+            "Failed to reach DNS server over TCP and/or UDP. "
+            "Exitting without running tests."
+        )
     )
     test_runner_log(
-        "======= DNS server stdout (merged stdout and stderr) ============="
+        "======= DNS server stdout " "(merged stdout and stderr) ============="
     )
     with open(dns_server_subprocess_output, "r") as l:
         test_runner_log(l.read())
