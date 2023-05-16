@@ -44,21 +44,23 @@ _ClientStatusRequest = csds_pb2.ClientStatusRequest
 class CsdsClient(framework.rpc.grpc.GrpcClientHelper):
     stub: csds_pb2_grpc.ClientStatusDiscoveryServiceStub
 
-    def __init__(self,
-                 channel: grpc.Channel,
-                 *,
-                 log_target: Optional[str] = ''):
-        super().__init__(channel,
-                         csds_pb2_grpc.ClientStatusDiscoveryServiceStub,
-                         log_target=log_target)
+    def __init__(
+        self, channel: grpc.Channel, *, log_target: Optional[str] = ""
+    ):
+        super().__init__(
+            channel,
+            csds_pb2_grpc.ClientStatusDiscoveryServiceStub,
+            log_target=log_target,
+        )
 
     def fetch_client_status(self, **kwargs) -> Optional[ClientConfig]:
         """Fetches the active xDS configurations."""
-        response = self.call_unary_with_deadline(rpc='FetchClientStatus',
-                                                 req=_ClientStatusRequest(),
-                                                 **kwargs)
+        response = self.call_unary_with_deadline(
+            rpc="FetchClientStatus", req=_ClientStatusRequest(), **kwargs
+        )
         if len(response.config) != 1:
-            logger.debug('Unexpected number of client configs: %s',
-                         len(response.config))
+            logger.debug(
+                "Unexpected number of client configs: %s", len(response.config)
+            )
             return None
         return response.config[0]

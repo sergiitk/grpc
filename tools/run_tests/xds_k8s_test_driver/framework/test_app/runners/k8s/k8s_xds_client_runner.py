@@ -27,27 +27,27 @@ logger = logging.getLogger(__name__)
 
 
 class KubernetesClientRunner(k8s_base_runner.KubernetesBaseRunner):
-
     def __init__(  # pylint: disable=too-many-locals
-            self,
-            k8s_namespace,
-            *,
-            deployment_name,
-            image_name,
-            td_bootstrap_image,
-            gcp_api_manager: gcp.api.GcpApiManager,
-            gcp_project: str,
-            gcp_service_account: str,
-            xds_server_uri=None,
-            network='default',
-            service_account_name=None,
-            stats_port=8079,
-            deployment_template='client.deployment.yaml',
-            service_account_template='service-account.yaml',
-            reuse_namespace=False,
-            namespace_template=None,
-            debug_use_port_forwarding=False,
-            enable_workload_identity=True):
+        self,
+        k8s_namespace,
+        *,
+        deployment_name,
+        image_name,
+        td_bootstrap_image,
+        gcp_api_manager: gcp.api.GcpApiManager,
+        gcp_project: str,
+        gcp_service_account: str,
+        xds_server_uri=None,
+        network="default",
+        service_account_name=None,
+        stats_port=8079,
+        deployment_template="client.deployment.yaml",
+        service_account_template="service-account.yaml",
+        reuse_namespace=False,
+        namespace_template=None,
+        debug_use_port_forwarding=False,
+        enable_workload_identity=True,
+    ):
         super().__init__(k8s_namespace, namespace_template, reuse_namespace)
 
         # Settings
@@ -84,25 +84,36 @@ class KubernetesClientRunner(k8s_base_runner.KubernetesBaseRunner):
 
     # TODO(sergiitk): make rpc UnaryCall enum or get it from proto
     def run(  # pylint: disable=arguments-differ
-            self,
-            *,
-            server_target,
-            rpc='UnaryCall',
-            qps=25,
-            metadata='',
-            secure_mode=False,
-            config_mesh=None,
-            print_response=False,
-            log_to_stdout: bool = False) -> XdsTestClient:
+        self,
+        *,
+        server_target,
+        rpc="UnaryCall",
+        qps=25,
+        metadata="",
+        secure_mode=False,
+        config_mesh=None,
+        print_response=False,
+        log_to_stdout: bool = False,
+    ) -> XdsTestClient:
         logger.info(
             'Deploying xDS test client "%s" to k8s namespace %s: '
-            'server_target=%s rpc=%s qps=%s metadata=%r secure_mode=%s '
-            'print_response=%s', self.deployment_name, self.k8s_namespace.name,
-            server_target, rpc, qps, metadata, secure_mode, print_response)
-        self._logs_explorer_link(deployment_name=self.deployment_name,
-                                 namespace_name=self.k8s_namespace.name,
-                                 gcp_project=self.gcp_project,
-                                 gcp_ui_url=self.gcp_ui_url)
+            "server_target=%s rpc=%s qps=%s metadata=%r secure_mode=%s "
+            "print_response=%s",
+            self.deployment_name,
+            self.k8s_namespace.name,
+            server_target,
+            rpc,
+            qps,
+            metadata,
+            secure_mode,
+            print_response,
+        )
+        self._logs_explorer_link(
+            deployment_name=self.deployment_name,
+            namespace_name=self.k8s_namespace.name,
+            gcp_project=self.gcp_project,
+            gcp_ui_url=self.gcp_ui_url,
+        )
 
         super().run()
 
@@ -112,14 +123,16 @@ class KubernetesClientRunner(k8s_base_runner.KubernetesBaseRunner):
             self._grant_workload_identity_user(
                 gcp_iam=self.gcp_iam,
                 gcp_service_account=self.gcp_service_account,
-                service_account_name=self.service_account_name)
+                service_account_name=self.service_account_name,
+            )
 
             # Create service account
             self.service_account = self._create_service_account(
                 self.service_account_template,
                 service_account_name=self.service_account_name,
                 namespace_name=self.k8s_namespace.name,
-                gcp_service_account=self.gcp_service_account)
+                gcp_service_account=self.gcp_service_account,
+            )
 
         # Always create a new deployment
         self.deployment = self._create_deployment(
@@ -138,7 +151,8 @@ class KubernetesClientRunner(k8s_base_runner.KubernetesBaseRunner):
             metadata=metadata,
             secure_mode=secure_mode,
             config_mesh=config_mesh,
-            print_response=print_response)
+            print_response=print_response,
+        )
 
         # Load test client pod. We need only one client at the moment
         pod_name = self._wait_deployment_pod_count(self.deployment)[0]
@@ -151,21 +165,26 @@ class KubernetesClientRunner(k8s_base_runner.KubernetesBaseRunner):
 
         return self._xds_test_client_for_pod(pod, server_target=server_target)
 
-    def _xds_test_client_for_pod(self, pod: k8s.V1Pod, *,
-                                 server_target: str) -> XdsTestClient:
+    def _xds_test_client_for_pod(
+        self, pod: k8s.V1Pod, *, server_target: str
+    ) -> XdsTestClient:
         if self.debug_use_port_forwarding:
             pf = self._start_port_forwarding_pod(pod, self.stats_port)
             rpc_port, rpc_host = pf.local_port, pf.local_address
         else:
             rpc_port, rpc_host = self.stats_port, None
 
-        return XdsTestClient(ip=pod.status.pod_ip,
-                             rpc_port=rpc_port,
-                             server_target=server_target,
-                             hostname=pod.metadata.name,
-                             rpc_host=rpc_host)
+        return XdsTestClient(
+            ip=pod.status.pod_ip,
+            rpc_port=rpc_port,
+            server_target=server_target,
+            hostname=pod.metadata.name,
+            rpc_host=rpc_host,
+        )
 
-    def cleanup(self, *, force=False, force_namespace=False):  # pylint: disable=arguments-differ
+    def cleanup(
+        self, *, force=False, force_namespace=False
+    ):  # pylint: disable=arguments-differ
         if self.deployment or force:
             self._delete_deployment(self.deployment_name)
             self.deployment = None
@@ -173,16 +192,16 @@ class KubernetesClientRunner(k8s_base_runner.KubernetesBaseRunner):
             self._revoke_workload_identity_user(
                 gcp_iam=self.gcp_iam,
                 gcp_service_account=self.gcp_service_account,
-                service_account_name=self.service_account_name)
+                service_account_name=self.service_account_name,
+            )
             self._delete_service_account(self.service_account_name)
             self.service_account = None
         super().cleanup(force=force_namespace and force)
 
     @classmethod
-    def make_namespace_name(cls,
-                            resource_prefix: str,
-                            resource_suffix: str,
-                            name: str = 'client') -> str:
+    def make_namespace_name(
+        cls, resource_prefix: str, resource_suffix: str, name: str = "client"
+    ) -> str:
         """A helper to make consistent XdsTestClient kubernetes namespace name
         for given resource prefix and suffix.
 

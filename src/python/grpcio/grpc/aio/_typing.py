@@ -22,8 +22,8 @@ from ._metadata import Metadata
 from ._metadata import MetadataKey
 from ._metadata import MetadataValue
 
-RequestType = TypeVar('RequestType')
-ResponseType = TypeVar('ResponseType')
+RequestType = TypeVar("RequestType")
+ResponseType = TypeVar("ResponseType")
 SerializingFunction = Callable[[Any], bytes]
 DeserializingFunction = Callable[[bytes], Any]
 MetadatumType = Tuple[MetadataKey, MetadataValue]

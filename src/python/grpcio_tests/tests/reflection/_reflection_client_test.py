@@ -36,7 +36,6 @@ _EMPTY_EXTENSIONS_SYMBOL_NAME = "grpc.testing.proto2.EmptyWithExtensions"
 
 
 class ReflectionClientTest(unittest.TestCase):
-
     def setUp(self):
         self._server = test_common.test_server()
         self._SERVICE_NAMES = (
@@ -61,8 +60,9 @@ class ReflectionClientTest(unittest.TestCase):
         self.assertCountEqual(self._SERVICE_NAMES, services)
 
     def testReflectionServiceName(self):
-        self.assertEqual(reflection.SERVICE_NAME,
-                         "grpc.reflection.v1alpha.ServerReflection")
+        self.assertEqual(
+            reflection.SERVICE_NAME, "grpc.reflection.v1alpha.ServerReflection"
+        )
 
     def testFindFile(self):
         file_name = _PROTO_FILE_NAME
@@ -110,7 +110,8 @@ class ReflectionClientTest(unittest.TestCase):
         self.assertTrue(method_desc.full_name.endswith(method_name))
 
         empty_message_desc = self.desc_pool.FindMessageTypeByName(
-            _EMPTY_PROTO_SYMBOL_NAME)
+            _EMPTY_PROTO_SYMBOL_NAME
+        )
         self.assertEqual(empty_message_desc, method_desc.input_type)
         self.assertEqual(empty_message_desc, method_desc.output_type)
 
