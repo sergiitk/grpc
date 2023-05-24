@@ -111,5 +111,6 @@ class AffinityTest(xds_k8s_testcase.RegularXdsKubernetesTestCase):
         with self.subTest('12_next_100_affinity_rpcs_pick_different_backend'):
             pass
 
+
 if __name__ == '__main__':
     absltest.main(failfast=True)
