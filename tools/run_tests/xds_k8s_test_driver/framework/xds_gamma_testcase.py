@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from framework.infrastructure import k8s
-import framework.xds_k8s_testcase as xds_k8s_testcase
 import framework.infrastructure.traffic_director_gamma as td_gamma
 from framework.test_app.runners.k8s import gamma_server_runner
+import framework.xds_k8s_testcase as xds_k8s_testcase
 
 GammaServerRunner = gamma_server_runner.GammaServerRunner
 
