@@ -585,6 +585,8 @@ class IsolatedXdsKubernetesTestCase(
         """Hook method for setting up the test fixture before exercising it."""
         super().setUp()
 
+        self.addCleanup(self.my_tear_down)
+
         if self.resource_suffix_randomize:
             self.resource_suffix = helpers_rand.random_resource_suffix()
         logger.info(
@@ -636,7 +638,7 @@ class IsolatedXdsKubernetesTestCase(
     def initKubernetesClientRunner(self) -> KubernetesClientRunner:
         raise NotImplementedError
 
-    def tearDown(self):
+    def my_tear_down(self):
         logger.info("----- TestMethod %s teardown -----", self.id())
         logger.debug("Getting pods restart times")
         client_restarts: int = 0

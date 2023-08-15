@@ -13,16 +13,22 @@
 # limitations under the License.
 """Base test case used for xds test suites."""
 
-from typing import Optional
+import logging
 import unittest
+from typing import Optional
 
-from absl import logging
 from absl.testing import absltest
+
+import absl.testing.xml_reporter
+
+logger = logging.getLogger(__name__)
 
 
 class BaseTestCase(absltest.TestCase):
     def run(self, result: unittest.TestResult = None) -> None:
-        super().run(result)
+        result = super().run(result)
+        return
+
         current_errors = [
             error for test, error in result.errors if test is self
         ]
@@ -32,9 +38,10 @@ class BaseTestCase(absltest.TestCase):
         current_unexpected_successes = [
             test for test in result.unexpectedSuccesses if test is self
         ]
-        current_skipped = [
-            reason for test, reason in result.skipped if test is self
-        ]
+        current_skipped = next(
+            (reason for test, reason in result.skipped if test is self),
+            None,
+        )
         # Assume one test case will only have one status.
         if current_errors or current_failures:
             logging.info("----- TestCase %s FAILED -----", self.id())
@@ -55,8 +62,8 @@ class BaseTestCase(absltest.TestCase):
     def _print_error_list(
         self, errors: Optional[list[str]], is_unexpected_error: bool = False
     ) -> None:
-        # FAILUREs are those errors explicitly signalled using the TestCase.assert*()
-        # methods.
+        # FAILUREs are those errors explicitly signalled using
+        # the TestCase.assert*() methods.
         for err in errors:
             logging.error(
                 "%s Traceback in %s:\n%s",
@@ -64,3 +71,25 @@ class BaseTestCase(absltest.TestCase):
                 self.id(),
                 err,
             )
+
+
+class CustomTextAndXMLTestResult(
+    absl.testing.xml_reporter._TextAndXMLTestResult
+):
+    def addError(self, test, err):
+        print(11111)
+        logger.info("----- TestCase %s FAILED -----", test.id())
+        logger.error("ERROR Traceback in %s:\n%r", test.id(), err)
+        super().addError(test, err)
+
+    def addFailure(self, test, err):
+        print(11111)
+        logger.info("----- TestCase %s FAILED -----", test.id())
+        logger.error("Failure Traceback in %s:\n%r", test.id(), err)
+        super().addFailure(test, err)
+
+
+# Monkey patch the default report class
+absl.testing.xml_reporter.TextAndXMLTestRunner._TEST_RESULT_CLASS = (
+    CustomTextAndXMLTestResult
+)
