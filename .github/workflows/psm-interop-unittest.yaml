@@ -31,10 +31,10 @@ jobs:
       run: >
         pwd &&
         python -m grpc_tools.protoc --proto_path=../../../
-          --python_out=. --grpc_python_out=.
-          src/proto/grpc/testing/empty.proto
-          src/proto/grpc/testing/messages.proto
-          src/proto/grpc/testing/test.proto
+        --python_out=. --grpc_python_out=.
+        src/proto/grpc/testing/empty.proto
+        src/proto/grpc/testing/messages.proto
+        src/proto/grpc/testing/test.proto
 
     - name: "Run unit tests"
       run: python -m tests.unit.helpers.skips_test
