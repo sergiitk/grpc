@@ -1,4 +1,4 @@
-name: PSM Interop Unit Tests
+name: PSM Interop
 
 on:
   push:
