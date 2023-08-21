@@ -1,4 +1,4 @@
-name: PSM Interop Unittest
+name: PSM Interop Unit Tests
 
 on:
   push:
@@ -29,6 +29,7 @@ jobs:
 
     - name: "Generate protos"
       run: >
+        pwd &&
         python -m grpc_tools.protoc --proto_path=../../../
           --python_out=. --grpc_python_out=.
           src/proto/grpc/testing/empty.proto
