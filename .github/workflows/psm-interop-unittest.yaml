@@ -19,12 +19,17 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
+    # To add this job to required GitHub checks, it's not enough to use
+    # the on.pull_request.paths filter. For required checks, the job needs to
+    # return the success status, and not be skipped.
+    # Using paths-filter action, we skip the setup/test steps when psm interop
+    # files are unchanged, and the job returns success.
     - uses: dorny/paths-filter@v2
       id: paths_filter
       with:
-        # - 'tools/run_tests/xds_k8s_test_driver/**'
         filters:  |
           psm_interop_src:
+            - 'tools/run_tests/xds_k8s_test_driver/**'
             - 'src/proto/grpc/testing/empty.proto'
             - 'src/proto/grpc/testing/messages.proto'
             - 'src/proto/grpc/testing/test.proto'
