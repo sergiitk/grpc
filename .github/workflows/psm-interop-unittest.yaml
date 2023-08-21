@@ -1,10 +1,12 @@
 name: PSM Interop
 
 on:
-  push:
-    branches:
-    - psm-interop-gh-action-test
   pull_request:
+    paths:
+      - 'tools/run_tests/xds_k8s_test_driver/**'
+      - 'src/proto/grpc/testing/empty.proto'
+      - 'src/proto/grpc/testing/messages.proto'
+      - 'src/proto/grpc/testing/test.proto'
 
 permissions:
   contents: read
