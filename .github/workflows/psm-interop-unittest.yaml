@@ -13,6 +13,7 @@ permissions:
 
 jobs:
   unittest:
+    name: "Unit Tests"
     runs-on: ubuntu-latest
     defaults:
       run:
