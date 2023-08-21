@@ -2,11 +2,6 @@ name: PSM Interop
 
 on:
   pull_request:
-    paths:
-      - 'tools/run_tests/xds_k8s_test_driver/**'
-      - 'src/proto/grpc/testing/empty.proto'
-      - 'src/proto/grpc/testing/messages.proto'
-      - 'src/proto/grpc/testing/test.proto'
 
 permissions:
   contents: read
@@ -14,25 +9,42 @@ permissions:
 jobs:
   unittest:
     runs-on: ubuntu-latest
+    permissions:
+      # Used by paths-filter to get the diff.
+      pull-requests: read
     defaults:
       run:
         working-directory: 'tools/run_tests/xds_k8s_test_driver'
 
     steps:
     - uses: actions/checkout@v3
+
+    - uses: dorny/paths-filter@v2
+      id: paths_filter
+      with:
+        filters:  |
+          psm_interop_src:
+            - 'tools/run_tests/xds_k8s_test_driver/**'
+            - 'src/proto/grpc/testing/empty.proto'
+            - 'src/proto/grpc/testing/messages.proto'
+            - 'src/proto/grpc/testing/test.proto'
+
     - uses: actions/setup-python@v4
+      if: ${{ steps.paths_filter.outputs.psm_interop_src == 'true' }}
       with:
         python-version: '3.10'
         cache: 'pip'
         cache-dependency-path: 'tools/run_tests/xds_k8s_test_driver/requirements.lock'
 
     - name: "Install requirements"
+      if: ${{ steps.paths_filter.outputs.psm_interop_src == 'true' }}
       run: |
         pip list
         pip install -r requirements.lock
         pip list
 
     - name: "Generate protos"
+      if: ${{ steps.paths_filter.outputs.psm_interop_src == 'true' }}
       run: >
         python -m grpc_tools.protoc --proto_path=../../../
         --python_out=. --grpc_python_out=.
@@ -41,4 +53,5 @@ jobs:
         src/proto/grpc/testing/test.proto
 
     - name: "Run unit tests"
+      if: ${{ steps.paths_filter.outputs.psm_interop_src == 'true' }}
       run: python -m tests.unit
