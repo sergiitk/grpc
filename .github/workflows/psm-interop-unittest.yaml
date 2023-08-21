@@ -3,7 +3,7 @@ name: PSM Interop
 on:
   pull_request:
     paths:
-      - 'tools/run_tests/xds_k8s_test_driver/**'
+      # - 'tools/run_tests/xds_k8s_test_driver/**'
       - 'src/proto/grpc/testing/empty.proto'
       - 'src/proto/grpc/testing/messages.proto'
       - 'src/proto/grpc/testing/test.proto'
