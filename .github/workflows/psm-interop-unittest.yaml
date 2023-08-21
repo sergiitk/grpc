@@ -25,11 +25,13 @@ jobs:
         cache-dependency-path: 'tools/run_tests/xds_k8s_test_driver/requirements.lock'
 
     - name: "Install requirements"
-      run: pip list && pip install -r requirements.lock && pip list
+      run: |
+        pip list
+        pip install -r requirements.lock
+        pip list
 
     - name: "Generate protos"
       run: >
-        pwd &&
         python -m grpc_tools.protoc --proto_path=../../../
         --python_out=. --grpc_python_out=.
         src/proto/grpc/testing/empty.proto
@@ -37,4 +39,4 @@ jobs:
         src/proto/grpc/testing/test.proto
 
     - name: "Run unit tests"
-      run: python -m tests.unit.helpers.skips_test
+      run: python -m tests.unit
