@@ -9,6 +9,11 @@ permissions:
 jobs:
   unittest:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python_version: ["3.9", "3.10"]
+        
     permissions:
       # Used by paths-filter to get the diff.
       pull-requests: read
@@ -37,7 +42,7 @@ jobs:
     - uses: actions/setup-python@v4
       if: ${{ steps.paths_filter.outputs.psm_interop_src == 'true' }}
       with:
-        python-version: '3.10'
+        python-version: "${{ matrix.python_version }}"
         cache: 'pip'
         cache-dependency-path: 'tools/run_tests/xds_k8s_test_driver/requirements.lock'
 
