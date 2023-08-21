@@ -22,9 +22,9 @@ jobs:
     - uses: dorny/paths-filter@v2
       id: paths_filter
       with:
+        # - 'tools/run_tests/xds_k8s_test_driver/**'
         filters:  |
           psm_interop_src:
-            - 'tools/run_tests/xds_k8s_test_driver/**'
             - 'src/proto/grpc/testing/empty.proto'
             - 'src/proto/grpc/testing/messages.proto'
             - 'src/proto/grpc/testing/test.proto'
