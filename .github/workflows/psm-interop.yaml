@@ -8,6 +8,7 @@ permissions:
 
 jobs:
   unittest:
+    name: "unittest (python ${{ matrix.python_version }})"
     runs-on: ubuntu-latest
     strategy:
       matrix:
