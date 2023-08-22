@@ -10,13 +10,11 @@ jobs:
   unittest:
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
       matrix:
         python_version: ["3.9", "3.10"]
-        
+      fail-fast: false
     permissions:
-      # Used by paths-filter to get the diff.
-      pull-requests: read
+      pull-requests: read  # Used by paths-filter to read the diff.
     defaults:
       run:
         working-directory: 'tools/run_tests/xds_k8s_test_driver'
