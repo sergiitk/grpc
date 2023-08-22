@@ -49,6 +49,8 @@ jobs:
       if: ${{ steps.paths_filter.outputs.psm_interop_src == 'true' }}
       run: |
         pip list
+        pip install --upgrade pip setuptools
+        pip list
         pip install -r requirements.lock
         pip list
 
