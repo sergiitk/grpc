@@ -19,15 +19,15 @@ https://github.com/envoyproxy/envoy/blob/main/api/envoy/service/status/v3/csds.p
 import logging
 from typing import Optional
 
-# Needed to load the descriptors so that Any is parsed
-# TODO(sergiitk): replace with import xds_protos when it works
-import framework.rpc.xds_protos_imports  # pylint: disable=unused-import
-
 from envoy.service.status.v3 import csds_pb2
 from envoy.service.status.v3 import csds_pb2_grpc
 import grpc
 
 import framework.rpc
+
+# Needed to load the descriptors so that Any is parsed
+# TODO(sergiitk): replace with import xds_protos when it works
+import framework.rpc.xds_protos_imports  # pylint: disable=unused-import
 
 logger = logging.getLogger(__name__)
 
