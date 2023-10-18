@@ -14,11 +14,10 @@
 """Base test case used for xds test suites."""
 
 import logging
-import unittest
 from typing import Optional
+import unittest
 
 from absl.testing import absltest
-
 import absl.testing.xml_reporter
 
 logger = logging.getLogger(__name__)
