@@ -27,7 +27,9 @@ cat C:\image_id.txt
 dir C:\
 dir "%programfiles%"
 dir "%programfiles%\Python310"
-mklink "%programfiles%\Python310\python3.exe" "%programfiles%\Python310\python.exe"
+dir "%ProgramFiles(x86)%"
+dir "%ProgramFiles(x86)%\Python310"
+mklink "%ProgramFiles(x86)%\Python310\python3.exe" "%ProgramFiles(x86)%\Python310\python.exe"
 
 python --version
 python3 --version
