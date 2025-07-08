@@ -16,7 +16,8 @@
 set -ex
 
 # NOTE(rbellevi): We ignore generated code.
-IGNORE_PATTERNS=--ignore-patterns='.*pb2\.py,.*pb2_grpc\.py'
+# NOTE(sergiitk): And venv folders.
+IGNORE_PATTERNS=--ignore-patterns='.*pb2\.py,.*pb2_grpc\.py,^\.?venv([-_].+|$)'
 
 # change to root directory
 cd "$(dirname "$0")/../.."
@@ -37,8 +38,8 @@ TEST_DIRS=(
     'src/python/grpcio_tests/tests_gevent'
 )
 
-VIRTUALENV=venv_python_code
-python3 -m virtualenv $VIRTUALENV
+VIRTUALENV=.venv-pylint
+python3.7 -m venv $VIRTUALENV
 source $VIRTUALENV/bin/activate
 
 # TODO(https://github.com/grpc/grpc/issues/23394): Update Pylint.
@@ -56,6 +57,8 @@ for dir in "${TEST_DIRS[@]}"; do
   python3 -m pylint --rcfile=.pylintrc-tests -rn "$dir" ${IGNORE_PATTERNS} || EXIT=1
 done
 
+# NOTE(sergiitk): note that ignore-patterns doesn't work here because the list
+# of files provided explicitly as command args (by find+xargs).
 find examples/python \
   -iname "*.py" \
   -not -name "*_pb2.py" \
