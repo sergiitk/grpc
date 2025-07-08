@@ -25,10 +25,9 @@ cat C:\image_id.txt
 
 @rem create "python3" link that normally doesn't exist
 dir C:\
-dir C:\Python39\
-dir C:\Program Files
-dir C:\Program Files\Python310
-mklink C:\Program Files\Python310 C:\Python39\python.exe
+dir "%programfiles%"
+dir "%programfiles%\Python310"
+mklink "%programfiles%\Python310\python3.exe" "%programfiles%\Python310\python.exe"
 
 python --version
 python3 --version
