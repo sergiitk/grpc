@@ -18,18 +18,18 @@ echo "!TIME!: prepare_build_windows.bat started"
 @rem make sure msys binaries are preferred over cygwin binaries
 @rem set path to python3.9
 @rem set path to CMake
-set PATH=C:\tools\msys64\usr\bin;C:\C:\Program Files\Python310;C:\Program Files\CMake\bin;%PATH%
+set PATH=C:\tools\msys64\usr\bin;C:\Python39;C:\Program Files\CMake\bin;%PATH%
 
 @rem Print image ID of the windows kokoro image being used.
 cat C:\image_id.txt
 
-@rem create "python3" link that normally doesn't exist
+@rem install py 3.9
+choco install -y --no-progress --allow-multiple-versions python --version=3.9.13
 dir C:\
-dir "%programfiles%"
-dir "%programfiles%\Python310"
-dir "%ProgramFiles(x86)%"
-dir "%ProgramFiles(x86)%\Python310"
-mklink "%ProgramFiles(x86)%\Python310\python3.exe" "%ProgramFiles(x86)%\Python310\python.exe"
+dir C:\Python39
+
+@rem create "python3" link that normally doesn't exist
+mklink C:\Python39\python3.exe C:\Python39\python.exe
 
 python --version
 python3 --version
