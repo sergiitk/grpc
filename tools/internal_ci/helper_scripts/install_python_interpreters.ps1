@@ -67,18 +67,19 @@ function Install-Python {
 
 # Python 3.9
 $Python39x86Config = @{
-    PythonVersion = "3.9.11"
-    PythonInstaller = "python-3.9.11"
+    PythonVersion = "3.9.13"
+    PythonInstaller = "python-3.9.13"
     PythonInstallPath = "C:\Python39_32bit"
-    PythonInstallerHash = "4210652b14a030517046cdf111c09c1e"
+    PythonInstallerHash = "46c35b0a2a4325c275b2ed3187b08ac4"
 }
 Install-Python @Python39x86Config
 
 $Python39x64Config = @{
-    PythonVersion = "3.9.11"
-    PythonInstaller = "python-3.9.11-amd64"
+    # Keep the version in sync with the one installed by choco in prepare_build_windows.bat.
+    PythonVersion = "3.9.13"
+    PythonInstaller = "python-3.9.13-amd64"
     PythonInstallPath = "C:\Python39"
-    PythonInstallerHash = "fef52176a572efd48b7148f006b25801"
+    PythonInstallerHash = "e7062b85c3624af82079794729618eca"
 }
 Install-Python @Python39x64Config
 

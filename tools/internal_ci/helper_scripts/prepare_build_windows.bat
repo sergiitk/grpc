@@ -23,10 +23,8 @@ set PATH=C:\tools\msys64\usr\bin;C:\Python39;C:\Program Files\CMake\bin;%PATH%
 @rem Print image ID of the windows kokoro image being used.
 cat C:\image_id.txt
 
-@rem install py 3.9
-choco install -y --no-progress --allow-multiple-versions python --version=3.9.13
-dir C:\
-dir C:\Python39
+@rem install python 3.9
+choco install -y --no-progress python --version=3.9.13
 
 @rem create "python3" link that normally doesn't exist
 mklink C:\Python39\python3.exe C:\Python39\python.exe
