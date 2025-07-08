@@ -1,5 +1,5 @@
 #!/usr/bin/env powershell
-# Install Python 3.8 for x64 and x86 in order to build wheels on Windows.
+# Install Python 3.9 for x64 and x86 in order to build wheels on Windows.
 
 Set-StrictMode -Version 2
 $ErrorActionPreference = 'Stop'
@@ -64,23 +64,6 @@ function Install-Python {
 
     Write-Host "Python $PythonVersion installed by $PythonInstaller at $PythonInstallPath."
 }
-
-# Python 3.8
-$Python38x86Config = @{
-    PythonVersion = "3.8.10"
-    PythonInstaller = "python-3.8.10"
-    PythonInstallPath = "C:\Python38_32bit"
-    PythonInstallerHash = "b355cfc84b681ace8908ae50908e8761"
-}
-Install-Python @Python38x86Config
-
-$Python38x64Config = @{
-    PythonVersion = "3.8.10"
-    PythonInstaller = "python-3.8.10-amd64"
-    PythonInstallPath = "C:\Python38"
-    PythonInstallerHash = "62cf1a12a5276b0259e8761d4cf4fe42"
-}
-Install-Python @Python38x64Config
 
 # Python 3.9
 $Python39x86Config = @{
