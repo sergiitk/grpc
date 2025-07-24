@@ -179,6 +179,7 @@ if PY_MINOR_VERSION < 12:
 else:
     def _get_or_create_default_loop():
         import threading
+        warnings.simplefilter('default')
         warnings.warn(
             (
                 'There is no current event loop running in thread'
