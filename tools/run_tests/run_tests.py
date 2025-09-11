@@ -728,22 +728,35 @@ class PythonLanguage(object):
                     environment["GRPC_ENABLE_FORK_SUPPORT"] = "0"
 
                 environment.update(_PYTHON_EXTRA_ENV)
+                environment["GRPC_PYTHON_TESTRUNNER_FILTER"] = str(test_case)
 
-                jobs.extend(
-                    [
-                        self.config.job_spec(
-                            python_config.run
-                            + [self._TEST_COMMAND[io_platform]],
-                            timeout_seconds=10 * 60,
-                            environ=dict(
-                                GRPC_PYTHON_TESTRUNNER_FILTER=str(test_case),
-                                **environment,
-                            ),
-                            shortname=f"{python_config.name}.{io_platform}.{test_case}",
+                logfilename = ""
+                if self.args.xml_report:
+                    logfilename = (
+                        f"{self.args.xml_report.removesuffix('.xml')}.log"
+                    )
+
+                for test_case in test_cases:
+                    shortname = (
+                        f"{python_config.name}.{io_platform}.{test_case}"
+                    )
+                    per_suite_log_file = ""
+                    if logfilename:
+                        per_suite_log_file = os.path.join(
+                            os.path.dirname(logfilename),
+                            shortname,
+                            os.path.basename(logfilename),
                         )
-                        for test_case in test_cases
-                    ]
-                )
+
+                    job_spec = self.config.job_spec(
+                        python_config.run + [self._TEST_COMMAND[io_platform]],
+                        timeout_seconds=10 * 60,
+                        environ=environment,
+                        shortname=shortname,
+                        logfilename=per_suite_log_file,
+                    )
+                    jobs.append(job_spec)
+
         return jobs
 
     def pre_build_steps(self):
