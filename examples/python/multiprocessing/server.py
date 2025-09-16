@@ -18,13 +18,13 @@ from __future__ import division
 from __future__ import print_function
 
 from concurrent import futures
-import contextlib
 import datetime
 import logging
 import math
 import multiprocessing
 import os
 import platform
+import errno
 import socket
 import sys
 import time
@@ -36,8 +36,10 @@ import prime_pb2_grpc
 _LOGGER = logging.getLogger(__name__)
 
 _ONE_DAY = datetime.timedelta(days=1)
-_PROCESS_COUNT = multiprocessing.cpu_count()
-_THREAD_CONCURRENCY = _PROCESS_COUNT
+# _PROCESS_COUNT = multiprocessing.cpu_count()
+_PROCESS_COUNT = 3
+_THREAD_CONCURRENCY = 1
+# _THREAD_CONCURRENCY = _PROCESS_COUNT
 
 
 def is_prime(n):
@@ -50,9 +52,15 @@ def is_prime(n):
 
 class PrimeChecker(prime_pb2_grpc.PrimeCheckerServicer):
     def check(self, request, context):
+        if multiprocessing.current_process().name == 'Process-3':
+            _LOGGER.info("Sleepy")
+            time.sleep(3)
+            _LOGGER.info("Dead")
+            os.kill(os.getpid(), 9)
+            # sys.exit(1)
+
         _LOGGER.info(
-            "PID %d: Determining primality of %s",
-            os.getpid(),
+            "Determining primality of %s",
             request.candidate,
         )
         return prime_pb2.Primality(isPrime=is_prime(request.candidate))
@@ -66,10 +74,15 @@ def _wait_forever(server):
         server.stop(None)
 
 
-def _run_server(bind_address):
+def _run_server(host, port):
     """Start a server in a subprocess."""
+    setup_logger()
+
     _LOGGER.info("Starting new server with PID %d", os.getpid())
     options = (("grpc.so_reuseport", 1),)
+
+    bind_address=f"{host}:{port}"
+    s = get_socket(host, port, listen=False)
 
     server = grpc.server(
         futures.ThreadPoolExecutor(
@@ -83,18 +96,76 @@ def _run_server(bind_address):
     _wait_forever(server)
 
 
-@contextlib.contextmanager
-def _reserve_port():
-    """Find and reserve a port for all subprocesses to use."""
-    sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-    if sock.getsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT) == 0:
-        raise RuntimeError("Failed to set SO_REUSEPORT.")
-    sock.bind(("", 0))
-    try:
-        yield sock.getsockname()[1]
-    finally:
-        sock.close()
+# @contextlib.contextmanager
+# def _reserve_port():
+#     """Find and reserve a port for all subprocesses to use."""
+#     sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+#     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+#     if sock.getsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT) == 0:
+#         raise RuntimeError("Failed to set SO_REUSEPORT.")
+#     sock.bind(("", 0))
+#     try:
+#         yield sock.getsockname()[1]
+#     finally:
+#         sock.close()
+
+_DEFAULT_SOCK_OPTIONS = (
+    (socket.SO_REUSEADDR, socket.SO_REUSEPORT)
+)
+_UNRECOVERABLE_ERRNOS = (errno.EADDRINUSE, errno.ENOSR)
+
+def get_socket(
+    bind_address="localhost",
+    port=0,
+    listen=True,
+    sock_options=_DEFAULT_SOCK_OPTIONS,
+):
+    """Opens a socket.
+
+    Useful for reserving a port for a system-under-test.
+
+    Args:
+      bind_address: The host to which to bind.
+      port: The port to which to bind.
+      listen: A boolean value indicating whether or not to listen on the socket.
+      sock_options: A sequence of socket options to apply to the socket.
+
+    Returns:
+      A tuple containing:
+        - the address to which the socket is bound
+        - the port to which the socket is bound
+        - the socket object itself
+    """
+    _sock_options = sock_options if sock_options else []
+    if socket.has_ipv6:
+        address_families = (socket.AF_INET6, socket.AF_INET)
+    else:
+        address_families = (socket.AF_INET,)
+    for address_family in address_families:
+        try:
+            sock = socket.socket(address_family, socket.SOCK_STREAM)
+            for sock_option in _sock_options:
+                sock.setsockopt(socket.SOL_SOCKET, sock_option, 1)
+
+            for sock_option in _sock_options:
+                val = sock.getsockopt(socket.SOL_SOCKET, sock_option)
+                _LOGGER.info(f'{sock_option=} {val=}')
+
+            sock.bind((bind_address, port))
+            if listen:
+                sock.listen(1)
+            return bind_address, sock.getsockname()[1], sock
+        except OSError as os_error:
+            sock.close()
+            if os_error.errno in _UNRECOVERABLE_ERRNOS:
+                raise
+            else:
+                continue
+    raise RuntimeError(
+        "Failed to bind to {} with sock_options {}".format(
+            bind_address, sock_options
+        )
+    )
 
 
 def main():
@@ -118,28 +189,55 @@ def main():
             "consider using multiple worker processes on different ports."
         )
         sys.stdout.flush()
-    with _reserve_port() as port:
-        bind_address = "localhost:{}".format(port)
-        _LOGGER.info("Binding to '%s'", bind_address)
-        sys.stdout.flush()
-        workers = []
-        for _ in range(_PROCESS_COUNT):
-            # NOTE: It is imperative that the worker subprocesses be forked before
-            # any gRPC servers start up. See
-            # https://github.com/grpc/grpc/issues/16001 for more details.
-            worker = multiprocessing.Process(
-                target=_run_server, args=(bind_address,)
-            )
-            worker.start()
-            workers.append(worker)
-        for worker in workers:
-            worker.join()
 
+    host, port, sock = get_socket(listen=False)
+    bind_address=f"{host}:{port}"
+    _LOGGER.info("Binding to '%s'", bind_address)
+
+    workers = []
+    for _ in range(_PROCESS_COUNT):
+        # NOTE: It is imperative that the worker subprocesses be forked before
+        # any gRPC servers start up. See
+        # https://github.com/grpc/grpc/issues/16001 for more details.
+        worker = multiprocessing.Process(
+            target=_run_server, args=(host, port,),
+        )
+        # worker.start()
+        workers.append(worker)
+
+    for worker in workers:
+        worker.start()
+
+    try:
+        for worker in workers:
+            worker.join(timeout=10)
+    except KeyboardInterrupt:
+        print("Terminating processes...")
+        for worker in workers:
+            worker.terminate()
+
+
+    # with _reserve_port() as port:
+    #     bind_address = "localhost:{}".format(port)
+    #     sys.stdout.flush()
+
+
+
+def setup_logger():
+    # handler = logging.StreamHandler(sys.stdout)
+    # formatter = logging.Formatter("[PID %(process)d] %(message)s")
+    # handler.setFormatter(formatter)
+    # _LOGGER.addHandler(handler)
+    # _LOGGER.setLevel(logging.INFO)
+    logging.basicConfig(
+        level=logging.INFO,
+        style="{",
+        format="[{process} {processName} {thread} {threadName}] {message}",
+        datefmt="%m%d %H:%M:%S",
+    )
 
 if __name__ == "__main__":
-    handler = logging.StreamHandler(sys.stdout)
-    formatter = logging.Formatter("[PID %(process)d] %(message)s")
-    handler.setFormatter(formatter)
-    _LOGGER.addHandler(handler)
-    _LOGGER.setLevel(logging.INFO)
+    setup_logger()
+    # multiprocessing.set_start_method(method="spawn")
+    multiprocessing.set_start_method(method="forkserver")
     main()

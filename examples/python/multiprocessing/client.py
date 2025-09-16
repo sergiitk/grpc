@@ -28,8 +28,8 @@ import grpc
 import prime_pb2
 import prime_pb2_grpc
 
-_PROCESS_COUNT = 8
-_MAXIMUM_CANDIDATE = 10000
+_PROCESS_COUNT = 16
+_MAXIMUM_CANDIDATE = 1000
 
 # Each worker process initializes a single channel after forking.
 # It's regrettable, but to ensure that each subprocess only has to instantiate
@@ -87,7 +87,7 @@ def main():
     )
     args = parser.parse_args()
     primes = _calculate_primes(args.server_address)
-    print(primes)
+    print('\n'.join(str(num) for (num, result) in primes if result))
 
 
 if __name__ == "__main__":
