@@ -41,10 +41,16 @@ describe GRPC::ActiveCall do
     linux = RUBY_PLATFORM =~ /linux/
     arm = RUBY_PLATFORM =~ /(aarch64|arm64)/
     if linux && arm
+      GRPC.logger.info("I AM AN ARM LINUX")
       # TODO(stanleycheung): fix test timing out on linux arch, see
       # prod:grpc/core/master/linux/arm64/grpc_basictests_ruby
       skip "Flaky: this tests times out randomly when running on arm64 linux"
+      fail "am I skipped or I am failed?"
     end
+  end
+
+  after(:all) do
+    fail "I'll fail you even if nothing else did"
   end
 
   before(:each) do
@@ -95,6 +101,8 @@ describe GRPC::ActiveCall do
 
     describe '#multi_req_view' do
       it 'exposes a fixed subset of the ActiveCall.methods' do
+        fail "I should have never reached here"
+
         want = %w(cancelled?, deadline, each_remote_read, metadata, \
                   shutdown, peer, peer_cert, send_initial_metadata, \
                   initial_metadata_sent)
