@@ -108,7 +108,9 @@ def main():
     clean()
 
     generate_package(
-        PackageMeta(name="grpc", name_long="gRPC Python", destination_package="grpcio")
+        PackageMeta(
+            name="grpc", name_long="gRPC Python", destination_package="grpcio"
+        )
     )
 
     generate_package(
