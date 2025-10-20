@@ -29,7 +29,7 @@ import prime_pb2
 import prime_pb2_grpc
 
 _PROCESS_COUNT = 8
-_MAXIMUM_CANDIDATE = 10000
+_MAXIMUM_CANDIDATE = 30
 
 # Each worker process initializes a single channel after forking.
 # It's regrettable, but to ensure that each subprocess only has to instantiate
@@ -40,21 +40,20 @@ _worker_stub_singleton = None
 _LOGGER = logging.getLogger(__name__)
 
 
-def _shutdown_worker():
-    _LOGGER.info("Shutting worker process down.")
-    if _worker_channel_singleton is not None:
-        _worker_channel_singleton.close()
+# def _shutdown_worker():
+#     _LOGGER.info("Shutting worker process down.")
+#     if _worker_channel_singleton is not None:
+#         _worker_channel_singleton.close()
 
 
-def _initialize_worker(server_address):
+def _initialize_worker(_worker_channel):
     global _worker_channel_singleton  # pylint: disable=global-statement
     global _worker_stub_singleton  # pylint: disable=global-statement
     _LOGGER.info("Initializing worker process.")
-    _worker_channel_singleton = grpc.insecure_channel(server_address)
     _worker_stub_singleton = prime_pb2_grpc.PrimeCheckerStub(
-        _worker_channel_singleton
+        _worker_channel
     )
-    atexit.register(_shutdown_worker)
+    # atexit.register(_shutdown_worker)
 
 
 def _run_worker_query(primality_candidate):
@@ -64,11 +63,11 @@ def _run_worker_query(primality_candidate):
     )
 
 
-def _calculate_primes(server_address):
+def _calculate_primes(_worker_channel):
     worker_pool = multiprocessing.Pool(
         processes=_PROCESS_COUNT,
         initializer=_initialize_worker,
-        initargs=(server_address,),
+        initargs=(_worker_channel,),
     )
     check_range = range(2, _MAXIMUM_CANDIDATE)
     primality = worker_pool.map(_run_worker_query, check_range)
@@ -86,8 +85,10 @@ def main():
         help="The address of the server (e.g. localhost:50051)",
     )
     args = parser.parse_args()
-    primes = _calculate_primes(args.server_address)
-    print(primes)
+
+    with grpc.insecure_channel(args.server_address) as _worker_channel:
+        primes = _calculate_primes(_worker_channel)
+    # print(primes)
 
 
 if __name__ == "__main__":
