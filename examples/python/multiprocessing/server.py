@@ -79,13 +79,13 @@ def _run_server(bind_address):
 
 
 @contextlib.contextmanager
-def _reserve_port():
+def _reserve_port(port = 0):
     """Find and reserve a port for all subprocesses to use."""
     sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
     if sock.getsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT) == 0:
         raise RuntimeError("Failed to set SO_REUSEPORT.")
-    sock.bind(("", 0))
+    sock.bind(("", port))
     try:
         yield sock.getsockname()[1]
     finally:
@@ -103,7 +103,9 @@ def main():
             on MacOS, consider using multiple worker processes on different ports.
         """
         print(warning_message)
-    with _reserve_port() as port:
+
+    pnum = 50051
+    with _reserve_port(pnum) as port:
         bind_address = "localhost:{}".format(port)
         _LOGGER.info("Binding to '%s'", bind_address)
         sys.stdout.flush()

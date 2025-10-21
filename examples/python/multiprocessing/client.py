@@ -82,13 +82,16 @@ def main():
     parser = argparse.ArgumentParser(description=msg)
     parser.add_argument(
         "server_address",
+        nargs="?",
+        default="localhost:50051",
         help="The address of the server (e.g. localhost:50051)",
     )
     args = parser.parse_args()
 
     with grpc.insecure_channel(args.server_address) as _worker_channel:
         primes = _calculate_primes(_worker_channel)
-    # print(primes)
+    print([prime for prime, result in primes if result])
+    print('---- PASS ----')
 
 
 if __name__ == "__main__":
