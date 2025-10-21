@@ -46,7 +46,7 @@ _LOGGER = logging.getLogger(__name__)
 def print_state(chan, connect=False):
     result = chan._channel.check_connectivity_state(connect)
     state = _common.CYGRPC_CONNECTIVITY_STATE_TO_CHANNEL_CONNECTIVITY[result]
-    _LOGGER.info(f"{id(chan._channel)=}, channel state: {state}")
+    return f"{id(chan._channel)=}, channel state: {state}"
 
 def get_state_und(cychan, connect=False):
     result = cychan.check_connectivity_state(connect)
@@ -77,9 +77,14 @@ def _initialize_worker(_worker_channel):
 def _run_worker_query(primality_candidate):
     st = get_state_und(_worker_stub_singleton.check._channel)
     _LOGGER.info("%s, checking primality of %s.", st, primality_candidate)
-    return _worker_stub_singleton.check(
-        prime_pb2.PrimeCandidate(candidate=primality_candidate)
-    )
+    try:
+        res = _worker_stub_singleton.check(
+            prime_pb2.PrimeCandidate(candidate=primality_candidate)
+        )
+        return res
+    except Exception as e:
+        _LOGGER.error(e)
+        return None
 
 
 def _calculate_primes(_worker_channel):
@@ -89,11 +94,21 @@ def _calculate_primes(_worker_channel):
             initializer=_initialize_worker,
             initargs=(_worker_channel,),
         )
+        errors = False
         with worker_pool:
             check_range = range(2, _MAXIMUM_CANDIDATE)
             primality = worker_pool.map(_run_worker_query, check_range)
-            primes = zip(check_range, map(operator.attrgetter("isPrime"), primality))
-            return tuple(primes)
+            primes = []
+            for num, result in zip(check_range, primality):
+                if result is None:
+                    # error, continue
+                    errors = True
+                    continue
+
+                if result.isPrime:
+                    primes.append(num)
+            # primes = zip(check_range, map(operator.attrgetter("isPrime"), primality))
+            return primes, errors
 
 
 def main():
@@ -110,17 +125,22 @@ def main():
     args = parser.parse_args()
 
     chan = grpc.insecure_channel(args.server_address)
-    print_state(chan)
+    _LOGGER.info(print_state(chan))
 
     tmp_stub = prime_pb2_grpc.PrimeCheckerStub(chan)
     tmp_stub.check(prime_pb2.PrimeCandidate(candidate=1))
 
-    print_state(chan)
+    _LOGGER.info(print_state(chan))
 
-    primes = _calculate_primes(chan)
+    primes, err = _calculate_primes(chan)
 
-    print([prime for prime, result in primes if result])
-    print('---- PASS ----')
+    # print([prime for prime, result in primes if result])
+    print(primes)
+    if err:
+        print('---- PASS WITH ERRORS ----')
+    else:
+        print('---- PASS ----')
+
 
 
 if __name__ == "__main__":
