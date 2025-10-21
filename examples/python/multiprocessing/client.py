@@ -75,11 +75,14 @@ def _initialize_worker(_worker_channel):
 
 
 def _run_worker_query(primality_candidate):
-    st = get_state_und(_worker_stub_singleton.check._channel)
+    try:
+        st = get_state_und(_worker_stub_singleton.check._channel)
+    except Exception as e:
+        st = f"{e!r}"
     _LOGGER.info("%s, checking primality of %s.", st, primality_candidate)
     try:
         res = _worker_stub_singleton.check(
-            prime_pb2.PrimeCandidate(candidate=primality_candidate)
+            prime_pb2.PrimeCandidate(candidate=primality_candidate),
         )
         return res
     except Exception as e:
