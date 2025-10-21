@@ -36,7 +36,7 @@ _MAXIMUM_CANDIDATE = 30
 # Each worker process initializes a single channel after forking.
 # It's regrettable, but to ensure that each subprocess only has to instantiate
 # a single channel to be reused across all RPCs, we use globals.
-# _worker_channel_singleton = None
+_worker_channel_singleton = None
 _worker_stub_singleton = None
 
 _LOGGER = logging.getLogger(__name__)
@@ -46,7 +46,12 @@ _LOGGER = logging.getLogger(__name__)
 def print_state(chan, connect=False):
     result = chan._channel.check_connectivity_state(connect)
     state = _common.CYGRPC_CONNECTIVITY_STATE_TO_CHANNEL_CONNECTIVITY[result]
-    print(f"Channel state: {state}")
+    _LOGGER.info(f"{id(chan._channel)=}, channel state: {state}")
+
+def get_state_und(cychan, connect=False):
+    result = cychan.check_connectivity_state(connect)
+    state = _common.CYGRPC_CONNECTIVITY_STATE_TO_CHANNEL_CONNECTIVITY[result]
+    return f"{id(cychan)=}, channel state: {state}"
 
 
 # def _shutdown_worker():
@@ -56,10 +61,12 @@ def print_state(chan, connect=False):
 
 
 def _initialize_worker(_worker_channel):
-    # global _worker_channel_singleton  # pylint: disable=global-statement
+    global _worker_channel_singleton  # pylint: disable=global-statement
     global _worker_stub_singleton  # pylint: disable=global-statement
     _LOGGER.info("Initializing worker process.")
-    print_state(_worker_channel)
+    # print_state(_worker_channel)
+    # _worker_channel_singleton=_worker_channel
+    # print_state(_worker_channel)
 
     _worker_stub_singleton = prime_pb2_grpc.PrimeCheckerStub(
         _worker_channel
@@ -68,22 +75,25 @@ def _initialize_worker(_worker_channel):
 
 
 def _run_worker_query(primality_candidate):
-    _LOGGER.info("Checking primality of %s.", primality_candidate)
+    st = get_state_und(_worker_stub_singleton.check._channel)
+    _LOGGER.info("%s, checking primality of %s.", st, primality_candidate)
     return _worker_stub_singleton.check(
         prime_pb2.PrimeCandidate(candidate=primality_candidate)
     )
 
 
 def _calculate_primes(_worker_channel):
-    worker_pool = multiprocessing.Pool(
-        processes=_PROCESS_COUNT,
-        initializer=_initialize_worker,
-        initargs=(_worker_channel,),
-    )
-    check_range = range(2, _MAXIMUM_CANDIDATE)
-    primality = worker_pool.map(_run_worker_query, check_range)
-    primes = zip(check_range, map(operator.attrgetter("isPrime"), primality))
-    return tuple(primes)
+    with _worker_channel:
+        worker_pool = multiprocessing.Pool(
+            processes=_PROCESS_COUNT,
+            initializer=_initialize_worker,
+            initargs=(_worker_channel,),
+        )
+        with worker_pool:
+            check_range = range(2, _MAXIMUM_CANDIDATE)
+            primality = worker_pool.map(_run_worker_query, check_range)
+            primes = zip(check_range, map(operator.attrgetter("isPrime"), primality))
+            return tuple(primes)
 
 
 def main():
