@@ -83,6 +83,7 @@ def _run_worker_query(primality_candidate):
     try:
         res = _worker_stub_singleton.check(
             prime_pb2.PrimeCandidate(candidate=primality_candidate),
+            wait_for_ready=True,
         )
         return res
     except Exception as e:
