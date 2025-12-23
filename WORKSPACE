@@ -63,11 +63,8 @@ system_python(
 load("@system_python//:pip.bzl", system_pip_parse = "pip_parse")
 
 system_pip_parse(
-    name = "pip_deps",
+    name = "protobuf_pip_deps",
     requirements = "@com_google_protobuf//python:requirements.txt",
-    requirements_overrides = {
-        "3.11": "@com_google_protobuf//python:requirements_311.txt",
-    },
 )
 
 http_archive(
