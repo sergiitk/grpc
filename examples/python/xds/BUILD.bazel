@@ -19,7 +19,7 @@ py_binary(
     srcs = ["server.py"],
     main = "server.py",
     python_version = "PY3",
-    srcs_version = "PY2AND3",
+    srcs_version = "PY3",
     deps = [
         "//examples/protos:helloworld_py_pb2",
         "//examples/protos:helloworld_py_pb2_grpc",
@@ -32,7 +32,7 @@ py_binary(
     srcs = ["client.py"],
     main = "client.py",
     python_version = "PY3",
-    srcs_version = "PY2AND3",
+    srcs_version = "PY3",
     deps = [
         "//examples/protos:helloworld_py_pb2",
         "//examples/protos:helloworld_py_pb2_grpc",

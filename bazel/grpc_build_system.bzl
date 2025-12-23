@@ -718,7 +718,7 @@ def grpc_py_binary(
         deps = [],
         external_deps = [],
         testonly = False,
-        python_version = "PY2",
+        python_version = "PY3",
         **kwargs):
     py_binary(
         name = name,

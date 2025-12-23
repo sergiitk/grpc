@@ -26,7 +26,7 @@ py_binary(
     ],
     main = "alts_server.py",
     python_version = "PY3",
-    srcs_version = "PY2AND3",
+    srcs_version = "PY3",
     deps = [
         "//src/python/grpcio/grpc:grpcio",
     ],
@@ -42,7 +42,7 @@ py_binary(
     ],
     main = "alts_client.py",
     python_version = "PY3",
-    srcs_version = "PY2AND3",
+    srcs_version = "PY3",
     deps = [
         "//src/python/grpcio/grpc:grpcio",
     ],

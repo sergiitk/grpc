@@ -41,7 +41,7 @@ py_binary(
     srcs = ["client.py"],
     imports = ["."],
     python_version = "PY3",
-    srcs_version = "PY2AND3",
+    srcs_version = "PY3",
     deps = [
         ":hash_name_py_pb2",
         ":hash_name_py_pb2_grpc",
@@ -52,7 +52,7 @@ py_binary(
 py_library(
     name = "search",
     srcs = ["search.py"],
-    srcs_version = "PY2AND3",
+    srcs_version = "PY3",
     deps = [
         ":hash_name_py_pb2",
     ],
@@ -63,7 +63,7 @@ py_binary(
     srcs = ["server.py"],
     imports = ["."],
     python_version = "PY3",
-    srcs_version = "PY2AND3",
+    srcs_version = "PY3",
     deps = [
         ":hash_name_py_pb2",
         ":search",
