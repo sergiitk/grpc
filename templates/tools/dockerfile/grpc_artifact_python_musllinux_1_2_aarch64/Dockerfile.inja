@@ -16,7 +16,7 @@
 
 FROM quay.io/pypa/musllinux_1_2_aarch64:2025.07.27-1
 
-{% include "../git_config.include" %}
+{% include "../git_avoid_dubious_ownership_error.include" %}
 
 # Preinstall zstd and hiredis for ccache to avoid *_FROM_INTERNET downloads.
 RUN apk add openssl openssl-dev zstd zstd-dev hiredis-dev

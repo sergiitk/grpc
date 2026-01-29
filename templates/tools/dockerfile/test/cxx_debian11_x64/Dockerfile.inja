@@ -25,9 +25,7 @@ FROM debian:11
 
 #=================
 # Setup git to access working directory across docker boundary
-
-RUN git config --global --add safe.directory "*"
-RUN git config --global protocol.file.allow always
+{% include "../../git_avoid_dubious_ownership_error.include" %}
 
 
 # Define the default command.

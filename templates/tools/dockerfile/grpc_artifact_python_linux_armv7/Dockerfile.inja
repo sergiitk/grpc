@@ -20,7 +20,7 @@
 FROM dockcross/linux-armv7
 
 # Configure git early so the cache reused by other py build based on the same image.
-{% include "../git_config.include" %}
+{% include "../git_avoid_dubious_ownership_error.include" %}
 
 RUN apt update && apt install -y build-essential zlib1g-dev libncurses5-dev libgdbm-dev \
                                  libnss3-dev libssl-dev libreadline-dev libffi-dev && apt-get clean
