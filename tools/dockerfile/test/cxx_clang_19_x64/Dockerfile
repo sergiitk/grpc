@@ -20,8 +20,8 @@ RUN apt update && apt -y upgrade && apt install -y build-essential curl git time
 # This avoids the "fatal: detected dubious ownership in repository XYZ"
 # git error.
 
-RUN git config --global --add safe.directory '*'
-RUN git config --global protocol.file.allow always
+RUN git config --global protocol.file.allow always && \
+  git config --global --add safe.directory '*'
 
 #====================
 # run_tests.py python dependencies

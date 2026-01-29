@@ -62,8 +62,8 @@ RUN BAZEL_ARCH_SUFFIX="$(uname -m | sed s/aarch64/arm64/)" \
 # This avoids the "fatal: detected dubious ownership in repository XYZ"
 # git error.
 
-RUN git config --global --add safe.directory '*'
-RUN git config --global protocol.file.allow always
+RUN git config --global protocol.file.allow always && \
+  git config --global --add safe.directory '*'
 
 #=================
 # Setup git to access working directory across docker boundary.
