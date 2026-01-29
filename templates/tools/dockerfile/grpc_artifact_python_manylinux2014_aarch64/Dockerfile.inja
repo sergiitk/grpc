@@ -16,7 +16,7 @@
 
 FROM quay.io/pypa/manylinux2014_aarch64:2025.07.14-1
 
-{% include "../git_config.include" %}
+{% include "../git_avoid_dubious_ownership_error.include" %}
 {% include "../ccache.include" %}
 {% include "../python_pip_builds.include" %}
 
