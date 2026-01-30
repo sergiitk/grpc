@@ -17,7 +17,19 @@
 FROM quay.io/pypa/manylinux2014_aarch64:2026.01.28-1
 
 {% include "../git_avoid_dubious_ownership_error.include" %}
-{% include "../ccache.include" %}
+
+# Install ccache from source since ccache 3.x packaged with most linux distributions
+# does not support Redis backend for caching.
+RUN curl -sSL -o ccache.tar.gz https://github.com/ccache/ccache/releases/download/v4.12.2/ccache-4.12.2.tar.gz \
+    && tar -zxf ccache.tar.gz \
+    && cd ccache-4.12.2 \
+    && mkdir build && cd build \
+    && cmake -DCMAKE_BUILD_TYPE=Release -DZSTD_FROM_INTERNET=ON -DHIREDIS_FROM_INTERNET=ON .. \
+    && make -j4 && make install \
+    && cd ../.. \
+    && rm -rf ccache-4.12.2 ccache.tar.gz
+
+
 {% include "../python_pip_builds.include" %}
 
 # The `cryptography` package's dependency `cffi` lacks Python 3.14 supported
