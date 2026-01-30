@@ -14,44 +14,28 @@
 
 # AUTO-GENERATED FROM `$REPO_ROOT/templates/tools/dockerfile/grpc_artifact_python_manylinux2014_aarch64/Dockerfile.inja`!!!
 
-FROM quay.io/pypa/manylinux2014_aarch64:2025.07.14-1
-
-# TODO: simplify the list of third_party modules list
-# NOTE: git>=2.46 allows leading paths like third_party/* to include all subdirectories
-# current docker base images use git versions lower than 2.46 and hence require separate configs for each submodule
-RUN git config --global protocol.file.allow always && \
-  git config --global --add safe.directory /var/local/jenkins/grpc && \
-  git config --global --add safe.directory /var/local/jenkins/grpc/.git && \
-  git config --global --add safe.directory /var/local/jenkins/grpc/.git/modules/third_party/abseil-cpp && \
-  git config --global --add safe.directory /var/local/jenkins/grpc/.git/modules/third_party/benchmark && \
-  git config --global --add safe.directory /var/local/jenkins/grpc/.git/modules/third_party/bloaty && \
-  git config --global --add safe.directory /var/local/jenkins/grpc/.git/modules/third_party/boringssl-with-bazel && \
-  git config --global --add safe.directory /var/local/jenkins/grpc/.git/modules/third_party/cares/cares && \
-  git config --global --add safe.directory /var/local/jenkins/grpc/.git/modules/third_party/envoy-api && \
-  git config --global --add safe.directory /var/local/jenkins/grpc/.git/modules/third_party/googleapis && \
-  git config --global --add safe.directory /var/local/jenkins/grpc/.git/modules/third_party/googletest && \
-  git config --global --add safe.directory /var/local/jenkins/grpc/.git/modules/third_party/opencensus-proto && \
-  git config --global --add safe.directory /var/local/jenkins/grpc/.git/modules/third_party/opentelemetry && \
-  git config --global --add safe.directory /var/local/jenkins/grpc/.git/modules/third_party/opentelemetry-cpp && \
-  git config --global --add safe.directory /var/local/jenkins/grpc/.git/modules/third_party/protobuf && \
-  git config --global --add safe.directory /var/local/jenkins/grpc/.git/modules/third_party/protoc-gen-validate && \
-  git config --global --add safe.directory /var/local/jenkins/grpc/.git/modules/third_party/re2 && \
-  git config --global --add safe.directory /var/local/jenkins/grpc/.git/modules/third_party/xds && \
-  git config --global --add safe.directory /var/local/jenkins/grpc/.git/modules/third_party/zlib
+FROM quay.io/pypa/manylinux2014_aarch64:2026.01.28-1
 
 #=================
-# Install ccache
+# Setup git to access working directory across docker boundary.
+# This avoids the "fatal: detected dubious ownership in repository XYZ"
+# git error.
+
+RUN git config --global --add safe.directory '*'
+RUN git config --global protocol.file.allow always
+
 
 # Install ccache from source since ccache 3.x packaged with most linux distributions
 # does not support Redis backend for caching.
-RUN curl -sSL -o ccache.tar.gz https://github.com/ccache/ccache/releases/download/v4.11.3/ccache-4.11.3.tar.gz \
+RUN curl -sSL -o ccache.tar.gz https://github.com/ccache/ccache/releases/download/v4.12.2/ccache-4.12.2.tar.gz \
     && tar -zxf ccache.tar.gz \
-    && cd ccache-4.11.3 \
+    && cd ccache-4.12.2 \
     && mkdir build && cd build \
-    && cmake -DCMAKE_BUILD_TYPE=Release -DZSTD_FROM_INTERNET=ON -DHIREDIS_FROM_INTERNET=ON .. \
-    && make -j4 && make install \
+    && cmake -D CMAKE_BUILD_TYPE=Release -D ENABLE_TESTING=OFF .. \
+    && make && make install \
     && cd ../.. \
-    && rm -rf ccache-4.11.3 ccache.tar.gz
+    && rm -rf ccache-4.12.2 ccache.tar.gz
+
 
 #===================================
 # Install Python build requirements
