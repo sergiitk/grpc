@@ -14,7 +14,7 @@
 
 # AUTO-GENERATED FROM `$REPO_ROOT/templates/tools/dockerfile/grpc_artifact_python_manylinux2014_aarch64/Dockerfile.inja`!!!
 
-FROM quay.io/pypa/manylinux2014_aarch64:2025.07.14-1
+FROM quay.io/pypa/manylinux2014_aarch64:2026.01.28-1
 
 #=================
 # Setup git to access working directory across docker boundary.
@@ -24,19 +24,18 @@ FROM quay.io/pypa/manylinux2014_aarch64:2025.07.14-1
 RUN git config --global --add safe.directory '*'
 RUN git config --global protocol.file.allow always
 
-#=================
-# Install ccache
 
 # Install ccache from source since ccache 3.x packaged with most linux distributions
 # does not support Redis backend for caching.
-RUN curl -sSL -o ccache.tar.gz https://github.com/ccache/ccache/releases/download/v4.11.3/ccache-4.11.3.tar.gz \
+RUN curl -sSL -o ccache.tar.gz https://github.com/ccache/ccache/releases/download/v4.12.2/ccache-4.12.2.tar.gz \
     && tar -zxf ccache.tar.gz \
-    && cd ccache-4.11.3 \
+    && cd ccache-4.12.2 \
     && mkdir build && cd build \
     && cmake -DCMAKE_BUILD_TYPE=Release -DZSTD_FROM_INTERNET=ON -DHIREDIS_FROM_INTERNET=ON .. \
     && make -j4 && make install \
     && cd ../.. \
-    && rm -rf ccache-4.11.3 ccache.tar.gz
+    && rm -rf ccache-4.12.2 ccache.tar.gz
+
 
 #===================================
 # Install Python build requirements
