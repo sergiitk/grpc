@@ -409,6 +409,7 @@ endif()
 # Setup external proto library at third_party/cel-spec if it doesn't exist
 if (NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/cel-spec AND gRPC_DOWNLOAD_ARCHIVES)
   # Download the archive via HTTP, validate the checksum, and extract to third_party/cel-spec.
+  # TODO(sergiitk): revert removeprefix removal
   download_archive(
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/cel-spec
     https://storage.googleapis.com/grpc-bazel-mirror/github.com/google/cel-spec/archive/refs/tags/v0.25.1.tar.gz
@@ -420,6 +421,7 @@ endif()
 # Setup external proto library at third_party/envoy-api if it doesn't exist
 if (NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/envoy-api AND gRPC_DOWNLOAD_ARCHIVES)
   # Download the archive via HTTP, validate the checksum, and extract to third_party/envoy-api.
+  # TODO(sergiitk): revert removeprefix removal
   download_archive(
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/envoy-api
     https://storage.googleapis.com/grpc-bazel-mirror/github.com/envoyproxy/data-plane-api/archive/6ef568cf4a67362849911d1d2a546fd9f35db2ff.tar.gz
@@ -431,6 +433,7 @@ endif()
 # Setup external proto library at third_party/googleapis if it doesn't exist
 if (NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/googleapis AND gRPC_DOWNLOAD_ARCHIVES)
   # Download the archive via HTTP, validate the checksum, and extract to third_party/googleapis.
+  # TODO(sergiitk): revert removeprefix removal
   download_archive(
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/googleapis
     https://storage.googleapis.com/grpc-bazel-mirror/github.com/googleapis/googleapis/archive/2193a2bfcecb92b92aad7a4d81baa428cafd7dfd.zip
@@ -442,6 +445,7 @@ endif()
 # Setup external proto library at third_party/protoc-gen-validate if it doesn't exist
 if (NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/protoc-gen-validate AND gRPC_DOWNLOAD_ARCHIVES)
   # Download the archive via HTTP, validate the checksum, and extract to third_party/protoc-gen-validate.
+  # TODO(sergiitk): revert removeprefix removal
   download_archive(
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/protoc-gen-validate
     https://storage.googleapis.com/grpc-bazel-mirror/github.com/bufbuild/protoc-gen-validate/archive/refs/tags/v1.2.1.tar.gz
@@ -453,6 +457,7 @@ endif()
 # Setup external proto library at third_party/xds if it doesn't exist
 if (NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/xds AND gRPC_DOWNLOAD_ARCHIVES)
   # Download the archive via HTTP, validate the checksum, and extract to third_party/xds.
+  # TODO(sergiitk): revert removeprefix removal
   download_archive(
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/xds
     https://storage.googleapis.com/grpc-bazel-mirror/github.com/cncf/xds/archive/ee656c7534f5d7dc23d44dd611689568f72017a6.tar.gz
