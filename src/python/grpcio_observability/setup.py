@@ -269,6 +269,7 @@ else:
     DEFINE_MACROS += (("Py_LIMITED_API", "0x030A00F0"),)
     API_TAG = "cp310"
 
+
 def extension_modules():
     if BUILD_WITH_CYTHON:
         cython_module_files = [
@@ -326,9 +327,5 @@ if __name__ == "__main__":
             "opentelemetry-api>=1.21.0",
         ],
         cmdclass={"build_ext": BuildExt},
-        options={
-            "bdist_wheel": {
-                "py_limited_api": API_TAG
-            }
-        }
+        options={"bdist_wheel": {"py_limited_api": API_TAG}},
     )

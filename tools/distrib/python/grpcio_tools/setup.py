@@ -354,9 +354,5 @@ if __name__ == "__main__":
         cmdclass={
             "build_ext": BuildExt,
         },
-        options={
-            "bdist_wheel": {
-                "py_limited_api": API_TAG
-            }
-        }
+        options={"bdist_wheel": {"py_limited_api": API_TAG}},
     )
