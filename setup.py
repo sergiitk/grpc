@@ -503,6 +503,7 @@ else:
     DEFINE_MACROS += (("Py_LIMITED_API", "0x030A00F0"),)
     API_TAG = "cp310"
 
+
 def cython_extensions_and_necessity():
     cython_module_files = [
         os.path.join(PYTHON_STEM, name.replace(".", "/") + ".pyx")
@@ -616,9 +617,5 @@ if __name__ == "__main__":
         extras_require=EXTRAS_REQUIRES,
         setup_requires=SETUP_REQUIRES,
         cmdclass=COMMAND_CLASS,
-        options={
-            "bdist_wheel": {
-                "py_limited_api": API_TAG
-            }
-        }
+        options={"bdist_wheel": {"py_limited_api": API_TAG}},
     )
