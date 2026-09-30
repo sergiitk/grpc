@@ -33606,7 +33606,6 @@ targets:
   deps:
   - gtest
   - grpc_test_util
-  uses_polling: false
 - name: xds_wrr_end2end_test
   gtest: true
   build: test
